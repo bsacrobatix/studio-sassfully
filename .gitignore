@@ -1,3 +1,6 @@
 .context/
 .artifacts/
 .worktrees/
+# Kitsoki local runtime
+.kitsoki.local.yaml
+.kitsoki/sessions/

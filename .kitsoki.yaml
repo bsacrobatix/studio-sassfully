@@ -1,0 +1,7 @@
+story_dirs:
+  - ./.kitsoki/stories
+
+project_profile: .kitsoki/project-profile.yaml
+
+root:
+  import: dev-story

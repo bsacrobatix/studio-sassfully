@@ -1,0 +1,178 @@
+schema: project-profile/v1
+id: studio-sassfully
+title: Studio Sassfully
+summary: |
+  Project-local Kitsoki dev-story binding for Studio Sassfully. The
+  generated instance imports `@kitsoki/dev-story`; this repository owns only the
+  profile values, tool commands, and local setup files.
+
+commands:
+  dev: ""
+  test: ""
+  build: ""
+  check: "scripts/checks.sh"
+
+repo:
+  root: "."
+  vcs: git
+  default_branch: "main"
+  remote: "git@github.com:bsacrobatix/studio-sassfully.git"
+  monorepo: false
+
+stack:
+  kind: "generic"
+  languages: []
+  package_managers: []
+
+testing:
+  mechanisms:
+    - kind: unit
+      runner: command
+      command: ""
+    - kind: build
+      runner: command
+      command: ""
+
+conventions:
+  source: hybrid
+  dirs:
+    context:   { path: ".context",   use: local-runtime }
+    artifacts: { path: ".artifacts", use: local-runtime }
+    worktrees: { path: ".worktrees", use: local-runtime }
+  rules_files:
+    - "AGENTS.md"
+  gitignore:
+    manage: true
+    additions:
+      - ".kitsoki.local.yaml"
+      - ".kitsoki/sessions/"
+      - ".artifacts/"
+      - ".context/"
+      - ".worktrees/"
+
+tracker:
+  provider: "none"
+
+kitsoki:
+  story: dev-story
+  instance:
+    id: studio-sassfully-dev
+    path: .kitsoki/stories/studio-sassfully-dev/app.yaml
+    bindings:
+      ticket: host.local_files.ticket
+      vcs: host.git
+      ci: host.local
+      workspace: host.git_worktree
+      transport: host.append_to_file
+  judge_mode: human
+  autonomy: supervised
+
+dev_story_profile:
+  docs:
+    publish_durable_path: ".context/prd"
+    prd_doc_filename: ""
+    design_template_dir: ""
+    design_durable_path: ".context/designs"
+    design_doc_filename: ""
+    design_ticket_dir: ""
+    ticket_repo: ""
+  bugfix:
+    build_cmd: ""
+    test_cmd: ""
+
+onboarding:
+  base_story: "dev-story"
+  base_story_reason: "Default starter for normal software repositories: it supports project workbench, design/PRD, bugfix, git/worktree, and follow-up customization through a project-local wrapper."
+  base_story_title: "Dev-story project workflow"
+  recording_policy: "no-llm-only"
+  repo_patterns:
+    -
+      evidence: "Selected dev-story for a local project checkout."
+      id: "selected-starter"
+      recommendation: "Start with the shared dev-story workflow and keep project-specific changes in `.kitsoki/project-profile.yaml` or the generated `.kitsoki/stories/<id>-dev/` wrapper."
+      source: "deterministic-init"
+    -
+      evidence: "VCS `git`, default branch `main`, remote `git@github.com:bsacrobatix/studio-sassfully.git`."
+      id: "repo-metadata"
+      recommendation: "Use local VCS metadata for worktree and handoff defaults; no network lookup is required during onboarding."
+      source: "local-git"
+    -
+      evidence: "Found project rule files: `AGENTS.md`."
+      id: "repo-rules"
+      recommendation: "Treat these as the first customization source before mining older transcripts."
+      source: "rules-files"
+  story_customizations:
+    -
+      evidence: ".kitsoki/stories/studio-sassfully-dev/app.yaml"
+      id: "project-local-instance"
+      status: "applied"
+      summary: "Generate a thin project-owned dev-story wrapper under `.kitsoki/stories/<id>-dev/` that imports `@kitsoki/dev-story`."
+    -
+      evidence: ".context/prd, .context/designs"
+      id: "project-doc-defaults"
+      status: "applied"
+      summary: "Retarget generated PRD/design outputs to project-local runtime docs paths instead of Kitsoki's own docs tree."
+
+mining:
+  first_pass_sample: 0
+  note: "No associated Claude/Codex transcripts were found during deterministic discovery."
+  sample: "recency"
+  sources:
+    []
+  status: "no-transcripts-found"
+  transcript_count: 0
+
+setup_plan:
+  dirs_create:
+    - ".kitsoki"
+    - ".kitsoki/stories"
+    - ".kitsoki/stories/studio-sassfully-dev"
+    - ".context"
+    - ".context/prd"
+    - ".context/designs"
+    - ".artifacts"
+    - ".worktrees"
+  gitignore_additions:
+    - ".kitsoki.local.yaml"
+    - ".kitsoki/sessions/"
+    - ".artifacts/"
+    - ".context/"
+    - ".worktrees/"
+  verifications:
+    -
+      command: "kitsoki validate .kitsoki/stories/studio-sassfully-dev/app.yaml"
+      gate: "required"
+      id: "story-load"
+      kind: "story"
+  writes:
+    -
+      action: "create"
+      path: ".kitsoki/project-profile.yaml"
+      summary: "Declarative onboarding profile for this project."
+    -
+      action: "create"
+      path: ".kitsoki/stories/studio-sassfully-dev/app.yaml"
+      summary: "Thin project-owned dev-story instance importing @kitsoki/dev-story."
+    -
+      action: "create"
+      path: ".kitsoki/stories/studio-sassfully-dev/README.md"
+      summary: "Local operator handoff for running and extending the generated instance."
+    -
+      action: "create"
+      path: ".kitsoki/check-readiness.py"
+      summary: "Explicit post-apply verifier for the profile-declared checks."
+    -
+      action: "create"
+      path: ".kitsoki/promote-session-mining.py"
+      summary: "Promote emitted session-mining recipes into pending profile customizations."
+    -
+      action: "create"
+      path: ".kitsoki.yaml"
+      summary: "Discover project-local Kitsoki stories and select the generated instance."
+    -
+      action: "merge"
+      path: ".gitignore"
+      summary: "Ignore local Kitsoki runtime, session, artifact, and worktree files."
+
+readiness:
+  status: not-run
