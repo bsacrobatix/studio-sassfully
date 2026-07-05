@@ -16,7 +16,7 @@ repo:
   root: "."
   vcs: git
   default_branch: "main"
-  remote: "git@github.com:bsacrobatix/studio-sassfully.git"
+  remote: "https://github.com/bsacrobatix/studio-sassfully.git"
   monorepo: false
 
 stack:
@@ -92,7 +92,7 @@ onboarding:
       recommendation: "Start with the shared dev-story workflow and keep project-specific changes in `.kitsoki/project-profile.yaml` or the generated `.kitsoki/stories/<id>-dev/` wrapper."
       source: "deterministic-init"
     -
-      evidence: "VCS `git`, default branch `main`, remote `git@github.com:bsacrobatix/studio-sassfully.git`."
+      evidence: "VCS `git`, default branch `main`, remote `https://github.com/bsacrobatix/studio-sassfully.git`."
       id: "repo-metadata"
       recommendation: "Use local VCS metadata for worktree and handoff defaults; no network lookup is required during onboarding."
       source: "local-git"

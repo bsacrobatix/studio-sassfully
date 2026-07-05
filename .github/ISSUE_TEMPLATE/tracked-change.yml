@@ -1,0 +1,28 @@
+name: Tracked change
+description: Work item materialized from a pog/catalog.yaml node (POG loop)
+labels: ["node:change"]
+body:
+  - type: input
+    id: node-id
+    attributes:
+      label: Catalog node id
+      description: >-
+        The pog/catalog.yaml node this issue tracks (a change node, or the
+        requirement/milestone it decomposes). Issue state is derived truth for
+        the node's status — don't hand-edit the catalog status.
+      placeholder: e.g. change-feedback-core-anchor-contract
+    validations:
+      required: true
+  - type: textarea
+    id: brief
+    attributes:
+      label: Brief
+      description: What this change delivers and the gate that proves it.
+    validations:
+      required: true
+  - type: input
+    id: gate
+    attributes:
+      label: Gate
+      description: The deterministic check that must exit 0 (defaults to scripts/checks.sh).
+      placeholder: scripts/checks.sh
