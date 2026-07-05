@@ -97,6 +97,18 @@ if git remote | grep -q . && [ ! -x scripts/sync-main-from-remote.sh ]; then
   warn "repo has a remote but no scripts/sync-main-from-remote.sh"
 fi
 
+# 6. credential hygiene: secrets live in the credential store
+# (~/.config/kitsoki, see kitsoki docs/architecture/credentials.md) or in
+# service env — never tracked in a repo. Warning, not failure: some repos
+# legitimately track fixture keys; move real ones out and re-run.
+cred_tracked="$(git ls-files | grep -E '\.(pem|env)$' | grep -viE '(^|[./])example(\.|$)|\.example\.' || true)"
+if [ -z "$cred_tracked" ]; then
+  ok "no tracked *.pem / *.env files"
+else
+  warn "tracked credential-suspect files (secrets belong in the credential store, not the repo):"
+  printf '%s\n' "$cred_tracked" | sed 's/^/          /'
+fi
+
 if [ "$fail" -ne 0 ]; then
   echo "pog-doctor: FAIL"
   exit 1
