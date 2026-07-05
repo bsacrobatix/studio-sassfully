@@ -1,0 +1,517 @@
+schema: project-object-graph/seed-catalog/v0
+catalog:
+  id: sassfully-catalog
+  title: sassfully — product object graph
+  status: active
+  visibility: public
+  purpose: product-catalog
+  # Catalog-first development: this graph exists before the first line of
+  # code. Requirements and use cases are mined from docs/concept.md and
+  # docs/requirements/slidey-generic-feedback-brief.md; the design/PRD pass
+  # (a recorded dev-story session) will confirm or amend them as decision
+  # nodes before implementation starts. Lint: scripts/checks.sh.
+  source_window:
+    branch: main
+    sampled_at: "2026-07-05"
+    inputs:
+      - id: source-concept
+        kind: document
+        path: docs/concept.md
+      - id: source-slidey-brief
+        kind: document
+        path: docs/requirements/slidey-generic-feedback-brief.md
+
+type_registry:
+  - id: core-node
+    schema: graph-type/v0
+    extends: null
+    summary: Shared envelope for every sassfully graph node.
+    required_fields:
+      - id
+      - schema
+      - title
+      - status
+      - visibility
+      - sources
+      - edges
+  - id: product
+    schema: graph-type/v0
+    extends: core-node
+    summary: The product root node.
+  - id: requirement
+    schema: graph-type/v0
+    extends: core-node
+    summary: Durable, testable statement the product must satisfy.
+    edge_fields:
+      - id: part_of
+        target_type: product
+        cardinality: one
+        nests_under: true
+      - id: motivated_by
+        target_type: use-case
+        cardinality: many
+  - id: use-case
+    schema: graph-type/v0
+    extends: core-node
+    summary: A host-and-user scenario that motivates requirements.
+    edge_fields:
+      - id: part_of
+        target_type: product
+        cardinality: one
+      - id: acceptance
+        target_type: requirement
+        cardinality: many
+  - id: limitation
+    schema: graph-type/v0
+    extends: core-node
+    summary: An explicit non-requirement — pinned so scope creep is lintable,
+      per the brief's own non-goals.
+    edge_fields:
+      - id: part_of
+        target_type: product
+        cardinality: one
+      - id: constrains
+        target_type: requirement
+        cardinality: many
+  - id: milestone
+    schema: graph-type/v0
+    extends: core-node
+    summary: A delivery step in the product sequence; each proves a claim.
+    edge_fields:
+      - id: part_of
+        target_type: product
+        cardinality: one
+      - id: delivers
+        target_type: requirement
+        cardinality: many
+      - id: after
+        target_type: milestone
+        cardinality: one
+        acyclic: true
+  - id: component
+    schema: graph-type/v0
+    extends: core-node
+    summary: A planned package/module boundary from the brief; becomes real
+      when implementation nodes land against it.
+    edge_fields:
+      - id: part_of
+        target_type: product
+        cardinality: one
+      - id: satisfies
+        target_type: requirement
+        cardinality: many
+
+nodes:
+  # --- product -----------------------------------------------------------
+  - schema: sassfully/product/v0
+    id: product-sassfully
+    title: sassfully
+    status: active
+    visibility: public
+    summary: A generic, contextual-feedback framework — bring-your-own
+      presentation, semantically-anchored feedback (bug reports, comments,
+      copy/design feedback, questions, AI instructions), routed to the outcome
+      each item deserves, with capture opt-in and privacy-controlled.
+    sources: [source-concept]
+    edges: {}
+
+  # --- requirements (product) ---------------------------------------------
+  - schema: sassfully/requirement/v0
+    id: req-generic-kinds
+    title: Feedback is generic by kind
+    status: draft
+    visibility: public
+    summary: "Support at least: bug, content_comment, copy_feedback,
+      design_feedback, question, ai_instruction, issue_request, approval,
+      rejection. Kind may change copy, required fields, review UI, and sink
+      routing — it must not fork the anchor or evidence model."
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-deck-feedback, uc-product-site-feedback]
+  - schema: sassfully/requirement/v0
+    id: req-anchor-any-point
+    title: Feedback is anchorable at any visible point
+    status: draft
+    visibility: public
+    summary: "A feedback item can target: the whole artifact, the current
+      scope, scope plus step, a visible element picked in annotation mode, an
+      opened reference, or a media/replay time position when the host supports
+      it."
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-deck-feedback]
+  - schema: sassfully/requirement/v0
+    id: req-producer-owned-anchors
+    title: Anchors are producer-owned and portable
+    status: draft
+    visibility: public
+    summary: A generic anchor envelope (producer, artifactId, scope, step,
+      ref, label, bbox, mediaTimeMs, url, extra) where only the producer
+      interprets scope/step/ref. Consumers may display fields, never parse
+      their meaning.
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-deck-feedback, uc-pm-portal-feedback]
+  - schema: sassfully/requirement/v0
+    id: req-capture-review-submit
+    title: Capture, review, and sink submission are separate stages
+    status: draft
+    visibility: public
+    summary: Collect a draft locally, show it for review, submit only the
+      reviewed bundle — even for low-friction comments. Feedback is not
+      mutation; the reviewed note is the artifact.
+    sources: [source-slidey-brief, source-concept]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-deck-feedback, uc-bug-report-with-replay]
+  - schema: sassfully/requirement/v0
+    id: req-multi-sink-routing
+    title: One feedback item can route to multiple sinks
+    status: draft
+    visibility: public
+    summary: "Sink contract supports: local JSONL note, GitHub/Jira/Linear
+      issue, issue/PR comment, review comment, AI instruction dispatch,
+      reviewed artifact bundle, and no-op dry-run. The frontend never knows
+      upload mechanics, labels, templates, auth, or storage layout."
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-product-site-feedback, uc-pm-portal-feedback]
+  - schema: sassfully/requirement/v0
+    id: req-ai-actionable-bundle
+    title: Reviewed bundles preserve enough state for AI action
+    status: draft
+    visibility: public
+    summary: An ai_instruction or issue-to-agent bundle includes the user
+      instruction, anchor envelope, artifact identity, allowed source excerpt
+      or stable pointer, reviewed label/snippet, relevant references, and a
+      preferred action (comment-only, propose patch, patch artifact, file
+      issue).
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-pm-portal-feedback]
+  - schema: sassfully/requirement/v0
+    id: req-feedback-artifact-deck
+    title: A reviewed bundle can render as a report deck
+    status: draft
+    visibility: public
+    summary: Summary scene, anchor scene, optional before/after or thumbnail,
+      evidence/privacy review scene, sink receipt scene — an artifact, never
+      the primary data model.
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-deck-feedback]
+  - schema: sassfully/requirement/v0
+    id: req-standalone-and-embedded
+    title: The UI works standalone and embedded
+    status: draft
+    visibility: public
+    summary: "Modes: standalone shell trigger; embedded with the parent host
+      owning the trigger via embed:view / embed:annotate / embed:pick;
+      workspace edit mode without conflicting with inline editing; minimal
+      accessible present mode; read-only bundles where mutation is never
+      assumed."
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-deck-feedback, uc-product-site-feedback]
+
+  # --- requirements (privacy) ----------------------------------------------
+  - schema: sassfully/requirement/v0
+    id: req-privacy-metadata-first-class
+    title: Privacy metadata is first-class
+    status: draft
+    visibility: public
+    summary: Every field in a reviewed bundle carries source, sensitivity,
+      policy, review state, and retention metadata.
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-bug-report-with-replay]
+  - schema: sassfully/requirement/v0
+    id: req-data-avoidance-default
+    title: Data avoidance is the default
+    status: draft
+    visibility: public
+    summary: Prefer producer ids, indices, refs, roles, labels, bboxes,
+      hashes, and short reviewed snippets over raw DOM text, full screenshots,
+      HAR, console objects, or replay logs.
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: []
+  - schema: sassfully/requirement/v0
+    id: req-raw-drafts-stay-local
+    title: Raw draft data stays local by default
+    status: draft
+    visibility: public
+    summary: Remote sinks and AI processors receive only the reviewed bundle;
+      user-entered text is shown in the review step and marked user-provided.
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: []
+  - schema: sassfully/requirement/v0
+    id: req-host-policy-gates-evidence
+    title: Host policies gate high-risk evidence
+    status: draft
+    visibility: public
+    summary: HAR, replay (rrweb), screenshots, console capture, source
+      excerpts, and raw scene JSON are capabilities a host explicitly enables
+      per feedback kind — never always-on defaults. HAR and rrweb are optional
+      everywhere and off by default.
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-bug-report-with-replay, uc-deck-feedback]
+
+  # --- use cases ------------------------------------------------------------
+  - schema: sassfully/use-case/v0
+    id: uc-deck-feedback
+    title: Deck feedback in slidey
+    status: draft
+    visibility: public
+    summary: A viewer gives feedback at any visible point of a slidey deck via
+      the embed protocol (embed:view scope/step, embed:pick anchors); a
+      scene/step anchor plus thumbnail is enough for copy/design comments.
+      slidey is the first real host and the host-neutrality proof.
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      acceptance: [req-anchor-any-point, req-producer-owned-anchors, req-standalone-and-embedded]
+  - schema: sassfully/use-case/v0
+    id: uc-product-site-feedback
+    title: Product-site feedback
+    status: draft
+    visibility: public
+    summary: A visitor files feedback on a generated product site; routing
+      turns it into a comment, an issue, or a support request.
+    sources: [source-concept]
+    edges:
+      part_of: [product-sassfully]
+      acceptance: [req-generic-kinds, req-multi-sink-routing]
+  - schema: sassfully/use-case/v0
+    id: uc-pm-portal-feedback
+    title: PM-portal feedback
+    status: draft
+    visibility: public
+    summary: A reviewer annotates a catalog/portal surface; an ai_instruction
+      outcome dispatches the reviewed bundle to an authoring/refine flow.
+    sources: [source-concept]
+    edges:
+      part_of: [product-sassfully]
+      acceptance: [req-ai-actionable-bundle, req-multi-sink-routing]
+  - schema: sassfully/use-case/v0
+    id: uc-bug-report-with-replay
+    title: Bug report with replay evidence
+    status: draft
+    visibility: public
+    summary: The kitsoki-lineage case — a bug report carrying opt-in rrweb
+      replay and network summary, with privacy review before submission.
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      acceptance: [req-host-policy-gates-evidence, req-privacy-metadata-first-class, req-capture-review-submit]
+
+  # --- explicit non-requirements ---------------------------------------------
+  - schema: sassfully/limitation/v0
+    id: lim-not-bug-specific
+    title: Not a bug-only reporter
+    status: pinned
+    visibility: public
+    summary: The first version must not be bug-specific; bug is one kind among
+      many.
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      constrains: [req-generic-kinds]
+  - schema: sassfully/limitation/v0
+    id: lim-not-github-specific
+    title: GitHub is never required
+    status: pinned
+    visibility: public
+    summary: GitHub is one sink among many; the core never depends on it.
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      constrains: [req-multi-sink-routing]
+  - schema: sassfully/limitation/v0
+    id: lim-not-har-specific
+    title: HAR is never required
+    status: pinned
+    visibility: public
+    summary: Network capture is optional evidence, disabled by default.
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      constrains: [req-host-policy-gates-evidence]
+  - schema: sassfully/limitation/v0
+    id: lim-not-slidey-specific
+    title: slidey is a host, not a dependency
+    status: pinned
+    visibility: public
+    summary: slidey is the reference integration; the core must work for any
+      producer speaking the anchor envelope.
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      constrains: [req-producer-owned-anchors]
+  - schema: sassfully/limitation/v0
+    id: lim-no-raw-capture-to-ai
+    title: AI processing never sees raw capture by default
+    status: pinned
+    visibility: public
+    summary: Only reviewed bundles reach AI processors; raw drafts stay local.
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      constrains: [req-raw-drafts-stay-local]
+  - schema: sassfully/limitation/v0
+    id: lim-capture-not-canonical
+    title: Capture is not the source of truth
+    status: pinned
+    visibility: public
+    summary: Screenshot/replay never outrank semantic anchors when anchors are
+      available.
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      constrains: [req-data-avoidance-default]
+
+  # --- milestones -------------------------------------------------------------
+  - schema: sassfully/milestone/v0
+    id: ms-1-feedback-core
+    title: M1 feedback-core
+    status: planned
+    visibility: public
+    summary: Anchor contract + capture widget + local-note outcome, no
+      integrations — proves the catalog-first loop and the brief's minimum
+      viable slice (trigger, optional annotation anchor, prose+kind, review
+      step with privacy manifest, local/test sink).
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      delivers: [req-generic-kinds, req-anchor-any-point, req-producer-owned-anchors, req-capture-review-submit, req-raw-drafts-stay-local]
+  - schema: sassfully/milestone/v0
+    id: ms-2-slidey-integration
+    title: M2 slidey integration
+    status: planned
+    visibility: public
+    summary: First real host via the embed protocol slidey already speaks —
+      proves the host-neutrality claim.
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      delivers: [req-standalone-and-embedded, req-feedback-artifact-deck]
+      after: [ms-1-feedback-core]
+  - schema: sassfully/milestone/v0
+    id: ms-3-outcome-routing
+    title: M3 outcome routing
+    status: planned
+    visibility: public
+    summary: Issue creation via agent tooling and the AI-instruction handoff.
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      delivers: [req-multi-sink-routing, req-ai-actionable-bundle]
+      after: [ms-1-feedback-core]
+  - schema: sassfully/milestone/v0
+    id: ms-4-product-site
+    title: M4 generated product site
+    status: planned
+    visibility: public
+    summary: The product site generated from this catalog's public subgraph.
+    sources: [source-concept]
+    edges:
+      part_of: [product-sassfully]
+      delivers: []
+      after: [ms-1-feedback-core]
+  - schema: sassfully/milestone/v0
+    id: ms-5-embedded-everywhere
+    title: M5 embedded in sites and portal
+    status: planned
+    visibility: public
+    summary: sassfully embedded in the product sites and the PM portal — the
+      loop closes; feedback about the products arrives through the product.
+    sources: [source-concept]
+    edges:
+      part_of: [product-sassfully]
+      delivers: []
+      after: [ms-2-slidey-integration]
+
+  # --- planned components (package boundaries from the brief) -----------------
+  - schema: sassfully/component/v0
+    id: comp-core
+    title: core
+    status: planned
+    visibility: public
+    summary: Bundle schema, anchor schema, privacy manifest, state machine.
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      satisfies: [req-producer-owned-anchors, req-capture-review-submit, req-privacy-metadata-first-class]
+  - schema: sassfully/component/v0
+    id: comp-capture-dom
+    title: capture-dom
+    status: planned
+    visibility: public
+    summary: Optional DOM/screenshot/rrweb capture providers.
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      satisfies: [req-host-policy-gates-evidence]
+  - schema: sassfully/component/v0
+    id: comp-producer-embed
+    title: producer-embed
+    status: planned
+    visibility: public
+    summary: "Generic embed:view / embed:annotate / embed:pick helpers."
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      satisfies: [req-standalone-and-embedded, req-anchor-any-point]
+  - schema: sassfully/component/v0
+    id: comp-review-ui
+    title: review-ui
+    status: planned
+    visibility: public
+    summary: Chromeless review modal and annotation picker shell.
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      satisfies: [req-capture-review-submit, req-raw-drafts-stay-local]
+  - schema: sassfully/component/v0
+    id: comp-sinks
+    title: sinks
+    status: planned
+    visibility: public
+    summary: Sink interface plus test sink and local JSONL sink.
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      satisfies: [req-multi-sink-routing]
+  - schema: sassfully/component/v0
+    id: comp-slidey-adapter
+    title: slidey adapter
+    status: planned
+    visibility: public
+    summary: slidey adapter and the slidey report-deck generator.
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      satisfies: [req-feedback-artifact-deck]
+  - schema: sassfully/component/v0
+    id: comp-kitsoki-adapter
+    title: kitsoki compatibility adapter
+    status: proposed
+    visibility: public
+    summary: Kitsoki bug-report compatibility adapter, if needed later.
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      satisfies: []

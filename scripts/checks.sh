@@ -4,7 +4,13 @@
 #   1. pog-doctor  — conventions lint (CI-safe: skips the hook check in CI)
 #   2. tests       — empty suite today, green by definition; real tests hang
 #                    off this hook as feedback-core lands
-#   3. (coming with the seed catalog) `kitsoki graph lint pog/catalog.yaml`
+#   3. graph lint  — pog/catalog.yaml validated by the kitsoki engine.
+#      Resolution order: $KITSOKI_BIN (prebuilt binary), else build from
+#      $POG_KITSOKI_SRC (a kitsoki checkout with the object-graph engine;
+#      binary cached in .artifacts/bin by source HEAD sha). In CI, where no
+#      kitsoki source is available yet, the lint is SKIPPED loudly — pinning
+#      a build for CI is its own tracked step (POG plan 1.4); locally the
+#      lint is mandatory.
 #
 # No network, no live LLM — safe for CI.
 set -euo pipefail
@@ -15,9 +21,36 @@ scripts/pog-doctor .
 
 echo "tests: empty suite (no code yet) — green"
 
+lint_catalog() {
+  if [ -n "${KITSOKI_BIN:-}" ] && [ -x "${KITSOKI_BIN}" ]; then
+    "$KITSOKI_BIN" graph lint pog/catalog.yaml
+    echo "catalog: lint green (KITSOKI_BIN)"
+    return 0
+  fi
+  local src="${POG_KITSOKI_SRC:-$HOME/code/Kitsoki/.worktrees/project-object-graph}"
+  if [ -d "$src" ]; then
+    local sha bin
+    sha="$(git -C "$src" rev-parse --short HEAD)"
+    bin="$PWD/.artifacts/bin/kitsoki-$sha"
+    if [ ! -x "$bin" ]; then
+      mkdir -p .artifacts/bin
+      echo "building kitsoki@$sha from $src ..."
+      (cd "$src" && go build -o "$bin" ./cmd/kitsoki)
+    fi
+    "$bin" graph lint pog/catalog.yaml
+    echo "catalog: lint green (kitsoki@$sha)"
+    return 0
+  fi
+  if [ "${CI:-}" = "true" ] || [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+    echo "catalog: LINT SKIPPED in CI — no kitsoki build available; CI pinning is POG plan 1.4"
+    return 0
+  fi
+  echo "error: no kitsoki available to lint pog/catalog.yaml (set KITSOKI_BIN or POG_KITSOKI_SRC)" >&2
+  return 1
+}
+
 if [ -f pog/catalog.yaml ]; then
-  echo "error: pog/catalog.yaml exists but checks.sh doesn't lint it yet — wire the graph lint step" >&2
-  exit 1
+  lint_catalog
 fi
 
 echo "checks: green"
