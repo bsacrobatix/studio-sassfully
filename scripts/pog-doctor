@@ -13,6 +13,13 @@
 #   4. AGENTS.md exists and carries the pack conventions marker block
 #   5. scripts/merge-to-main.sh exists and is executable
 #   W. the repo has a remote but no scripts/sync-main-from-remote.sh
+#   W. no tracked *.pem/*.env credential-suspect files (originated in
+#      studio-sassfully's own pog-doctor v0.2, folded back upstream here)
+#   W. every file recorded in .pog-pack-manifest still matches its recorded
+#      hash (flags a pack-managed file edited outside install.sh — doesn't
+#      know if the *pack itself* has moved on since this repo doesn't carry
+#      a copy of it, only that this repo's own record of what it installed
+#      no longer matches what's on disk)
 #
 # Exit 0 when every hard check passes. Designed for CI: no network, no LLM,
 # output is one line per check.
@@ -97,7 +104,7 @@ if git remote | grep -q . && [ ! -x scripts/sync-main-from-remote.sh ]; then
   warn "repo has a remote but no scripts/sync-main-from-remote.sh"
 fi
 
-# 6. credential hygiene: secrets live in the credential store
+# W. credential hygiene: secrets live in the credential store
 # (~/.config/kitsoki, see kitsoki docs/architecture/credentials.md) or in
 # service env — never tracked in a repo. Warning, not failure: some repos
 # legitimately track fixture keys; move real ones out and re-run.
@@ -107,6 +114,48 @@ if [ -z "$cred_tracked" ]; then
 else
   warn "tracked credential-suspect files (secrets belong in the credential store, not the repo):"
   printf '%s\n' "$cred_tracked" | sed 's/^/          /'
+fi
+
+# W. pack-managed files still match what .pog-pack-manifest recorded at
+# install time (this only proves internal consistency with this repo's own
+# last install — it cannot see whether the pack itself has since changed
+# upstream; that needs a fresh `install.sh <this-repo>` run from the pack).
+if [ -f .pog-pack-manifest ]; then
+  hash_of() {
+    if command -v sha256sum >/dev/null 2>&1; then
+      sha256sum "$1" | awk '{print $1}'
+    else
+      shasum -a 256 "$1" | awk '{print $1}'
+    fi
+  }
+  drifted=""
+  while IFS="$(printf '\t')" read -r relpath want; do
+    [ -n "$relpath" ] || continue
+    path="$relpath"
+    case "$relpath" in
+      git-hooks/*)
+        # synthetic manifest key: hooks live under .git/hooks (or a
+        # worktree's own git-path), not at a literal repo-relative path.
+        path="$(git rev-parse --git-path "hooks/${relpath#git-hooks/}")"
+        # skipped entirely when uninspectable (e.g. CI checkout has no hooks)
+        [ "$ci_mode" -eq 1 ] && continue
+        ;;
+    esac
+    if [ ! -e "$path" ]; then
+      drifted="$drifted$relpath (missing)\n"
+    else
+      got="$(hash_of "$path")"
+      [ "$got" = "$want" ] || drifted="$drifted$relpath\n"
+    fi
+  done < .pog-pack-manifest
+  if [ -z "$drifted" ]; then
+    ok "pack-managed files match .pog-pack-manifest"
+  else
+    warn "pack-managed file(s) differ from .pog-pack-manifest (edited locally, or the pack has changed upstream — re-run install.sh to reconcile):"
+    printf "$drifted" | sed 's/^/          /'
+  fi
+else
+  warn "no .pog-pack-manifest (installed before this check existed — re-run install.sh once to start tracking)"
 fi
 
 if [ "$fail" -ne 0 ]; then
