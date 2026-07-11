@@ -31,6 +31,20 @@ hosts:
   - host.diff.open
   - host.run
   - host.starlark.run
+  # ── dev-story core hosts (transitively required by imports.core;
+  # kept in sync with @kitsoki/dev-story's own hosts: list) ──────────
+  - host.agent.codeact
+  - host.chat.transcript
+  - host.decomposition.update
+  - host.dev.onboarding
+  - host.dev.profile_setup
+  - host.fs.writable_dir
+  - host.gh.ticket.get
+  - host.ide.get_diagnostics
+  - host.proposal.publish
+  - host.session_mining.run
+  - host.slidey.render
+  - host.ui_qa.run
 
 imports:
   core:
