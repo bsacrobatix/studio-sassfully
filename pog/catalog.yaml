@@ -14,6 +14,9 @@ catalog:
     branch: main
     sampled_at: "2026-07-05"
     inputs:
+      - id: source-pog-graph-mcp-plan
+        kind: external-document
+        path: "../POG/.context/graph-mcp-plan.md"
       - id: source-concept
         kind: document
         path: docs/concept.md
@@ -166,7 +169,7 @@ nodes:
     sources: [source-slidey-brief, source-concept]
     edges:
       part_of: [product-sassfully]
-      motivated_by: [uc-deck-feedback, uc-bug-report-with-replay]
+      motivated_by: [uc-deck-feedback, uc-bug-report-with-replay, uc-agent-files-tool-gap]
   - schema: sassfully/requirement/v0
     id: req-multi-sink-routing
     title: One feedback item can route to multiple sinks
@@ -255,7 +258,7 @@ nodes:
     sources: [source-slidey-brief]
     edges:
       part_of: [product-sassfully]
-      motivated_by: []
+      motivated_by: [uc-agent-files-tool-gap]
   - schema: sassfully/requirement/v0
     id: req-host-policy-gates-evidence
     title: Host policies gate high-risk evidence
@@ -515,3 +518,67 @@ nodes:
     edges:
       part_of: [product-sassfully]
       satisfies: []
+
+  # --- agent feedback channel (an MCP tool surface as producer; requirements
+  #     dogfooded from the kitsoki graph-MCP toolset plan,
+  #     see source-pog-graph-mcp-plan) ---------------------------------------
+  - schema: sassfully/requirement/v0
+    id: req-agent-reporter-kind
+    title: Agents are first-class feedback reporters
+    status: draft
+    visibility: public
+    summary: A machine reporter (an agent holding only an MCP toolset) files
+      feedback through the same generic kind mechanism as any human reporter.
+      An agent tool-gap report is just a kind (e.g. tool_gap) that may change
+      copy, required fields, and sink routing, but never forks the anchor or
+      evidence model.
+    sources: [source-pog-graph-mcp-plan]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-agent-files-tool-gap]
+  - schema: sassfully/requirement/v0
+    id: req-mcp-producer-anchor
+    title: MCP tool servers are producers with opaque anchors
+    status: draft
+    visibility: public
+    summary: An MCP tool server (e.g. producer kitsoki-graph-mcp) anchors
+      agent feedback with producer-owned opaque scope/step/ref strings — a
+      catalog identity at a revision, the tool name that hit the wall, a node
+      or changeset id — which consumers may display but never parse.
+    sources: [source-pog-graph-mcp-plan]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-agent-files-tool-gap]
+  - schema: sassfully/requirement/v0
+    id: req-bundle-ingestable
+    title: Agent feedback bundles are valid capture-stage drafts
+    status: draft
+    visibility: public
+    summary: The locally written report bundle an agent-producer emits
+      (structured fields plus anchor plus redacted evidence) validates as a
+      sassfully capture-stage draft, so review and submission consume
+      machine-filed feedback with no special ingestion path; raw drafts stay
+      local until reviewed.
+    sources: [source-pog-graph-mcp-plan]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-agent-files-tool-gap]
+  - schema: sassfully/use-case/v0
+    id: uc-agent-files-tool-gap
+    title: An autonomous agent files a tool-gap report from inside its toolset
+    status: draft
+    visibility: public
+    summary: An agent restricted to an MCP toolset hits a task its tools
+      cannot express. Instead of routing around the gap it files a structured
+      report through a non-blocking feedback tool advertised at the moment of
+      friction; the capture stage stores the draft locally, review happens in
+      the host system's queue, and submission routes to the configured sink.
+    sources: [source-pog-graph-mcp-plan]
+    edges:
+      part_of: [product-sassfully]
+      acceptance:
+        - req-agent-reporter-kind
+        - req-mcp-producer-anchor
+        - req-bundle-ingestable
+        - req-capture-review-submit
+        - req-raw-drafts-stay-local
