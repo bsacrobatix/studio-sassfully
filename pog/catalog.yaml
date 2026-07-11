@@ -23,6 +23,9 @@ catalog:
       - id: source-slidey-brief
         kind: document
         path: docs/requirements/slidey-generic-feedback-brief.md
+      - id: source-kitsoki-feedback-proposal
+        kind: external-document
+        path: "../Kitsoki/docs/proposals/generic-feedback-sdk-slidey-reports.md"
 
 type_registry:
   - id: core-node
@@ -273,6 +276,102 @@ nodes:
       part_of: [product-sassfully]
       motivated_by: [uc-bug-report-with-replay, uc-deck-feedback]
 
+  # --- requirements (gaps found vs. kitsoki's current bug-reporting mechanism,
+  #     see source-kitsoki-feedback-proposal) --------------------------------
+  - schema: sassfully/requirement/v0
+    id: req-sink-lifecycle-ops
+    title: Sinks support erasure and evidence replacement
+    status: draft
+    visibility: public
+    summary: A submitted item is not append-only. A sink implements erase(id,
+      reason) for data-subject deletion requests and replaceEvidence(id,
+      bundle) for correcting/upgrading a filed item's evidence, in addition to
+      submit(). Frontend and core never assume a sink is create-only.
+    sources: [source-kitsoki-feedback-proposal]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-product-site-feedback, uc-pm-portal-feedback]
+  - schema: sassfully/requirement/v0
+    id: req-idempotent-submission
+    title: Submission is idempotent
+    status: draft
+    visibility: public
+    summary: Every reviewed bundle carries a stable idempotency key; retrying a
+      submit (network failure, duplicate click) must not create a second
+      ticket/note at the sink.
+    sources: [source-kitsoki-feedback-proposal]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-product-site-feedback, uc-pm-portal-feedback]
+  - schema: sassfully/requirement/v0
+    id: req-privacy-fail-closed
+    title: Unclassified or high-risk fields block submission
+    status: draft
+    visibility: public
+    summary: Submit is blocked, not silently allowed, when a plugin/provider
+      contributes a field with unknown sensitivity or a high-risk field lacking
+      a host-declared policy. The reporter or host must resolve it before the
+      bundle can leave the browser.
+    sources: [source-kitsoki-feedback-proposal]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-bug-report-with-replay]
+  - schema: sassfully/requirement/v0
+    id: req-legal-basis-metadata
+    title: Bundles record a legal basis for personal data
+    status: draft
+    visibility: public
+    summary: When a bundle contains personal data, it records a legal basis
+      (consent, legitimate interest, contract, legal obligation, or
+      host-declared) distinct from the field-level handling policy. The core
+      never invents this basis on the host's behalf.
+    sources: [source-kitsoki-feedback-proposal]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-bug-report-with-replay]
+  - schema: sassfully/requirement/v0
+    id: req-public-sink-abuse-controls
+    title: Public, unauthenticated submission paths resist abuse
+    status: draft
+    visibility: public
+    summary: A sink reachable by an anonymous visitor (e.g. a generated product
+      site) enforces edge-level abuse controls — rate limits, proof-of-work, or
+      captcha-equivalent checks — before accepting a submission, rather than
+      relying on persistent reporter identity.
+    sources: [source-kitsoki-feedback-proposal]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-product-site-feedback]
+  - schema: sassfully/requirement/v0
+    id: req-ai-triage-narrative
+    title: Reviewed bundles carry an AI-authored triage narrative
+    status: draft
+    visibility: public
+    summary: Beyond the user's own text, the reviewed bundle can carry a
+      generated narrative — distilled problem statement, suspected
+      category/component, reproduction hints, and confidence — produced from
+      the bundle's own evidence. This is the artifact's differentiator over a
+      plain evidence dump; it is dependency-injected and cassette/stubbed in
+      tests so no automated run calls a live LLM.
+    sources: [source-kitsoki-feedback-proposal]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-pm-portal-feedback, uc-bug-report-with-replay]
+  - schema: sassfully/requirement/v0
+    id: req-reproducible-anchor-trace
+    title: An anchor can carry a deterministic reproduction pointer
+    status: draft
+    visibility: public
+    summary: When the producer has one, the anchor envelope's extra field can
+      carry a stable pointer to a deterministic, replayable interaction trace
+      (not just a narrative description), so a downstream automated fix
+      pipeline can reproduce the reported state rather than only read about
+      it.
+    sources: [source-kitsoki-feedback-proposal]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-bug-report-with-replay]
+
   # --- use cases ------------------------------------------------------------
   - schema: sassfully/use-case/v0
     id: uc-deck-feedback
@@ -297,7 +396,9 @@ nodes:
     sources: [source-concept]
     edges:
       part_of: [product-sassfully]
-      acceptance: [req-generic-kinds, req-multi-sink-routing]
+      acceptance: [req-generic-kinds, req-multi-sink-routing,
+        req-sink-lifecycle-ops, req-idempotent-submission,
+        req-public-sink-abuse-controls]
   - schema: sassfully/use-case/v0
     id: uc-pm-portal-feedback
     title: PM-portal feedback
@@ -308,7 +409,9 @@ nodes:
     sources: [source-concept]
     edges:
       part_of: [product-sassfully]
-      acceptance: [req-ai-actionable-bundle, req-multi-sink-routing]
+      acceptance: [req-ai-actionable-bundle, req-multi-sink-routing,
+        req-sink-lifecycle-ops, req-idempotent-submission,
+        req-ai-triage-narrative]
   - schema: sassfully/use-case/v0
     id: uc-bug-report-with-replay
     title: Bug report with replay evidence
@@ -319,7 +422,9 @@ nodes:
     sources: [source-slidey-brief]
     edges:
       part_of: [product-sassfully]
-      acceptance: [req-host-policy-gates-evidence, req-privacy-metadata-first-class, req-capture-review-submit]
+      acceptance: [req-host-policy-gates-evidence, req-privacy-metadata-first-class, req-capture-review-submit,
+        req-privacy-fail-closed, req-legal-basis-metadata, req-ai-triage-narrative,
+        req-reproducible-anchor-trace]
 
   # --- explicit non-requirements ---------------------------------------------
   - schema: sassfully/limitation/v0

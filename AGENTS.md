@@ -18,7 +18,7 @@ belong in `.context/`, never in tracked files.
   design.
 
 <!-- pack:conventions:begin — managed by the pog conventions pack installer; edits inside this block are overwritten on reinstall -->
-## Repo conventions (sassfully)
+## Repo conventions (studio-sassfully)
 
 - **Protected main.** The primary checkout stays on `main` at its tip — a
   `reference-transaction` git hook blocks branch switches and off-tip detaches
