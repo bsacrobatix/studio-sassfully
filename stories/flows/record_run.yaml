@@ -1,0 +1,38 @@
+test_kind: flow
+app: ../app.yaml
+initial_state: record
+initial_world:
+  node_id: ts-dev-story-flows
+  record_command: "scripts/record-flow-evidence.sh"
+
+# Cassette host.run (same mechanism as stories/qa-compliance-gate-runner's
+# gate_run.yaml): no live suite runs in this deterministic flow test. The
+# real invocation is the Materialize button / `kitsoki graph materialize`
+# on a test-suite node, where the engine also runs the flows_recorded.star
+# gate check after these rooms.
+host_handlers:
+  host.run:
+    by_call:
+      run_recorder:
+        data: { ok: true, stdout: "recorded pog/evidence/flows-studio-sassfully.json (exit 2)\nrecorded pog/evidence/flows-slidey.json (exit 2)\n", exit_code: 0 }
+
+turns:
+  - intent: { name: look, slots: {} }
+    expect_state: record
+    expect_world:
+      node_id: ts-dev-story-flows
+      record_ok: true
+      status: "recorded"
+
+  - intent: { name: next, slots: {} }
+    expect_state: done
+    expect_world:
+      status: "complete"
+    expect_view_matches: "Recording complete"
+
+  - intent: { name: restart, slots: {} }
+    expect_state: record
+    expect_world:
+      status: "recorded"
+
+expect_no_errors: true
