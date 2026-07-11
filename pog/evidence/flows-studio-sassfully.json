@@ -1,0 +1,10 @@
+{
+  "schema": "pog/evidence-flow-run/v0",
+  "repo": "studio-sassfully",
+  "app": ".kitsoki/stories/studio-sassfully-dev/app.yaml",
+  "command": "kitsoki test flows .kitsoki/stories/studio-sassfully-dev/app.yaml --json pog/evidence/flows-studio-sassfully.report.json",
+  "exit": 2,
+  "recorded_at": "2026-07-11T05:29:35Z",
+  "repo_commit": "605689695855b7e148cd46ec32456a6185b97d9a",
+  "report": null
+}

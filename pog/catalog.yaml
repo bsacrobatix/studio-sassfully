@@ -70,8 +70,7 @@ type_registry:
   - id: limitation
     schema: graph-type/v0
     extends: core-node
-    summary: An explicit non-requirement — pinned so scope creep is lintable,
-      per the brief's own non-goals.
+    summary: An explicit non-requirement — pinned so scope creep is lintable, per the brief's own non-goals.
     edge_fields:
       - id: part_of
         target_type: product
@@ -97,8 +96,7 @@ type_registry:
   - id: component
     schema: graph-type/v0
     extends: core-node
-    summary: A planned package/module boundary from the brief; becomes real
-      when implementation nodes land against it.
+    summary: A planned package/module boundary from the brief; becomes real when implementation nodes land against it.
     edge_fields:
       - id: part_of
         target_type: product
@@ -106,7 +104,93 @@ type_registry:
       - id: satisfies
         target_type: requirement
         cardinality: many
-
+  # Deliverable layer — POG materialization-first taxonomy (2026-07-11):
+  # deliverable nodes are SPECS of real evidence/functionality artifacts
+  # (demos, docs, tutorials, test evidence); "work" is the act of
+  # materializing them, and a deliverable is REAL exactly when its latest
+  # materialize run's Starlark gate check passes. Status uses the derived
+  # EvidenceStatus vocabulary (missing | planned | in-progress | failed |
+  # verified | stale) — flipped by runs, never hand-curated. The test-suite
+  # type carries the full contract (producer story + type-provided
+  # assertion); demo/doc/tutorial get their story bindings as the product
+  # grows the artifacts they judge.
+  - id: test-suite
+    schema: graph-type/v0
+    extends: core-node
+    summary: Recorded deterministic test/flow evidence; real when the recorded runs are clean per the type-provided flows_recorded assertion.
+    edge_fields:
+      - id: part_of
+        target_type: product
+        cardinality: one
+      - id: proves
+        target_type: requirement
+        cardinality: many
+    artifact:
+      schema: sassfully/artifact/flow-evidence/v0
+      format: json
+      presentation: document
+    materialize:
+      story: stories/record-flow-evidence
+      context_edges: [proves]
+      params:
+        - {id: record_command, type: string, default: "scripts/record-flow-evidence.sh"}
+      checks:
+        - id: gate
+          script: scripts/checks/flows_recorded.star
+          inputs_field: check_inputs
+          capabilities: {fs: {read: ["pog/evidence/**"]}}
+  - id: demo
+    schema: graph-type/v0
+    extends: core-node
+    summary: A recorded demonstration packet (tours + rrweb clips) of a use case; spec-only until its capture story is wired.
+    edge_fields:
+      - id: part_of
+        target_type: product
+        cardinality: one
+      - id: demonstrates
+        target_type: use-case
+        cardinality: many
+    artifact:
+      schema: sassfully/artifact/demo-packet/v0
+      format: json
+      presentation: media
+  - id: doc
+    schema: graph-type/v0
+    extends: core-node
+    summary: A generated document deliverable; spec-only until its producer story is wired.
+    edge_fields:
+      - id: part_of
+        target_type: product
+        cardinality: one
+      - id: documents
+        target_type: requirement
+        cardinality: many
+    artifact:
+      schema: sassfully/artifact/doc/v0
+      format: markdown
+      presentation: document
+  - id: tutorial
+    schema: graph-type/v0
+    extends: core-node
+    summary: A step-by-step walkthrough teaching a use case; spec-only until its producer story is wired.
+    edge_fields:
+      - id: part_of
+        target_type: product
+        cardinality: one
+      - id: teaches
+        target_type: use-case
+        cardinality: many
+    artifact:
+      schema: sassfully/artifact/doc/v0
+      format: markdown
+      presentation: document
+  # The structured write primitive (cribbed from the POG program catalog):
+  # system-authored writes — materialize write-backs, derived status flips —
+  # land as changeset nodes, so every catalog mutation has provenance.
+  - id: changeset
+    schema: graph-type/v0
+    extends: core-node
+    summary: A reviewable, structured edit to this catalog; content writes are changesets, lifecycle flips are direct writes with provenance.
 nodes:
   # --- product -----------------------------------------------------------
   - schema: sassfully/product/v0
@@ -114,23 +198,16 @@ nodes:
     title: sassfully
     status: active
     visibility: public
-    summary: A generic, contextual-feedback framework — bring-your-own
-      presentation, semantically-anchored feedback (bug reports, comments,
-      copy/design feedback, questions, AI instructions), routed to the outcome
-      each item deserves, with capture opt-in and privacy-controlled.
+    summary: A generic, contextual-feedback framework — bring-your-own presentation, semantically-anchored feedback (bug reports, comments, copy/design feedback, questions, AI instructions), routed to the outcome each item deserves, with capture opt-in and privacy-controlled.
     sources: [source-concept]
     edges: {}
-
   # --- requirements (product) ---------------------------------------------
   - schema: sassfully/requirement/v0
     id: req-generic-kinds
     title: Feedback is generic by kind
     status: draft
     visibility: public
-    summary: "Support at least: bug, content_comment, copy_feedback,
-      design_feedback, question, ai_instruction, issue_request, approval,
-      rejection. Kind may change copy, required fields, review UI, and sink
-      routing — it must not fork the anchor or evidence model."
+    summary: "Support at least: bug, content_comment, copy_feedback, design_feedback, question, ai_instruction, issue_request, approval, rejection. Kind may change copy, required fields, review UI, and sink routing — it must not fork the anchor or evidence model."
     sources: [source-slidey-brief]
     edges:
       part_of: [product-sassfully]
@@ -140,10 +217,7 @@ nodes:
     title: Feedback is anchorable at any visible point
     status: draft
     visibility: public
-    summary: "A feedback item can target: the whole artifact, the current
-      scope, scope plus step, a visible element picked in annotation mode, an
-      opened reference, or a media/replay time position when the host supports
-      it."
+    summary: "A feedback item can target: the whole artifact, the current scope, scope plus step, a visible element picked in annotation mode, an opened reference, or a media/replay time position when the host supports it."
     sources: [source-slidey-brief]
     edges:
       part_of: [product-sassfully]
@@ -153,10 +227,7 @@ nodes:
     title: Anchors are producer-owned and portable
     status: draft
     visibility: public
-    summary: A generic anchor envelope (producer, artifactId, scope, step,
-      ref, label, bbox, mediaTimeMs, url, extra) where only the producer
-      interprets scope/step/ref. Consumers may display fields, never parse
-      their meaning.
+    summary: A generic anchor envelope (producer, artifactId, scope, step, ref, label, bbox, mediaTimeMs, url, extra) where only the producer interprets scope/step/ref. Consumers may display fields, never parse their meaning.
     sources: [source-slidey-brief]
     edges:
       part_of: [product-sassfully]
@@ -166,9 +237,7 @@ nodes:
     title: Capture, review, and sink submission are separate stages
     status: draft
     visibility: public
-    summary: Collect a draft locally, show it for review, submit only the
-      reviewed bundle — even for low-friction comments. Feedback is not
-      mutation; the reviewed note is the artifact.
+    summary: Collect a draft locally, show it for review, submit only the reviewed bundle — even for low-friction comments. Feedback is not mutation; the reviewed note is the artifact.
     sources: [source-slidey-brief, source-concept]
     edges:
       part_of: [product-sassfully]
@@ -178,10 +247,7 @@ nodes:
     title: One feedback item can route to multiple sinks
     status: draft
     visibility: public
-    summary: "Sink contract supports: local JSONL note, GitHub/Jira/Linear
-      issue, issue/PR comment, review comment, AI instruction dispatch,
-      reviewed artifact bundle, and no-op dry-run. The frontend never knows
-      upload mechanics, labels, templates, auth, or storage layout."
+    summary: "Sink contract supports: local JSONL note, GitHub/Jira/Linear issue, issue/PR comment, review comment, AI instruction dispatch, reviewed artifact bundle, and no-op dry-run. The frontend never knows upload mechanics, labels, templates, auth, or storage layout."
     sources: [source-slidey-brief]
     edges:
       part_of: [product-sassfully]
@@ -191,11 +257,7 @@ nodes:
     title: Reviewed bundles preserve enough state for AI action
     status: draft
     visibility: public
-    summary: An ai_instruction or issue-to-agent bundle includes the user
-      instruction, anchor envelope, artifact identity, allowed source excerpt
-      or stable pointer, reviewed label/snippet, relevant references, and a
-      preferred action (comment-only, propose patch, patch artifact, file
-      issue).
+    summary: An ai_instruction or issue-to-agent bundle includes the user instruction, anchor envelope, artifact identity, allowed source excerpt or stable pointer, reviewed label/snippet, relevant references, and a preferred action (comment-only, propose patch, patch artifact, file issue).
     sources: [source-slidey-brief]
     edges:
       part_of: [product-sassfully]
@@ -205,9 +267,7 @@ nodes:
     title: A reviewed bundle can render as a report deck
     status: draft
     visibility: public
-    summary: Summary scene, anchor scene, optional before/after or thumbnail,
-      evidence/privacy review scene, sink receipt scene — an artifact, never
-      the primary data model.
+    summary: Summary scene, anchor scene, optional before/after or thumbnail, evidence/privacy review scene, sink receipt scene — an artifact, never the primary data model.
     sources: [source-slidey-brief]
     edges:
       part_of: [product-sassfully]
@@ -217,24 +277,18 @@ nodes:
     title: The UI works standalone and embedded
     status: draft
     visibility: public
-    summary: "Modes: standalone shell trigger; embedded with the parent host
-      owning the trigger via embed:view / embed:annotate / embed:pick;
-      workspace edit mode without conflicting with inline editing; minimal
-      accessible present mode; read-only bundles where mutation is never
-      assumed."
+    summary: "Modes: standalone shell trigger; embedded with the parent host owning the trigger via embed:view / embed:annotate / embed:pick; workspace edit mode without conflicting with inline editing; minimal accessible present mode; read-only bundles where mutation is never assumed."
     sources: [source-slidey-brief]
     edges:
       part_of: [product-sassfully]
       motivated_by: [uc-deck-feedback, uc-product-site-feedback]
-
   # --- requirements (privacy) ----------------------------------------------
   - schema: sassfully/requirement/v0
     id: req-privacy-metadata-first-class
     title: Privacy metadata is first-class
     status: draft
     visibility: public
-    summary: Every field in a reviewed bundle carries source, sensitivity,
-      policy, review state, and retention metadata.
+    summary: Every field in a reviewed bundle carries source, sensitivity, policy, review state, and retention metadata.
     sources: [source-slidey-brief]
     edges:
       part_of: [product-sassfully]
@@ -244,9 +298,7 @@ nodes:
     title: Data avoidance is the default
     status: draft
     visibility: public
-    summary: Prefer producer ids, indices, refs, roles, labels, bboxes,
-      hashes, and short reviewed snippets over raw DOM text, full screenshots,
-      HAR, console objects, or replay logs.
+    summary: Prefer producer ids, indices, refs, roles, labels, bboxes, hashes, and short reviewed snippets over raw DOM text, full screenshots, HAR, console objects, or replay logs.
     sources: [source-slidey-brief]
     edges:
       part_of: [product-sassfully]
@@ -256,8 +308,7 @@ nodes:
     title: Raw draft data stays local by default
     status: draft
     visibility: public
-    summary: Remote sinks and AI processors receive only the reviewed bundle;
-      user-entered text is shown in the review step and marked user-provided.
+    summary: Remote sinks and AI processors receive only the reviewed bundle; user-entered text is shown in the review step and marked user-provided.
     sources: [source-slidey-brief]
     edges:
       part_of: [product-sassfully]
@@ -267,10 +318,7 @@ nodes:
     title: Host policies gate high-risk evidence
     status: draft
     visibility: public
-    summary: HAR, replay (rrweb), screenshots, console capture, source
-      excerpts, and raw scene JSON are capabilities a host explicitly enables
-      per feedback kind — never always-on defaults. HAR and rrweb are optional
-      everywhere and off by default.
+    summary: HAR, replay (rrweb), screenshots, console capture, source excerpts, and raw scene JSON are capabilities a host explicitly enables per feedback kind — never always-on defaults. HAR and rrweb are optional everywhere and off by default.
     sources: [source-slidey-brief]
     edges:
       part_of: [product-sassfully]
@@ -378,10 +426,7 @@ nodes:
     title: Deck feedback in slidey
     status: draft
     visibility: public
-    summary: A viewer gives feedback at any visible point of a slidey deck via
-      the embed protocol (embed:view scope/step, embed:pick anchors); a
-      scene/step anchor plus thumbnail is enough for copy/design comments.
-      slidey is the first real host and the host-neutrality proof.
+    summary: A viewer gives feedback at any visible point of a slidey deck via the embed protocol (embed:view scope/step, embed:pick anchors); a scene/step anchor plus thumbnail is enough for copy/design comments. slidey is the first real host and the host-neutrality proof.
     sources: [source-slidey-brief]
     edges:
       part_of: [product-sassfully]
@@ -391,8 +436,7 @@ nodes:
     title: Product-site feedback
     status: draft
     visibility: public
-    summary: A visitor files feedback on a generated product site; routing
-      turns it into a comment, an issue, or a support request.
+    summary: A visitor files feedback on a generated product site; routing turns it into a comment, an issue, or a support request.
     sources: [source-concept]
     edges:
       part_of: [product-sassfully]
@@ -404,8 +448,7 @@ nodes:
     title: PM-portal feedback
     status: draft
     visibility: public
-    summary: A reviewer annotates a catalog/portal surface; an ai_instruction
-      outcome dispatches the reviewed bundle to an authoring/refine flow.
+    summary: A reviewer annotates a catalog/portal surface; an ai_instruction outcome dispatches the reviewed bundle to an authoring/refine flow.
     sources: [source-concept]
     edges:
       part_of: [product-sassfully]
@@ -417,8 +460,7 @@ nodes:
     title: Bug report with replay evidence
     status: draft
     visibility: public
-    summary: The kitsoki-lineage case — a bug report carrying opt-in rrweb
-      replay and network summary, with privacy review before submission.
+    summary: The kitsoki-lineage case — a bug report carrying opt-in rrweb replay and network summary, with privacy review before submission.
     sources: [source-slidey-brief]
     edges:
       part_of: [product-sassfully]
@@ -432,8 +474,7 @@ nodes:
     title: Not a bug-only reporter
     status: pinned
     visibility: public
-    summary: The first version must not be bug-specific; bug is one kind among
-      many.
+    summary: The first version must not be bug-specific; bug is one kind among many.
     sources: [source-slidey-brief]
     edges:
       part_of: [product-sassfully]
@@ -463,8 +504,7 @@ nodes:
     title: slidey is a host, not a dependency
     status: pinned
     visibility: public
-    summary: slidey is the reference integration; the core must work for any
-      producer speaking the anchor envelope.
+    summary: slidey is the reference integration; the core must work for any producer speaking the anchor envelope.
     sources: [source-slidey-brief]
     edges:
       part_of: [product-sassfully]
@@ -484,23 +524,18 @@ nodes:
     title: Capture is not the source of truth
     status: pinned
     visibility: public
-    summary: Screenshot/replay never outrank semantic anchors when anchors are
-      available.
+    summary: Screenshot/replay never outrank semantic anchors when anchors are available.
     sources: [source-slidey-brief]
     edges:
       part_of: [product-sassfully]
       constrains: [req-data-avoidance-default]
-
   # --- milestones -------------------------------------------------------------
   - schema: sassfully/milestone/v0
     id: ms-1-feedback-core
     title: M1 feedback-core
     status: planned
     visibility: public
-    summary: Anchor contract + capture widget + local-note outcome, no
-      integrations — proves the catalog-first loop and the brief's minimum
-      viable slice (trigger, optional annotation anchor, prose+kind, review
-      step with privacy manifest, local/test sink).
+    summary: Anchor contract + capture widget + local-note outcome, no integrations — proves the catalog-first loop and the brief's minimum viable slice (trigger, optional annotation anchor, prose+kind, review step with privacy manifest, local/test sink).
     sources: [source-slidey-brief]
     edges:
       part_of: [product-sassfully]
@@ -510,8 +545,7 @@ nodes:
     title: M2 slidey integration
     status: planned
     visibility: public
-    summary: First real host via the embed protocol slidey already speaks —
-      proves the host-neutrality claim.
+    summary: First real host via the embed protocol slidey already speaks — proves the host-neutrality claim.
     sources: [source-slidey-brief]
     edges:
       part_of: [product-sassfully]
@@ -544,14 +578,12 @@ nodes:
     title: M5 embedded in sites and portal
     status: planned
     visibility: public
-    summary: sassfully embedded in the product sites and the PM portal — the
-      loop closes; feedback about the products arrives through the product.
+    summary: sassfully embedded in the product sites and the PM portal — the loop closes; feedback about the products arrives through the product.
     sources: [source-concept]
     edges:
       part_of: [product-sassfully]
       delivers: []
       after: [ms-2-slidey-integration]
-
   # --- planned components (package boundaries from the brief) -----------------
   - schema: sassfully/component/v0
     id: comp-core
@@ -623,7 +655,6 @@ nodes:
     edges:
       part_of: [product-sassfully]
       satisfies: []
-
   # --- agent feedback channel (an MCP tool surface as producer; requirements
   #     dogfooded from the kitsoki graph-MCP toolset plan,
   #     see source-pog-graph-mcp-plan) ---------------------------------------
@@ -632,11 +663,7 @@ nodes:
     title: Agents are first-class feedback reporters
     status: draft
     visibility: public
-    summary: A machine reporter (an agent holding only an MCP toolset) files
-      feedback through the same generic kind mechanism as any human reporter.
-      An agent tool-gap report is just a kind (e.g. tool_gap) that may change
-      copy, required fields, and sink routing, but never forks the anchor or
-      evidence model.
+    summary: A machine reporter (an agent holding only an MCP toolset) files feedback through the same generic kind mechanism as any human reporter. An agent tool-gap report is just a kind (e.g. tool_gap) that may change copy, required fields, and sink routing, but never forks the anchor or evidence model.
     sources: [source-pog-graph-mcp-plan]
     edges:
       part_of: [product-sassfully]
@@ -646,10 +673,7 @@ nodes:
     title: MCP tool servers are producers with opaque anchors
     status: draft
     visibility: public
-    summary: An MCP tool server (e.g. producer kitsoki-graph-mcp) anchors
-      agent feedback with producer-owned opaque scope/step/ref strings — a
-      catalog identity at a revision, the tool name that hit the wall, a node
-      or changeset id — which consumers may display but never parse.
+    summary: An MCP tool server (e.g. producer kitsoki-graph-mcp) anchors agent feedback with producer-owned opaque scope/step/ref strings — a catalog identity at a revision, the tool name that hit the wall, a node or changeset id — which consumers may display but never parse.
     sources: [source-pog-graph-mcp-plan]
     edges:
       part_of: [product-sassfully]
@@ -659,11 +683,7 @@ nodes:
     title: Agent feedback bundles are valid capture-stage drafts
     status: draft
     visibility: public
-    summary: The locally written report bundle an agent-producer emits
-      (structured fields plus anchor plus redacted evidence) validates as a
-      sassfully capture-stage draft, so review and submission consume
-      machine-filed feedback with no special ingestion path; raw drafts stay
-      local until reviewed.
+    summary: The locally written report bundle an agent-producer emits (structured fields plus anchor plus redacted evidence) validates as a sassfully capture-stage draft, so review and submission consume machine-filed feedback with no special ingestion path; raw drafts stay local until reviewed.
     sources: [source-pog-graph-mcp-plan]
     edges:
       part_of: [product-sassfully]
@@ -673,11 +693,7 @@ nodes:
     title: An autonomous agent files a tool-gap report from inside its toolset
     status: draft
     visibility: public
-    summary: An agent restricted to an MCP toolset hits a task its tools
-      cannot express. Instead of routing around the gap it files a structured
-      report through a non-blocking feedback tool advertised at the moment of
-      friction; the capture stage stores the draft locally, review happens in
-      the host system's queue, and submission routes to the configured sink.
+    summary: An agent restricted to an MCP toolset hits a task its tools cannot express. Instead of routing around the gap it files a structured report through a non-blocking feedback tool advertised at the moment of friction; the capture stage stores the draft locally, review happens in the host system's queue, and submission routes to the configured sink.
     sources: [source-pog-graph-mcp-plan]
     edges:
       part_of: [product-sassfully]
@@ -687,3 +703,127 @@ nodes:
         - req-bundle-ingestable
         - req-capture-review-submit
         - req-raw-drafts-stay-local
+  # --- deliverables (evidence/functionality nodes) --------------------------
+  - schema: sassfully/test-suite/v0
+    id: ts-sassfully-dev-story-flows
+    title: Recorded no-LLM dev-story flow run against this repo
+    status: missing
+    visibility: public
+    summary: The sassfully half of the POG program's dev-story onboarding proof — a recorded `kitsoki test flows` run against .kitsoki/stories/studio-sassfully-dev, judged by the test-suite type's flows_recorded assertion. Materializing runs scripts/record-flow-evidence.sh (writes pog/evidence/ even on failure) and the engine judges the fresh evidence.
+    check_inputs:
+      reports:
+        - {repo: studio-sassfully, path: pog/evidence/flows-studio-sassfully.json}
+    sources: [source-concept]
+    edges:
+      part_of: [product-sassfully]
+      proves: [req-capture-review-submit]
+    materialization:
+      artifacts: []
+      checks:
+        - id: gate
+          ok: false
+          reasons:
+            - 'studio-sassfully: recorded run exited 2 (flows did not run clean)'
+          reproduce: kitsoki starlark run scripts/checks/flows_recorded.star --inputs '{"reports":[{"path":"pog/evidence/flows-studio-sassfully.json","repo":"studio-sassfully"}]}' --capabilities '{"fs":{"read":["pog/evidence/**"]}}'
+          script: scripts/checks/flows_recorded.star
+          script_sha256: 34aebdba4eff5b14944ecb1b124a758290e8011ff704d8cf9898aed1c71b9f90
+      job_id: 01KX7TE1XQF3FVYHE7P1XXDKT1
+      stages:
+        - id: record
+          status: complete
+        - id: done
+          status: complete
+        - id: check:gate
+          status: failed
+      status: failed
+      story: stories/record-flow-evidence
+  - schema: sassfully/demo/v0
+    id: demo-capture-widget
+    title: Recorded demo — capture, review, submit in a host page
+    status: missing
+    visibility: public
+    summary: Spec of a captured demo packet walking uc-bug-report-with-replay against a real host page embedding the widget. Does not exist yet; sits in the derived work queue until the widget is real enough to capture.
+    sources: [source-concept]
+    edges:
+      part_of: [product-sassfully]
+      demonstrates: [uc-bug-report-with-replay]
+  - schema: sassfully/tutorial/v0
+    id: tutorial-integrate-widget
+    title: Tutorial — integrate the feedback widget into a host app
+    status: missing
+    visibility: public
+    summary: Spec of a walkthrough from install to first routed feedback item. Does not exist yet; the derived work queue carries it until materialized.
+    sources: [source-concept]
+    edges:
+      part_of: [product-sassfully]
+      teaches: [uc-deck-feedback]
+  - id: cs-1
+    operations:
+      - changes:
+          - after:
+              artifacts: []
+              checks:
+                - id: gate
+                  ok: false
+                  reasons:
+                    - 'studio-sassfully: no evidence recorded (run scripts/record-flow-evidence.sh)'
+                  reproduce: kitsoki starlark run scripts/checks/flows_recorded.star --inputs '{"reports":[{"path":"pog/evidence/flows-studio-sassfully.json","repo":"studio-sassfully"}]}' --capabilities '{"fs":{"read":["pog/evidence/**"]}}'
+                  script: scripts/checks/flows_recorded.star
+                  script_sha256: 34aebdba4eff5b14944ecb1b124a758290e8011ff704d8cf9898aed1c71b9f90
+              job_id: 01KX7SWBEJA74MJZBZPSF5NPXK
+              stages:
+                - id: record
+                  status: complete
+                - id: done
+                  status: complete
+                - id: check:gate
+                  status: failed
+              status: failed
+              story: stories/record-flow-evidence
+            path:
+              - fields
+              - materialization
+        kind: modified
+        node: ts-sassfully-dev-story-flows
+    provenance:
+      job_id: 01KX7SWBEJA74MJZBZPSF5NPXK
+      story: stories/record-flow-evidence
+    schema: graph/changeset/v1
+    status: notified
+    title: 'materialize ts-sassfully-dev-story-flows: write back status "failed"'
+    visibility: internal
+  - id: cs-2
+    operations:
+      - changes:
+          - after:
+              artifacts: []
+              checks:
+                - id: gate
+                  ok: false
+                  reasons:
+                    - 'studio-sassfully: recorded run exited 2 (flows did not run clean)'
+                  reproduce: kitsoki starlark run scripts/checks/flows_recorded.star --inputs '{"reports":[{"path":"pog/evidence/flows-studio-sassfully.json","repo":"studio-sassfully"}]}' --capabilities '{"fs":{"read":["pog/evidence/**"]}}'
+                  script: scripts/checks/flows_recorded.star
+                  script_sha256: 34aebdba4eff5b14944ecb1b124a758290e8011ff704d8cf9898aed1c71b9f90
+              job_id: 01KX7TE1XQF3FVYHE7P1XXDKT1
+              stages:
+                - id: record
+                  status: complete
+                - id: done
+                  status: complete
+                - id: check:gate
+                  status: failed
+              status: failed
+              story: stories/record-flow-evidence
+            path:
+              - fields
+              - materialization
+        kind: modified
+        node: ts-sassfully-dev-story-flows
+    provenance:
+      job_id: 01KX7TE1XQF3FVYHE7P1XXDKT1
+      story: stories/record-flow-evidence
+    schema: graph/changeset/v1
+    status: notified
+    title: 'materialize ts-sassfully-dev-story-flows: write back status "failed"'
+    visibility: internal
