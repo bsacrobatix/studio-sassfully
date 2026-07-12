@@ -1,0 +1,47 @@
+states:
+  check:
+    description: "Running the qa-target's gate command"
+    relevant_world: [node_id, gate, check_ok, check_stdout, check_exit, status]
+    on_enter:
+      - invoke: host.run
+        id: run_gate
+        with:
+          cmd: "{{ world.gate }}"
+        bind: { check_ok: ok, check_stdout: stdout, check_exit: exit_code }
+        on_error: check_failed
+    view:
+      extends: "base"
+      blocks:
+        body:
+          - kv:
+              pairs:
+                Node: "{{ world.node_id|default:'(none)' }}"
+                Gate: "{{ world.gate|default:'(unset)' }}"
+                Ok: "{{ world.check_ok }}"
+                Exit: "{{ world.check_exit }}"
+        choices:
+          - list:
+              items:
+                - { label: "next", hint: "attest the result" }
+                - { label: "look" }
+    on:
+      next:
+        - target: attest
+      look:
+        - target: check
+  check_failed:
+    description: "Gate command could not be run"
+    terminal: true
+    relevant_world: [node_id, gate]
+    view:
+      extends: "base"
+      blocks:
+        body:
+          - prose: "host.run failed to execute the gate command; no changeset was written."
+        choices:
+          - list:
+              items:
+                - { label: "look" }
+    on:
+      look:
+        - target: check_failed

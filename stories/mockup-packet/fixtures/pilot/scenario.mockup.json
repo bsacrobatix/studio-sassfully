@@ -1,0 +1,172 @@
+{
+  "version": 1,
+  "title": "PM reviews the roadmap as a computed diff",
+  "tagline": "A tracked node's status or gate changes (a work item lands, a decision is recorded, a changeset applies).",
+  "zones": {
+    "rail": {
+      "heading": "Journey",
+      "typeHeading": "Exercises",
+      "scenarios": [
+        [
+          "PM reviews the roadmap as a computed diff",
+          "Without a computed diff the PM either re-reads the whole graph every time or misses a status flip that should have prompted a decision."
+        ]
+      ],
+      "types": [
+        "feature-pm-portal"
+      ]
+    },
+    "intake": {
+      "heading": "Step",
+      "fields": [
+        "Decision",
+        "Persona",
+        "Node"
+      ]
+    },
+    "graph": {
+      "projection": "graph-projection.json"
+    },
+    "inspector": {
+      "heading": "Inspector",
+      "evidenceHeading": "Acceptance"
+    },
+    "timeline": {
+      "heading": "Journey progress"
+    }
+  },
+  "states": {
+    "step_0_open_the_portal_the_catalog_view_loads_t": {
+      "group": "journey",
+      "rail": {
+        "active": 0,
+        "decision": "Open the portal; the catalog view loads the current graph.",
+        "detail": "Step 1 of 3"
+      },
+      "intake": [
+        "Open the portal; the catalog view loads the current graph.",
+        "pm",
+        "uc-pm-reviews-roadmap"
+      ],
+      "graph": {
+        "title": "PM reviews the roadmap as a computed diff",
+        "sub": "Open the portal; the catalog view loads the current graph.",
+        "state": "step_0_open_the_portal_the_catalog_view_loads_t"
+      },
+      "inspector": {
+        "headline": "Open the portal; the catalog view loads the current graph.",
+        "meaning": "The PM sees exactly what moved since last look, with provenance for every change, and can drill into any node's history.",
+        "metrics": [
+          [
+            "step",
+            "1/3"
+          ]
+        ],
+        "evidence": [
+          [
+            "",
+            "req-changeset-edits",
+            "requirement"
+          ]
+        ],
+        "action": "Next step"
+      },
+      "timeline": {
+        "steps": [
+          "Open the portal; the catalog view loads the current graph.",
+          "Switch to the roadmap diff view; desired vs current subgraphs render as a computed delta, not a hand-maintained list.",
+          "Drill into a changed node; its decision/changeset provenance is one click away."
+        ],
+        "done": 1
+      }
+    },
+    "step_1_switch_to_the_roadmap_diff_view_desired_": {
+      "group": "journey",
+      "rail": {
+        "active": 0,
+        "decision": "Switch to the roadmap diff view; desired vs current subgraphs render as a computed delta, not a hand-maintained list.",
+        "detail": "Step 2 of 3"
+      },
+      "intake": [
+        "Switch to the roadmap diff view; desired vs current subgraphs render as a computed delta, not a hand-maintained list.",
+        "pm",
+        "uc-pm-reviews-roadmap"
+      ],
+      "graph": {
+        "title": "PM reviews the roadmap as a computed diff",
+        "sub": "Switch to the roadmap diff view; desired vs current subgraphs render as a computed delta, not a hand-maintained list.",
+        "state": "step_1_switch_to_the_roadmap_diff_view_desired_"
+      },
+      "inspector": {
+        "headline": "Switch to the roadmap diff view; desired vs current subgraphs render as a computed delta, not a hand-maintained list.",
+        "meaning": "The PM sees exactly what moved since last look, with provenance for every change, and can drill into any node's history.",
+        "metrics": [
+          [
+            "step",
+            "2/3"
+          ]
+        ],
+        "evidence": [
+          [
+            "",
+            "req-changeset-edits",
+            "requirement"
+          ]
+        ],
+        "action": "Next step"
+      },
+      "timeline": {
+        "steps": [
+          "Open the portal; the catalog view loads the current graph.",
+          "Switch to the roadmap diff view; desired vs current subgraphs render as a computed delta, not a hand-maintained list.",
+          "Drill into a changed node; its decision/changeset provenance is one click away."
+        ],
+        "done": 2
+      }
+    },
+    "step_2_drill_into_a_changed_node_its_decision_c": {
+      "group": "journey",
+      "rail": {
+        "active": 0,
+        "decision": "Drill into a changed node; its decision/changeset provenance is one click away.",
+        "detail": "Step 3 of 3"
+      },
+      "intake": [
+        "Drill into a changed node; its decision/changeset provenance is one click away.",
+        "pm",
+        "uc-pm-reviews-roadmap"
+      ],
+      "graph": {
+        "title": "PM reviews the roadmap as a computed diff",
+        "sub": "Drill into a changed node; its decision/changeset provenance is one click away.",
+        "state": "step_2_drill_into_a_changed_node_its_decision_c"
+      },
+      "inspector": {
+        "headline": "Drill into a changed node; its decision/changeset provenance is one click away.",
+        "meaning": "The PM sees exactly what moved since last look, with provenance for every change, and can drill into any node's history.",
+        "metrics": [
+          [
+            "step",
+            "3/3"
+          ]
+        ],
+        "evidence": [
+          [
+            "",
+            "req-changeset-edits",
+            "requirement"
+          ]
+        ],
+        "action": "Done"
+      },
+      "timeline": {
+        "steps": [
+          "Open the portal; the catalog view loads the current graph.",
+          "Switch to the roadmap diff view; desired vs current subgraphs render as a computed delta, not a hand-maintained list.",
+          "Drill into a changed node; its decision/changeset provenance is one click away."
+        ],
+        "done": 3
+      }
+    }
+  }
+}

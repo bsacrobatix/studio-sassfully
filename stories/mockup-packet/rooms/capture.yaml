@@ -1,0 +1,37 @@
+states:
+  capture:
+    description: "Capturing rrweb clips for every tour"
+    relevant_world: [node_id, manifest_path, status]
+    on_enter:
+      - invoke: host.demo
+        id: capture_record
+        with:
+          op: record
+          manifest_path: "{{ world.manifest_path }}"
+        bind: { record_stdout: stdout }
+        on_error: failed
+      - set: { status: "captured" }
+    view:
+      extends: "base"
+      blocks:
+        body:
+          - prose: "record-tour.mjs launched the manifest's target once, captured every tour against it (contract §6), re-estimated narration timing, and ran demo-doctor as its own closing check."
+          - kv:
+              pairs:
+                Manifest: "{{ world.manifest_path }}"
+                Status: "{{ world.status }}"
+        choices:
+          - list:
+              items:
+                - { label: "next", hint: "review the doctor report" }
+                - { label: "restart" }
+                - { label: "look" }
+    on:
+      next:
+        - target: doctor
+      restart:
+        - target: project
+          effects:
+            - set: { status: "", mockup_path: "", doctor_ok: false, doctor_report: "" }
+      look:
+        - target: capture

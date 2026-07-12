@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "mockup": "mockup.html",
+  "deck": "bug-report-with-replay-demo.slidey.json",
+  "airSec": 1.5,
+  "target": {
+    "launch": "python3 -m http.server 7892 --bind 127.0.0.1",
+    "addr": "127.0.0.1:7892",
+    "readyPath": "/mockup.html",
+    "cwd": ".",
+    "timeoutMs": 30000
+  },
+  "viewport": {
+    "width": 1600,
+    "height": 900
+  },
+  "postersDir": "clips/posters",
+  "tours": [
+    {
+      "tour": "bug-report-with-replay-journey.tour.json",
+      "out": "clips/bug-report-with-replay-journey.rrweb.json"
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+test_kind: flow
+app: ../app.yaml
+initial_state: project
+initial_world:
+  node_id: uc-pm-reviews-roadmap
+  audience: internal
+
+# Cassette the host.demo.* exec verbs (A2, use-case-loop-plan §3.5: "cassette
+# these verbs") — same mechanism stories/ci-status's check_native.yaml flow
+# uses to stub host.git. No live node/chromium runs in this test.
+host_handlers:
+  host.demo:
+    by_call:
+      mockup_create:
+        data:
+          stdout: "wrote .artifacts/uc-pm-reviews-roadmap/mockup.html\n"
+      capture_record:
+        data:
+          stdout: "captured 3 tours; re-estimate: 0 flags; doctor: ok\n"
+      packet_doctor:
+        data:
+          report:
+            ok: true
+            checks:
+              - { name: states, ok: true }
+              - { name: deck-paths, ok: true }
+              - { name: freshness, ok: true }
+              - { name: chapters, ok: true }
+              - { name: estimate, ok: true }
+
+turns:
+  - intent: { name: look, slots: {} }
+    expect_state: project
+    expect_world:
+      node_id: uc-pm-reviews-roadmap
+      scenario_path: ".artifacts/uc-pm-reviews-roadmap/scenario.mockup.json"
+      manifest_path: ".artifacts/uc-pm-reviews-roadmap/packet.demo.json"
+      status: "projecting"
+
+  - intent: { name: next, slots: {} }
+    expect_state: mockup
+    expect_world:
+      mockup_path: ".artifacts/uc-pm-reviews-roadmap/mockup.html"
+      status: "mockup-created"
+      create_stdout: "wrote .artifacts/uc-pm-reviews-roadmap/mockup.html\n"
+
+  - intent: { name: next, slots: {} }
+    expect_state: tours
+    expect_world:
+      status: "tours-ready"
+
+  - intent: { name: next, slots: {} }
+    expect_state: capture
+    expect_world:
+      status: "captured"
+      record_stdout: "captured 3 tours; re-estimate: 0 flags; doctor: ok\n"
+
+  - intent: { name: next, slots: {} }
+    expect_state: doctor
+    expect_world:
+      status: "complete"
+      doctor_ok: true
+    expect_view_matches: "all pass"
+
+  - intent: { name: restart, slots: {} }
+    expect_state: project
+    expect_world:
+      status: "projecting"
+      mockup_path: ""
+      doctor_ok: false
+
+expect_no_errors: true

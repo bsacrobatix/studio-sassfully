@@ -1,0 +1,29 @@
+states:
+  project:
+    description: "Projecting the use-case's journey into a scenario spec"
+    relevant_world: [node_id, audience, scenario_path, status]
+    on_enter:
+      - set:
+          status: "projecting"
+          scenario_path: "{{ '.artifacts/' + world.node_id + '/scenario.mockup.json' }}"
+          manifest_path: "{{ '.artifacts/' + world.node_id + '/packet.demo.json' }}"
+    view:
+      extends: "base"
+      blocks:
+        body:
+          - prose: "Projecting the use-case's journey/for_persona fields into a scenario spec (portal/src/objectgraph/mockup-projection.ts, run out-of-band by the caller — see host_interfaces note)."
+          - kv:
+              pairs:
+                Node: "{{ world.node_id|default:'(unset)' }}"
+                Audience: "{{ world.audience }}"
+                Scenario: "{{ world.scenario_path }}"
+        choices:
+          - list:
+              items:
+                - { label: "next", hint: "generate the mockup" }
+                - { label: "look" }
+    on:
+      next:
+        - target: mockup
+      look:
+        - target: project

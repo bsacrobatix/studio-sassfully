@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "graphs": [
+    {
+      "id": "journey",
+      "nodes": [
+        {
+          "id": "uc-pm-reviews-roadmap",
+          "label": "PM reviews the roadmap as a computed diff",
+          "type": "use-case",
+          "lane": 0,
+          "row": 0
+        },
+        {
+          "id": "feature-pm-portal",
+          "label": "PM portal — catalog browser and authoring",
+          "type": "feature",
+          "lane": 1,
+          "row": 0
+        },
+        {
+          "id": "req-changeset-edits",
+          "label": "Catalog edits are changesets, never silent in-place writes",
+          "type": "requirement",
+          "lane": 2,
+          "row": 0
+        }
+      ],
+      "edges": [
+        {
+          "from": "uc-pm-reviews-roadmap",
+          "to": "feature-pm-portal",
+          "weight": 1
+        },
+        {
+          "from": "uc-pm-reviews-roadmap",
+          "to": "req-changeset-edits",
+          "weight": 1
+        }
+      ]
+    }
+  ],
+  "states": {
+    "step_0_open_the_portal_the_catalog_view_loads_t": {
+      "graph": "journey",
+      "status": {
+        "pulse": [
+          "uc-pm-reviews-roadmap"
+        ],
+        "done": [],
+        "plan": [
+          "feature-pm-portal"
+        ],
+        "dim": [
+          "req-changeset-edits"
+        ]
+      }
+    },
+    "step_1_switch_to_the_roadmap_diff_view_desired_": {
+      "graph": "journey",
+      "status": {
+        "pulse": [
+          "uc-pm-reviews-roadmap"
+        ],
+        "done": [
+          "feature-pm-portal"
+        ],
+        "plan": [],
+        "dim": [
+          "req-changeset-edits"
+        ]
+      }
+    },
+    "step_2_drill_into_a_changed_node_its_decision_c": {
+      "graph": "journey",
+      "status": {
+        "pulse": [
+          "uc-pm-reviews-roadmap"
+        ],
+        "done": [
+          "feature-pm-portal",
+          "req-changeset-edits"
+        ],
+        "plan": [],
+        "dim": []
+      }
+    }
+  }
+}

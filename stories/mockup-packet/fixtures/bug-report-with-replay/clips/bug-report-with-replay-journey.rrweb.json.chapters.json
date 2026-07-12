@@ -1,0 +1,62 @@
+[
+  {
+    "index": 0,
+    "id": "step_0_user_hits_an_issue_in_a_host_app",
+    "label": "User hits an issue in a host app embedding the widget; triggers the reporter (floating, chromeless trigger).",
+    "start_ms": 12,
+    "end_ms": 5517,
+    "source_ref": {
+      "kind": "rrweb",
+      "spec_path": "bug-report-with-replay-journey.tour.json",
+      "step_id": "step_0_user_hits_an_issue_in_a_host_app"
+    }
+  },
+  {
+    "index": 1,
+    "id": "step_1_widget_captures_an_anchor_at_the_trigger_poi",
+    "label": "Widget captures an anchor at the trigger point (producer-owned) plus an optional rrweb replay clip and network summary, opt-in per host policy.",
+    "start_ms": 5517,
+    "end_ms": 11022,
+    "source_ref": {
+      "kind": "rrweb",
+      "spec_path": "bug-report-with-replay-journey.tour.json",
+      "step_id": "step_1_widget_captures_an_anchor_at_the_trigger_poi"
+    }
+  },
+  {
+    "index": 2,
+    "id": "step_2_review_step_surfaces_the_privacy_manifest_be",
+    "label": "Review step surfaces the privacy manifest before submission — unclassified fields block submit; raw capture never leaves the device pre-review.",
+    "start_ms": 11022,
+    "end_ms": 16525,
+    "source_ref": {
+      "kind": "rrweb",
+      "spec_path": "bug-report-with-replay-journey.tour.json",
+      "step_id": "step_2_review_step_surfaces_the_privacy_manifest_be"
+    }
+  },
+  {
+    "index": 3,
+    "id": "step_3_user_adds_prose_and_picks_a_kind_bug",
+    "label": "User adds prose and picks a kind (bug is one of several, not privileged) and submits; a client-side idempotency key dedupes accidental double-submits.",
+    "start_ms": 16525,
+    "end_ms": 22031,
+    "source_ref": {
+      "kind": "rrweb",
+      "spec_path": "bug-report-with-replay-journey.tour.json",
+      "step_id": "step_3_user_adds_prose_and_picks_a_kind_bug"
+    }
+  },
+  {
+    "index": 4,
+    "id": "step_4_bundle_routes_to_a_configured_sink_local_bun",
+    "label": "Bundle routes to a configured sink (local/bundle/dry-run in v0.1; GitHub is a later parity follow-on, never required).",
+    "start_ms": 22031,
+    "end_ms": 27533,
+    "source_ref": {
+      "kind": "rrweb",
+      "spec_path": "bug-report-with-replay-journey.tour.json",
+      "step_id": "step_4_bundle_routes_to_a_configured_sink_local_bun"
+    }
+  }
+]

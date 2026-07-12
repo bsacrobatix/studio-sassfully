@@ -1,0 +1,52 @@
+# POG mockup-packet — deterministic story bound to the use-case type's
+# `materialize:` declaration in pog/catalog.yaml (A2, use-case-loop-plan.md
+# §3.5). Five rooms = five stage pills: project -> mockup -> tours -> capture
+# -> doctor, matching the plan's "Story stages (= rooms = pills)" column for
+# the mockup packet artifact row.
+#
+# Unlike stories/materialize-doc (pure world-state, execs nothing —
+# see the plan's own framing of that story as the exception), this story
+# DOES exec: the mockup/capture/doctor rooms call the host.demo.* verb
+# family (A2, upstream kitsoki branch a2-demo-verbs), which shells out to
+# kitsoki's own tools/frontend-mockup-mcp pipeline scripts. Flow tests
+# cassette these calls via host_handlers stubs (the same mechanism
+# stories/ci-status's check_native.yaml flow uses for host.git) — no live
+# node/chromium in CI. Real invocation (this slice) is CLI/hand-run via
+# scripts/materialize-pilot-mockup-packet.mjs, pending C1's headless-drive
+# spike and portal Materialize button.
+app:
+  id: pog-mockup-packet
+  version: 0.1.0
+  title: "POG use-case mockup packet"
+  author: "pog"
+  license: "CC0"
+
+world:
+  node_id: { type: string, default: "" }
+  audience: { type: string, default: "internal" }
+  scenario_path: { type: string, default: "" }
+  manifest_path: { type: string, default: "" }
+  mockup_path: { type: string, default: "" }
+  doctor_ok: { type: bool, default: false }
+  doctor_report: { type: object, default: {} }
+  create_stdout: { type: string, default: "" }
+  record_stdout: { type: string, default: "" }
+  status: { type: string, default: "" }
+
+intents:
+  next:
+    description: "Advance to the next packet stage."
+    examples: ["next", "continue"]
+    priority: 80
+  restart:
+    description: "Restart the packet pipeline from the project stage."
+    examples: ["restart", "start over"]
+    priority: 40
+  look:
+    description: "Re-render the current stage."
+    examples: ["look", "?"]
+    priority: 10
+
+root: project
+include:
+  - rooms/*.yaml

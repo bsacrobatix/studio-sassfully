@@ -1,0 +1,59 @@
+test_kind: flow
+app: ../app.yaml
+initial_state: check
+initial_world:
+  node_id: qa-catalog-lint-clean
+  catalog_path: "pog/catalog.yaml"
+  gate: "kitsoki graph lint pog/catalog.yaml"
+
+# Cassette the host.run and host.graph exec verbs (same mechanism
+# stories/mockup-packet's materialize_packet.yaml uses for host.demo.*): no
+# live shell command, no live catalog write, in this deterministic flow
+# test. The real invocation path is scripts/qa-compliance-gate.sh, which
+# drives this same story for real via `kitsoki graph materialize` against a
+# scratch copy of the catalog.
+host_handlers:
+  host.run:
+    by_call:
+      run_gate:
+        data: { ok: true, stdout: "graph lint: clean (0 issues)\n", exit_code: 0 }
+      write_evidence:
+        data: { ok: true, stdout: "", exit_code: 0 }
+  host.graph:
+    by_call:
+      propose_status:
+        data: { changeset_id: "cs-qa-catalog-lint-clean-1", status: "authorized", lint: [], rejected: false, reject_reasons: [] }
+      apply_status:
+        data: { rejected: false, reject_reasons: [], lint_issues: [], changed_files: ["pog/catalog.yaml"] }
+
+turns:
+  - intent: { name: look, slots: {} }
+    expect_state: check
+    expect_world:
+      node_id: qa-catalog-lint-clean
+      gate: "kitsoki graph lint pog/catalog.yaml"
+      check_ok: true
+      check_stdout: "graph lint: clean (0 issues)\n"
+
+  - intent: { name: next, slots: {} }
+    expect_state: attest
+    expect_world:
+      artifact_path: ".artifacts/qa-catalog-lint-clean/qa-check.log"
+      status: "verified"
+      changeset_id: "cs-qa-catalog-lint-clean-1"
+    expect_view_matches: "auto-authorized changeset"
+
+  # restart re-enters "check", whose on_enter re-invokes host.run
+  # immediately (same cassette response), so check_ok/check_stdout are
+  # reset then re-populated within the same turn — only status/
+  # artifact_path/changeset_id (attest-room-only fields) stay cleared.
+  - intent: { name: restart, slots: {} }
+    expect_state: check
+    expect_world:
+      check_ok: true
+      check_stdout: "graph lint: clean (0 issues)\n"
+      status: ""
+      artifact_path: ""
+      changeset_id: ""
+
+expect_no_errors: true

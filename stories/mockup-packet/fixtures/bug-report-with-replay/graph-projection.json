@@ -1,0 +1,181 @@
+{
+  "version": 1,
+  "graphs": [
+    {
+      "id": "journey",
+      "nodes": [
+        {
+          "id": "uc-bug-report-with-replay",
+          "label": "Bug report with replay evidence",
+          "type": "use-case",
+          "lane": 0,
+          "row": 0
+        },
+        {
+          "id": "feature-feedback-core",
+          "label": "Feedback core — capture/review/submit pipeline",
+          "type": "feature",
+          "lane": 1,
+          "row": 0
+        },
+        {
+          "id": "req-host-policy-gates-evidence",
+          "label": "req-host-policy-gates-evidence",
+          "type": "requirement",
+          "lane": 2,
+          "row": 0
+        },
+        {
+          "id": "req-producer-owned-anchors",
+          "label": "req-producer-owned-anchors",
+          "type": "requirement",
+          "lane": 2,
+          "row": 1
+        },
+        {
+          "id": "req-privacy-fail-closed",
+          "label": "req-privacy-fail-closed",
+          "type": "requirement",
+          "lane": 2,
+          "row": 2
+        },
+        {
+          "id": "req-idempotent-submission",
+          "label": "req-idempotent-submission",
+          "type": "requirement",
+          "lane": 2,
+          "row": 3
+        },
+        {
+          "id": "req-multi-sink-routing",
+          "label": "req-multi-sink-routing",
+          "type": "requirement",
+          "lane": 2,
+          "row": 4
+        }
+      ],
+      "edges": [
+        {
+          "from": "uc-bug-report-with-replay",
+          "to": "feature-feedback-core",
+          "weight": 1
+        },
+        {
+          "from": "uc-bug-report-with-replay",
+          "to": "req-host-policy-gates-evidence",
+          "weight": 1
+        },
+        {
+          "from": "uc-bug-report-with-replay",
+          "to": "req-producer-owned-anchors",
+          "weight": 1
+        },
+        {
+          "from": "uc-bug-report-with-replay",
+          "to": "req-privacy-fail-closed",
+          "weight": 1
+        },
+        {
+          "from": "uc-bug-report-with-replay",
+          "to": "req-idempotent-submission",
+          "weight": 1
+        },
+        {
+          "from": "uc-bug-report-with-replay",
+          "to": "req-multi-sink-routing",
+          "weight": 1
+        }
+      ]
+    }
+  ],
+  "states": {
+    "step_0_user_hits_an_issue_in_a_host_app": {
+      "graph": "journey",
+      "status": {
+        "pulse": [
+          "uc-bug-report-with-replay",
+          "req-host-policy-gates-evidence"
+        ],
+        "done": [],
+        "plan": [
+          "req-producer-owned-anchors",
+          "req-privacy-fail-closed",
+          "req-idempotent-submission",
+          "req-multi-sink-routing"
+        ],
+        "dim": []
+      }
+    },
+    "step_1_widget_captures_an_anchor_at_the_trigger_poi": {
+      "graph": "journey",
+      "status": {
+        "pulse": [
+          "uc-bug-report-with-replay",
+          "req-producer-owned-anchors"
+        ],
+        "done": [
+          "req-host-policy-gates-evidence"
+        ],
+        "plan": [
+          "req-privacy-fail-closed",
+          "req-idempotent-submission",
+          "req-multi-sink-routing"
+        ],
+        "dim": []
+      }
+    },
+    "step_2_review_step_surfaces_the_privacy_manifest_be": {
+      "graph": "journey",
+      "status": {
+        "pulse": [
+          "uc-bug-report-with-replay",
+          "req-privacy-fail-closed"
+        ],
+        "done": [
+          "req-host-policy-gates-evidence",
+          "req-producer-owned-anchors"
+        ],
+        "plan": [
+          "req-idempotent-submission",
+          "req-multi-sink-routing"
+        ],
+        "dim": []
+      }
+    },
+    "step_3_user_adds_prose_and_picks_a_kind_bug": {
+      "graph": "journey",
+      "status": {
+        "pulse": [
+          "uc-bug-report-with-replay",
+          "req-idempotent-submission"
+        ],
+        "done": [
+          "req-host-policy-gates-evidence",
+          "req-producer-owned-anchors",
+          "req-privacy-fail-closed"
+        ],
+        "plan": [
+          "req-multi-sink-routing"
+        ],
+        "dim": []
+      }
+    },
+    "step_4_bundle_routes_to_a_configured_sink_local_bun": {
+      "graph": "journey",
+      "status": {
+        "pulse": [
+          "uc-bug-report-with-replay",
+          "req-multi-sink-routing"
+        ],
+        "done": [
+          "req-host-policy-gates-evidence",
+          "req-producer-owned-anchors",
+          "req-privacy-fail-closed",
+          "req-idempotent-submission"
+        ],
+        "plan": [],
+        "dim": []
+      }
+    }
+  }
+}

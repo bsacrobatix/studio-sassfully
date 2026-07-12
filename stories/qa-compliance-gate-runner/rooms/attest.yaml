@@ -1,0 +1,98 @@
+states:
+  attest:
+    description: "Writing the evidence log and flipping the qa-target's status"
+    relevant_world: [node_id, catalog_path, check_ok, check_stdout, status, artifact_path, changeset_id]
+    on_enter:
+      - set:
+          status: "{{ world.check_ok ? \"verified\" : \"failed\" }}"
+          artifact_path: "{{ '.artifacts/' + world.node_id + '/qa-check.log' }}"
+      # Write the gate command's captured stdout as the evidence log. Uses
+      # `args` (argv, no shell re-interpolation of the content — see
+      # internal/host/handlers.go's buildCmd) rather than templating stdout
+      # into a `cmd` string, so arbitrary gate output (quotes, newlines)
+      # can't break out of the shell invocation.
+      - invoke: host.run
+        id: write_evidence
+        with:
+          cmd: "sh"
+          args:
+            - "-c"
+            - "mkdir -p \"$(dirname \"$2\")\" && printf '%s' \"$1\" > \"$2\""
+            - "sh"
+            - "{{ world.check_stdout }}"
+            - "{{ world.artifact_path }}"
+        on_error: attest_failed
+      # Flip the qa-target node's own `status` field via a system-authored
+      # changeset (D9 auto-authorize: the bare ["status"] path always
+      # qualifies — internal/graph/propose.go's isAutoAuthorizablePath).
+      # This is the ONLY writer of a qa-target's status: never hand-edited.
+      - invoke: host.graph
+        id: propose_status
+        with:
+          op: propose
+          catalog_path: "{{ world.catalog_path }}"
+          title: "{{ 'QA runner: ' + world.node_id + ' gate check' }}"
+          operations:
+            - kind: modified
+              node: "{{ world.node_id }}"
+              changes:
+                - path: ["status"]
+                  after: "{{ world.status }}"
+          provenance:
+            job_id: "{{ world.node_id }}-qa-check"
+            story: "stories/qa-compliance-gate-runner"
+        bind: { changeset_id: changeset_id }
+        on_error: attest_failed
+      - invoke: host.graph
+        id: apply_status
+        with:
+          op: apply
+          catalog_path: "{{ world.catalog_path }}"
+          changeset_id: "{{ world.changeset_id }}"
+          dry_run: false
+        on_error: attest_failed
+    view:
+      extends: "base"
+      blocks:
+        body:
+          - kv:
+              pairs:
+                Node: "{{ world.node_id|default:'(none)' }}"
+                Artifact: "{{ world.artifact_path|default:'(none)' }}"
+                Status: "{{ world.status|default:'(unset)' }}"
+                Changeset: "{{ world.changeset_id|default:'(none)' }}"
+          - prose: "Gate command ran; evidence log written; qa-target status flipped via a system-authored, auto-authorized changeset. Run `restart` to re-check."
+        choices:
+          - list:
+              items:
+                - { label: "restart" }
+                - { label: "look" }
+    on:
+      restart:
+        - target: check
+          effects:
+            - set:
+                check_ok: false
+                check_stdout: ""
+                check_exit: 0
+                status: ""
+                artifact_path: ""
+                changeset_id: ""
+      look:
+        - target: attest
+  attest_failed:
+    description: "Evidence write or status changeset failed"
+    terminal: true
+    relevant_world: [node_id]
+    view:
+      extends: "base"
+      blocks:
+        body:
+          - prose: "Writing evidence or proposing/applying the status changeset failed; no partial write was left in place beyond whatever host.graph itself guarantees."
+        choices:
+          - list:
+              items:
+                - { label: "look" }
+    on:
+      look:
+        - target: attest_failed

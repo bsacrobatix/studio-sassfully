@@ -1,0 +1,30 @@
+states:
+  tours:
+    description: "Starter tours are ready for capture"
+    relevant_world: [node_id, manifest_path, status]
+    on_enter:
+      - set: { status: "tours-ready" }
+    view:
+      extends: "base"
+      blocks:
+        body:
+          - prose: "The starter tours create-mockup.mjs emitted (one per journey-step group) are wired to the manifest and ready to capture. Hand-edit tour JSON here for a real product mockup; the pilot fixture uses the starter tours unmodified."
+          - kv:
+              pairs:
+                Manifest: "{{ world.manifest_path }}"
+                Status: "{{ world.status }}"
+        choices:
+          - list:
+              items:
+                - { label: "next", hint: "capture rrweb clips" }
+                - { label: "restart" }
+                - { label: "look" }
+    on:
+      next:
+        - target: capture
+      restart:
+        - target: project
+          effects:
+            - set: { status: "", mockup_path: "", doctor_ok: false, doctor_report: "" }
+      look:
+        - target: tours

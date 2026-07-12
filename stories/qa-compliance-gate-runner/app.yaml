@@ -1,0 +1,62 @@
+# POG qa-compliance-gate-runner — deterministic pilot story bound to the
+# qa-target type's `materialize:` declaration in pog/catalog.yaml (C3,
+# use-case-loop-plan.md §4 row C3 / §3.5 compliance paragraph). Two rooms,
+# check -> attest, matching the plan's "check -> attest" stage pair for the
+# `requirement` artifact kind. No hosts/agents/live LLM: the check room runs
+# the qa-target's `gate` field as a literal shell command via host.run (the
+# same generic host verb `stories/materialize-doc` docs point at for
+# "no Go needed"), and the attest room writes an evidence log + flips the
+# qa-target node's own `status` field (EvidenceStatus vocabulary: missing |
+# planned | stale | failed | verified | in-progress) via a system-authored
+# graph.propose/apply changeset — the same D9 auto-authorize mechanism C1's
+# internal/materialize/writeback.go uses for materialization:/evidence:,
+# extended here to the bare ["status"] path the D9 allowlist already always
+# permits (internal/graph/propose.go's isAutoAuthorizablePath). This is what
+# makes a qa-target's status "derived, never hand-edited": nothing but this
+# story's attest room (or a human editing the changeset queue) ever writes
+# it.
+app:
+  id: pog-qa-compliance-gate-runner
+  version: 0.1.0
+  title: "POG qa-target compliance gate runner"
+  author: "pog"
+  license: "CC0"
+
+# Host verb allow-list (internal/app/types.go's AppDef.Hosts) — host.run
+# (check room's gate command) and host.graph (attest room's status-flip
+# changeset). Without this, an undeclared host verb invoke is a silent
+# no-op rather than a hard error, which is exactly the bug that cost real
+# debugging time building this story: host.graph calls ran, returned
+# nothing, and the job still completed "successfully" with no status flip.
+hosts:
+  - host.run
+  - host.graph
+
+world:
+  node_id: { type: string, default: "" }
+  catalog_path: { type: string, default: "pog/catalog.yaml" }
+  gate: { type: string, default: "" }
+  check_ok: { type: bool, default: false }
+  check_stdout: { type: string, default: "" }
+  check_exit: { type: int, default: 0 }
+  artifact_path: { type: string, default: "" }
+  status: { type: string, default: "" }
+  changeset_id: { type: string, default: "" }
+
+intents:
+  next:
+    description: "Advance to the next stage."
+    examples: ["next", "continue"]
+    priority: 80
+  restart:
+    description: "Restart from the check stage."
+    examples: ["restart", "start over"]
+    priority: 40
+  look:
+    description: "Re-render the current stage."
+    examples: ["look", "?"]
+    priority: 10
+
+root: check
+include:
+  - rooms/*.yaml
