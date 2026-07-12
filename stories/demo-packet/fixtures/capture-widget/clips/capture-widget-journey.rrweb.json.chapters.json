@@ -1,0 +1,62 @@
+[
+  {
+    "index": 0,
+    "id": "step_0_open_the_host_page_real_widget_mounts",
+    "label": "A real host page imports feedback-core as ES modules; the chromeless floating trigger mounts.",
+    "start_ms": 567,
+    "end_ms": 10795,
+    "source_ref": {
+      "kind": "rrweb",
+      "spec_path": "capture-widget-journey.tour.json",
+      "step_id": "step_0_open_the_host_page_real_widget_mounts"
+    }
+  },
+  {
+    "index": 1,
+    "id": "step_1_trigger_opens_the_chromeless_reporter",
+    "label": "The floating trigger opens the reporter panel — producer stamps the anchor at trigger time.",
+    "start_ms": 10795,
+    "end_ms": 19856,
+    "source_ref": {
+      "kind": "rrweb",
+      "spec_path": "capture-widget-journey.tour.json",
+      "step_id": "step_1_trigger_opens_the_chromeless_reporter"
+    }
+  },
+  {
+    "index": 2,
+    "id": "step_2_user_describes_the_bug",
+    "label": "The user describes the bug; the draft (and any raw evidence) stays local.",
+    "start_ms": 19856,
+    "end_ms": 27332,
+    "source_ref": {
+      "kind": "rrweb",
+      "spec_path": "capture-widget-journey.tour.json",
+      "step_id": "step_2_user_describes_the_bug"
+    }
+  },
+  {
+    "index": 3,
+    "id": "step_3_privacy_review_passes_fail_closed",
+    "label": "Review runs the privacy manifest — unclassified fields would block submit, fail closed.",
+    "start_ms": 27332,
+    "end_ms": 33255,
+    "source_ref": {
+      "kind": "rrweb",
+      "spec_path": "capture-widget-journey.tour.json",
+      "step_id": "step_3_privacy_review_passes_fail_closed"
+    }
+  },
+  {
+    "index": 4,
+    "id": "step_4_reviewed_bundle_lands_in_the_local_sink",
+    "label": "Submit routes ONLY the reviewed bundle — with its idempotency key — to the local JSONL sink.",
+    "start_ms": 33255,
+    "end_ms": 42375,
+    "source_ref": {
+      "kind": "rrweb",
+      "spec_path": "capture-widget-journey.tour.json",
+      "step_id": "step_4_reviewed_bundle_lands_in_the_local_sink"
+    }
+  }
+]

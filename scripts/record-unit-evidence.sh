@@ -13,11 +13,11 @@ mkdir -p pog/evidence
 
 out="pog/evidence/feedback-core-unit.json"
 tap="pog/evidence/feedback-core-unit.tap"
-cmd="node --test --test-reporter=tap packages/feedback-core/test/"
+cmd="node --test --test-reporter=tap packages/feedback-core/test/*.test.mjs"
 
 echo "recording feedback-core unit suite: ${cmd}"
 if [ -d packages/feedback-core/test ]; then
-  node --test --test-reporter=tap packages/feedback-core/test/ >"${tap}" 2>"pog/evidence/feedback-core-unit.log"
+  node --test --test-reporter=tap packages/feedback-core/test/*.test.mjs >"${tap}" 2>"pog/evidence/feedback-core-unit.log"
   exit_code=$?
 else
   echo "packages/feedback-core/test does not exist (pre-code; Stage 2.3 builds it)" >"pog/evidence/feedback-core-unit.log"

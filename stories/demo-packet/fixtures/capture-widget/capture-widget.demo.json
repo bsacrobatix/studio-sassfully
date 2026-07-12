@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "_comment": "Stage 2.4 REAL-MODE packet for demo-capture-widget: a real capture (slidey capture --tours via kitsoki's record-tour.mjs, the productized mechanism) of the real example host page embedding packages/feedback-core's reporter. Supersedes the mockup-mode packet (stories/mockup-packet/fixtures/bug-report-with-replay), which stays as the labeled Stage 2.2 evidence. Regenerate: node ~/code/Kitsoki/tools/frontend-mockup-mcp/scripts/record-tour.mjs stories/demo-packet/fixtures/capture-widget/capture-widget.demo.json",
+  "sources": [
+    "../../../../examples/host-page/index.html",
+    "../../../../packages/feedback-core/src/reporter.mjs",
+    "../../../../packages/feedback-core/src/machine.mjs",
+    "../../../../packages/feedback-core/src/privacy.mjs"
+  ],
+  "states": [
+    "step_0_open_the_host_page_real_widget_mounts",
+    "step_1_trigger_opens_the_chromeless_reporter",
+    "step_2_user_describes_the_bug",
+    "step_3_privacy_review_passes_fail_closed",
+    "step_4_reviewed_bundle_lands_in_the_local_sink"
+  ],
+  "deck": "capture-widget-demo.slidey.json",
+  "airSec": 1.5,
+  "target": {
+    "launch": "node examples/host-page/serve.mjs 7893",
+    "addr": "127.0.0.1:7893",
+    "readyPath": "/",
+    "cwd": "../../../..",
+    "timeoutMs": 30000
+  },
+  "viewport": { "width": 1600, "height": 900 },
+  "postersDir": "clips/posters",
+  "tours": [
+    {
+      "tour": "capture-widget-journey.tour.json",
+      "out": "clips/capture-widget-journey.rrweb.json"
+    }
+  ]
+}

@@ -7,6 +7,7 @@ states:
         id: run_gate
         with:
           cmd: "{{ world.gate }}"
+          cwd: "{{ world.repo_root }}"
         bind: { check_ok: ok, check_stdout: stdout, check_exit: exit_code }
         on_error: check_failed
     view:

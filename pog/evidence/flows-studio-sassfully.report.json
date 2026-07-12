@@ -1,12 +1,4 @@
 {
-  "schema": "pog/evidence-flow-run/v0",
-  "repo": "studio-sassfully",
-  "app": "stories/app.yaml",
-  "command": "kitsoki test flows stories/app.yaml --json pog/evidence/flows-studio-sassfully.report.json",
-  "exit": 0,
-  "recorded_at": "2026-07-12T04:42:40Z",
-  "repo_commit": "c6a13ff5a3bfc4a8bd32324fd43746829cd654f5",
-  "report": {
   "Results": [
     {
       "File": "stories/flows/record_run.yaml",
@@ -508,5 +500,4 @@
   ],
   "Passed": 1,
   "Failed": 0
-}
 }

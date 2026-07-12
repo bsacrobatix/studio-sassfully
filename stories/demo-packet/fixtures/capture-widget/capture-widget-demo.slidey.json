@@ -1,0 +1,23 @@
+{
+  "scenes": [
+    {
+      "type": "title",
+      "title": "feedback-core v0.1 — real capture: report a bug from a host page"
+    },
+    {
+      "type": "video",
+      "mode": "fullscreen",
+      "fit": "contain",
+      "rrweb": "clips/capture-widget-journey.rrweb.json",
+      "chapters": "auto",
+      "title": "journey",
+      "narration": [
+        { "chapter": "step_0_open_the_host_page_real_widget_mounts", "text": "A real host page imports feedback-core as ES modules and mounts the chromeless floating trigger" },
+        { "chapter": "step_1_trigger_opens_the_chromeless_reporter", "text": "The trigger opens the reporter; the producer stamps the anchor at trigger time" },
+        { "chapter": "step_2_user_describes_the_bug", "text": "The user describes the bug; the raw draft stays local" },
+        { "chapter": "step_3_privacy_review_passes_fail_closed", "text": "Review runs the privacy manifest, fail closed" },
+        { "chapter": "step_4_reviewed_bundle_lands_in_the_local_sink", "text": "Submit routes only the reviewed bundle, with its idempotency key, to the local sink" }
+      ]
+    }
+  ]
+}

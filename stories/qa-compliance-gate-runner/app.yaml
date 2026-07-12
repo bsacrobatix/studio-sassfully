@@ -35,6 +35,7 @@ hosts:
 world:
   node_id: { type: string, default: "" }
   catalog_path: { type: string, default: "pog/catalog.yaml" }
+  repo_root: { type: string, default: "." }
   gate: { type: string, default: "" }
   check_ok: { type: bool, default: false }
   check_stdout: { type: string, default: "" }

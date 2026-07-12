@@ -1,0 +1,70 @@
+{
+  "_comment": "Real capture of uc-bug-report-with-replay's journey against the REAL widget on the example host page (no mockup, no storyboard shim — the guarded window.storyboard evals are harmless no-ops kept solely so demo-doctor's static states scan finds every declared state id).",
+  "target": {
+    "launch": "node examples/host-page/serve.mjs 7893",
+    "addr": "127.0.0.1:7893",
+    "readyPath": "/",
+    "cwd": "../../../..",
+    "timeoutMs": 30000
+  },
+  "startPath": "/",
+  "viewport": { "width": 1600, "height": 900 },
+  "deviceScaleFactor": 1,
+  "pace": 1,
+  "readySelector": "[data-feedback-trigger]",
+  "steps": [
+    {
+      "id": "step_0_open_the_host_page_real_widget_mounts",
+      "label": "A real host page imports feedback-core as ES modules; the chromeless floating trigger mounts.",
+      "before": [
+        { "waitFor": "[data-testid=host-content]" },
+        { "eval": "window.storyboard && window.storyboard.setStep('step_0_open_the_host_page_real_widget_mounts')" }
+      ],
+      "dwellMs": 2500,
+      "kind": "explain"
+    },
+    {
+      "id": "step_1_trigger_opens_the_chromeless_reporter",
+      "label": "The floating trigger opens the reporter panel — producer stamps the anchor at trigger time.",
+      "before": [
+        { "click": "[data-feedback-trigger]" },
+        { "waitFor": "[data-feedback-panel]" },
+        { "eval": "window.storyboard && window.storyboard.setStep('step_1_trigger_opens_the_chromeless_reporter')" }
+      ],
+      "dwellMs": 2500,
+      "kind": "explain"
+    },
+    {
+      "id": "step_2_user_describes_the_bug",
+      "label": "The user describes the bug; the draft (and any raw evidence) stays local.",
+      "before": [
+        { "eval": "const t = document.querySelector('[data-feedback-panel] textarea'); t.value = 'Clicking save loses my draft — happens every time on this page.'; t.dispatchEvent(new Event('input', { bubbles: true }))" },
+        { "eval": "window.storyboard && window.storyboard.setStep('step_2_user_describes_the_bug')" }
+      ],
+      "dwellMs": 2500,
+      "kind": "explain"
+    },
+    {
+      "id": "step_3_privacy_review_passes_fail_closed",
+      "label": "Review runs the privacy manifest — unclassified fields would block submit, fail closed.",
+      "before": [
+        { "click": "[data-feedback-panel] button", "text": "Review" },
+        { "waitFor": "[data-feedback-verdict]" },
+        { "eval": "window.storyboard && window.storyboard.setStep('step_3_privacy_review_passes_fail_closed')" }
+      ],
+      "dwellMs": 3000,
+      "kind": "explain"
+    },
+    {
+      "id": "step_4_reviewed_bundle_lands_in_the_local_sink",
+      "label": "Submit routes ONLY the reviewed bundle — with its idempotency key — to the local JSONL sink.",
+      "before": [
+        { "click": "[data-feedback-panel] button", "text": "Submit" },
+        { "waitFor": "[data-testid=sink-log]" },
+        { "eval": "window.storyboard && window.storyboard.setStep('step_4_reviewed_bundle_lands_in_the_local_sink')" }
+      ],
+      "dwellMs": 3500,
+      "kind": "explain"
+    }
+  ]
+}

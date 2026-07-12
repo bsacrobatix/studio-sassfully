@@ -28,6 +28,7 @@ hosts:
 world:
   node_id: { type: string, default: "" }
   record_command: { type: string, default: "scripts/record-flow-evidence.sh" }
+  repo_root: { type: string, default: "." }
   record_ok: { type: bool, default: false }
   record_stdout: { type: string, default: "" }
   record_exit: { type: int, default: 0 }

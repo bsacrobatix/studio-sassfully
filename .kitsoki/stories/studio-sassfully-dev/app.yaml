@@ -45,6 +45,7 @@ hosts:
   - host.session_mining.run
   - host.slidey.render
   - host.ui_qa.run
+  - host.capsule_workspace
 
 imports:
   core:

@@ -11,6 +11,7 @@ states:
         id: run_recorder
         with:
           cmd: "sh"
+          cwd: "{{ world.repo_root }}"
           args:
             - "-c"
             - "$1 || true"

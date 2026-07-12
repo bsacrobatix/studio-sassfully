@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>sassfully — example host page (feedback-core v0.1)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  body { font: 15px/1.5 system-ui; margin: 0; color: #14202b; background: #f6f8fa; }
+  header { background: #14202b; color: #fff; padding: 20px 28px; }
+  header h1 { margin: 0; font-size: 18px; }
+  main { max-width: 760px; margin: 28px auto; padding: 0 20px; }
+  .card { background: #fff; border: 1px solid #d5dce3; border-radius: 10px; padding: 18px 20px; margin-bottom: 16px; }
+  pre { background: #0d1117; color: #9fe8a5; padding: 12px; border-radius: 8px; overflow-x: auto; font-size: 12px; min-height: 40px; }
+</style>
+</head>
+<body>
+<header data-testid="host-header"><h1>Acme Docs — a host app embedding the sassfully feedback widget</h1></header>
+<main>
+  <div class="card" data-testid="host-content">
+    <h2>Some product surface</h2>
+    <p>This page is a REAL host: it imports <code>@sassfully/feedback-core</code> as ES modules,
+    mounts the chromeless reporter (floating trigger, bottom right), classifies its fields in a
+    privacy manifest, and routes reviewed bundles to a local JSONL sink rendered below.
+    Nothing here is a mockup.</p>
+  </div>
+  <div class="card">
+    <h3>Local JSONL sink (what actually left the reporter)</h3>
+    <pre id="sink-log" data-testid="sink-log">(nothing submitted yet)</pre>
+  </div>
+</main>
+<script type="module">
+  import {
+    mountReporter, createPrivacyManifest, createRouter, localJsonlSink,
+  } from "/packages/feedback-core/src/index.mjs";
+
+  const manifest = createPrivacyManifest({
+    fields: {
+      "kind": "public",
+      "anchor.producer": "public",
+      "anchor.artifactId": "public",
+      "anchor.scope": "low",
+      "anchor.step": "low",
+      "anchor.ref": "low",
+      "anchor.label": "low",
+      "anchor.url": "high",
+      "userText": "user_provided",
+      "evidence.kind": "low",
+      "evidence.label": "low",
+      "evidence.digest": "public",
+      "evidence.snippet": "user_provided",
+    },
+    hostPolicies: { "anchor.url": "allow" },
+  });
+
+  const log = document.getElementById("sink-log");
+  const sink = localJsonlSink({
+    append: async (line) => {
+      log.textContent = (log.textContent.startsWith("(") ? "" : log.textContent + "\n") + line;
+    },
+  });
+  const router = createRouter({ sinks: [sink] });
+
+  mountReporter({
+    anchorFor: () => ({
+      producer: "acme-docs",
+      artifactId: "docs-page-1",
+      scope: "docs",
+      step: "reading",
+      ref: "section-intro",
+      label: "Some product surface",
+      url: location.href,
+    }),
+    manifest,
+    router,
+  });
+</script>
+</body>
+</html>

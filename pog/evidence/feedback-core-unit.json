@@ -1,0 +1,10 @@
+{
+  "schema": "pog/evidence-flow-run/v0",
+  "repo": "studio-sassfully",
+  "app": "packages/feedback-core",
+  "command": "node --test --test-reporter=tap packages/feedback-core/test/*.test.mjs",
+  "exit": 0,
+  "recorded_at": "2026-07-12T04:28:00Z",
+  "repo_commit": "c6a13ff5a3bfc4a8bd32324fd43746829cd654f5",
+  "report": {"Passed": 11, "Failed": 0}
+}

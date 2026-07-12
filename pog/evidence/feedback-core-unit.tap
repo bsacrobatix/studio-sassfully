@@ -1,0 +1,76 @@
+TAP version 13
+# Subtest: the key is stable: same reviewed content, same key; different content, different key
+ok 1 - the key is stable: same reviewed content, same key; different content, different key
+  ---
+  duration_ms: 3.737542
+  type: 'test'
+  ...
+# Subtest: duplicate click: submitting the same bundle twice yields one sink item, same ref
+ok 2 - duplicate click: submitting the same bundle twice yields one sink item, same ref
+  ---
+  duration_ms: 0.398209
+  type: 'test'
+  ...
+# Subtest: network-failure retry: a sink that fails once does not leave a settled key; retry lands exactly one item
+ok 3 - network-failure retry: a sink that fails once does not leave a settled key; retry lands exactly one item
+  ---
+  duration_ms: 0.740583
+  type: 'test'
+  ...
+# Subtest: fail closed: a field with unknown sensitivity blocks submit and names itself
+ok 4 - fail closed: a field with unknown sensitivity blocks submit and names itself
+  ---
+  duration_ms: 2.887125
+  type: 'test'
+  ...
+# Subtest: fail closed: a high-risk field without a host policy blocks; declaring the policy unblocks
+ok 5 - fail closed: a high-risk field without a host policy blocks; declaring the policy unblocks
+  ---
+  duration_ms: 0.77425
+  type: 'test'
+  ...
+# Subtest: raw drafts stay local: sink sees only the reviewed bundle, never raw payloads; nothing pre-review
+ok 6 - raw drafts stay local: sink sees only the reviewed bundle, never raw payloads; nothing pre-review
+  ---
+  duration_ms: 0.526333
+  type: 'test'
+  ...
+# Subtest: anchor envelope: producer-owned, shape-validated, frozen
+ok 7 - anchor envelope: producer-owned, shape-validated, frozen
+  ---
+  duration_ms: 1.332125
+  type: 'test'
+  ...
+# Subtest: kinds: all nine present; config never forks the anchor/evidence model
+ok 8 - kinds: all nine present; config never forks the anchor/evidence model
+  ---
+  duration_ms: 0.730125
+  type: 'test'
+  ...
+# Subtest: capture -> review -> submit: the reviewed note is the artifact
+ok 9 - capture -> review -> submit: the reviewed note is the artifact
+  ---
+  duration_ms: 1.545958
+  type: 'test'
+  ...
+# Subtest: submit refuses anything not reviewed
+ok 10 - submit refuses anything not reviewed
+  ---
+  duration_ms: 0.434417
+  type: 'test'
+  ...
+# Subtest: required fields per kind are enforced at approval
+ok 11 - required fields per kind are enforced at approval
+  ---
+  duration_ms: 0.508917
+  type: 'test'
+  ...
+1..11
+# tests 11
+# suites 0
+# pass 11
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 98.500208

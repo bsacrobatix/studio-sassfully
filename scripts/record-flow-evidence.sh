@@ -14,7 +14,7 @@ cd "$(dirname "$0")/.."
 mkdir -p pog/evidence
 
 KITSOKI_BIN="${POG_KITSOKI_BIN:-kitsoki}"
-app_rel=".kitsoki/stories/studio-sassfully-dev/app.yaml"
+app_rel="stories/app.yaml"
 out="pog/evidence/flows-studio-sassfully.json"
 raw="pog/evidence/flows-studio-sassfully.report.json"
 cmd="kitsoki test flows ${app_rel} --json ${raw}"
