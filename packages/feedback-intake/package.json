@@ -1,0 +1,9 @@
+{
+  "name": "@sassfully/feedback-intake",
+  "version": "0.1.0",
+  "description": "Zero-dependency HTTP JSONL intake for reviewed Sassfully feedback bundles.",
+  "type": "module",
+  "main": "index.mjs",
+  "license": "Apache-2.0",
+  "scripts": { "test": "node --test test/*.test.mjs" }
+}

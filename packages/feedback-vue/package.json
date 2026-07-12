@@ -1,0 +1,10 @@
+{
+  "name": "@sassfully/feedback-vue",
+  "version": "0.1.0",
+  "description": "Vue 3 bindings for the host-neutral Sassfully feedback machine.",
+  "type": "module",
+  "main": "src/index.mjs",
+  "license": "Apache-2.0",
+  "peerDependencies": { "vue": "^3.0.0" },
+  "scripts": { "test": "node --test test/*.test.mjs" }
+}

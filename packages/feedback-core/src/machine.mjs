@@ -12,7 +12,7 @@ import { isKind, KIND_CONFIG } from "./kinds.mjs";
 import { privacyVerdict } from "./privacy.mjs";
 import { contentDigest, idempotencyKey } from "./idempotency.mjs";
 
-export function createDraft(kind, anchorSpec, { draftId } = {}) {
+export function createDraft(kind, anchorSpec, { draftId, context } = {}) {
   if (!isKind(kind)) throw new TypeError(`draft: unknown kind ${kind}`);
   const anchor = anchorSpec.producer ? createAnchor(anchorSpec) : anchorSpec; // pre-built frozen anchors pass through
   return {
@@ -22,6 +22,10 @@ export function createDraft(kind, anchorSpec, { draftId } = {}) {
     anchor,
     evidence: [], // raw items live HERE and nowhere else pre-review
     userText: "",
+    // Context is producer-owned diagnostic data.  It is deliberately carried
+    // through the same reviewed projection and privacy verdict as every other
+    // outbound field; unclassified paths therefore fail closed.
+    ...(context === undefined ? {} : { context }),
   };
 }
 
@@ -59,6 +63,7 @@ function reviewedPayload(draft) {
     anchor: { ...draft.anchor },
     userText: draft.userText, // marked user_provided by the manifest
     evidence: draft.evidence.map((e) => ({ kind: e.kind, label: e.label, digest: e.digest, snippet: e.snippet })),
+    ...(draft.context === undefined ? {} : { context: draft.context }),
   };
 }
 

@@ -62,6 +62,29 @@ export function dryRunSink() {
 }
 
 /**
+ * HTTP transport for a reviewed-bundle intake endpoint.  A non-2xx response
+ * remains an error so the UI can retry using the stable idempotency key.
+ */
+export function httpSink({ url, fetch = globalThis.fetch } = {}) {
+  if (!url || typeof url !== "string") throw new TypeError("httpSink: url (string) is required");
+  if (typeof fetch !== "function") throw new TypeError("httpSink: fetch function is required");
+  return {
+    id: "http",
+    async submit(bundle) {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(bundle),
+      });
+      if (!response.ok) throw new Error(`httpSink: POST ${url} failed (${response.status})`);
+      const receipt = await response.json();
+      if (!receipt || typeof receipt.ref !== "string") throw new Error("httpSink: response must contain a string ref");
+      return receipt;
+    },
+  };
+}
+
+/**
  * Router: kind -> sink, with idempotency-key dedupe. Retrying a submit
  * (network failure, duplicate click) never creates a second item: an
  * already-settled key returns the SAME receipt, marked deduped.

@@ -104,6 +104,20 @@ type_registry:
       - id: satisfies
         target_type: requirement
         cardinality: many
+  - id: feature
+    schema: graph-type/v0
+    extends: core-node
+    summary: A durable product capability grouping requirements and use cases.
+    edge_fields:
+      - id: part_of
+        target_type: product
+        cardinality: one
+      - id: requirements
+        target_type: requirement
+        cardinality: many
+      - id: use_cases
+        target_type: use-case
+        cardinality: many
   # Deliverable layer — POG materialization-first taxonomy (2026-07-11):
   # deliverable nodes are SPECS of real evidence/functionality artifacts
   # (demos, docs, tutorials, test evidence); "work" is the act of
@@ -391,6 +405,26 @@ nodes:
       part_of: [product-sassfully]
       motivated_by: [uc-product-site-feedback]
   - schema: sassfully/requirement/v0
+    id: req-submission-context
+    title: Reviewed bundles carry producer-supplied diagnostic context
+    status: in-progress
+    visibility: public
+    summary: A producer may attach arbitrary diagnostic context to a draft, but every context field path must be classified by the host privacy manifest before submission.
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-deck-feedback, uc-product-site-feedback]
+  - schema: sassfully/requirement/v0
+    id: req-http-sink
+    title: Reviewed bundles can submit to an HTTP intake
+    status: in-progress
+    visibility: public
+    summary: A reusable HTTP sink POSTs reviewed bundles with idempotency preserved and surfaces transport failures for safe retry.
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-deck-feedback, uc-product-site-feedback]
+  - schema: sassfully/requirement/v0
     id: req-ai-triage-narrative
     title: Reviewed bundles carry an AI-authored triage narrative
     status: draft
@@ -543,7 +577,7 @@ nodes:
   - schema: sassfully/milestone/v0
     id: ms-2-slidey-integration
     title: M2 slidey integration
-    status: planned
+    status: in-progress
     visibility: public
     summary: First real host via the embed protocol slidey already speaks — proves the host-neutrality claim.
     sources: [source-slidey-brief]
@@ -638,13 +672,44 @@ nodes:
   - schema: sassfully/component/v0
     id: comp-slidey-adapter
     title: slidey adapter
-    status: planned
+    status: shipped-in-host
     visibility: public
     summary: slidey adapter and the slidey report-deck generator.
     sources: [source-slidey-brief]
     edges:
       part_of: [product-sassfully]
       satisfies: [req-feedback-artifact-deck]
+  - schema: sassfully/component/v0
+    id: comp-feedback-vue
+    title: feedback-vue
+    status: in-progress
+    visibility: public
+    summary: Vue 3 feedback modal and composable binding the host-neutral core machine.
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      satisfies: [req-capture-review-submit, req-privacy-fail-closed, req-submission-context]
+  - schema: sassfully/component/v0
+    id: comp-feedback-intake
+    title: feedback-intake
+    status: in-progress
+    visibility: public
+    summary: Standalone JSONL HTTP intake for reviewed feedback bundles, with bounded request validation, dedupe, and minimal abuse controls.
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      satisfies: [req-http-sink, req-public-sink-abuse-controls]
+  - schema: sassfully/feature/v0
+    id: feature-feedback-core
+    title: Feedback-core
+    status: in-progress
+    visibility: public
+    summary: Framework-neutral contextual feedback capture and reviewed submission.
+    sources: [source-slidey-brief]
+    edges:
+      part_of: [product-sassfully]
+      requirements: [req-generic-kinds, req-capture-review-submit, req-privacy-fail-closed, req-idempotent-submission, req-submission-context, req-http-sink]
+      use_cases: [uc-deck-feedback, uc-product-site-feedback]
   - schema: sassfully/component/v0
     id: comp-kitsoki-adapter
     title: kitsoki compatibility adapter

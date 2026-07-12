@@ -10,7 +10,7 @@ import {
   createAnchor, anchorDisplayFields,
   createPrivacyManifest,
   createDraft, attachEvidence, setUserText, beginReview, approveReview, submit,
-  bundleSink, createRouter,
+  bundleSink, httpSink, createRouter,
 } from "../src/index.mjs";
 
 const MANIFEST = createPrivacyManifest({
@@ -79,4 +79,37 @@ test("required fields per kind are enforced at approval", () => {
   const draft = createDraft("rejection", { producer: "portal", artifactId: "node-7" });
   beginReview(draft, MANIFEST);
   assert.throws(() => approveReview(draft, MANIFEST), /requires userText/);
+});
+
+test("context is reviewed and fails closed when a producer leaves it unclassified", () => {
+  const draft = createDraft("bug", { producer: "portal", artifactId: "node-7" }, {
+    context: { build: { version: "2026.07.12" } },
+  });
+  setUserText(draft, "It broke");
+  const { payload, verdict } = beginReview(draft, MANIFEST);
+  assert.deepEqual(payload.context, { build: { version: "2026.07.12" } });
+  assert.equal(verdict.ok, false);
+  assert.ok(verdict.violations.some((v) => v.path === "context.build.version"));
+  assert.throws(() => approveReview(draft, MANIFEST), /privacy fails closed/);
+});
+
+test("http sink posts the reviewed bundle and returns its intake receipt", async () => {
+  const calls = [];
+  const sink = httpSink({
+    url: "https://feedback.example/api/feedback",
+    fetch: async (url, init) => {
+      calls.push({ url, init });
+      return { ok: true, status: 201, json: async () => ({ ref: "receipt-1" }) };
+    },
+  });
+  const receipt = await sink.submit({ reviewed: true, idempotencyKey: "fb-123" });
+  assert.deepEqual(receipt, { ref: "receipt-1" });
+  assert.equal(calls[0].init.method, "POST");
+  assert.equal(calls[0].init.headers["content-type"], "application/json");
+  assert.deepEqual(JSON.parse(calls[0].init.body), { reviewed: true, idempotencyKey: "fb-123" });
+});
+
+test("http sink exposes non-success responses for retry", async () => {
+  const sink = httpSink({ url: "https://feedback.example/api/feedback", fetch: async () => ({ ok: false, status: 503 }) });
+  await assert.rejects(() => sink.submit({ reviewed: true }), /503/);
 });
