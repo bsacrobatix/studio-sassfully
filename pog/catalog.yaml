@@ -720,6 +720,36 @@ nodes:
     edges:
       part_of: [product-sassfully]
       satisfies: []
+  - schema: sassfully/requirement/v0
+    id: req-review-session-records
+    title: Immutable revision-pinned review sessions
+    status: in-progress
+    visibility: public
+    summary: A review groups ordered independently addressable reviewed comment IDs at exactly one producer-owned spec revision. Comments and the review have separate stable idempotency keys; reordering changes sequence only, while a stale target requires an explicit rebase confirmation.
+    sources: [source-concept]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-deck-feedback]
+  - schema: sassfully/requirement/v0
+    id: req-review-session-privacy-and-receipts
+    title: Review summaries are privacy reviewed and processing is append-only
+    status: in-progress
+    visibility: public
+    summary: Comment and review context classify fail closed. Raw editor drafts remain local. Processing and resolution add immutable receipt records without mutating reviewed comments or the host system.
+    sources: [source-concept]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-deck-feedback]
+  - schema: sassfully/component/v0
+    id: comp-review-sessions
+    title: Generic review session core, Vue bindings, and JSONL intake
+    status: in-progress
+    visibility: public
+    summary: Generic session state machine and independently recoverable JSONL records; producer scope, geometry, time and extra fields remain opaque reviewed metadata.
+    sources: [source-concept]
+    edges:
+      part_of: [product-sassfully]
+      satisfies: [req-review-session-records, req-review-session-privacy-and-receipts]
   # --- agent feedback channel (an MCP tool surface as producer; requirements
   #     dogfooded from the kitsoki graph-MCP toolset plan,
   #     see source-pog-graph-mcp-plan) ---------------------------------------

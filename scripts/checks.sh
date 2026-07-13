@@ -19,7 +19,10 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 scripts/pog-doctor .
 
-echo "tests: empty suite (no code yet) — green"
+node --test packages/feedback-core/test/*.test.mjs
+node --test packages/feedback-vue/test/*.test.mjs
+node --test packages/feedback-intake/test/*.test.mjs
+echo "tests: feedback packages green"
 
 lint_catalog() {
   if [ -n "${KITSOKI_BIN:-}" ] && [ -x "${KITSOKI_BIN}" ]; then

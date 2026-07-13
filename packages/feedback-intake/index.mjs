@@ -1,5 +1,5 @@
 import http from "node:http";
-import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { KINDS } from "../feedback-core/src/kinds.mjs";
@@ -54,10 +54,45 @@ class TokenBuckets {
   }
 }
 
+/** Append-only review persistence.  The in-memory indexes are deliberately
+ * rebuilt solely from JSONL events so a restart has no hidden state. */
+export class ReviewStore {
+  constructor({ dataDir, now = () => Date.now() }) { this.dataDir = dataDir; this.now = now; this.reviews = new Map(); this.keys = new Map(); }
+  async load() {
+    let files = [];
+    try { files = (await readdir(this.dataDir)).filter((name) => /^feedback-\d{4}-\d{2}\.jsonl$/.test(name)); } catch (error) { if (error.code !== "ENOENT") throw error; }
+    for (const name of files.sort()) for (const line of (await readFile(path.join(this.dataDir, name), "utf8")).split("\n")) if (line) this.apply(JSON.parse(line));
+    return this;
+  }
+  apply(event) {
+    if (!event?.type?.startsWith("review.")) return;
+    if (event.idempotencyKey && this.keys.has(event.idempotencyKey)) return;
+    if (event.type === "review.create") this.reviews.set(event.review.sessionId, { ...event.review, comments: [], commentIds: [], receipts: [] });
+    const review = this.reviews.get(event.reviewId);
+    if (event.type === "review.comment" && review && !review.commentIds.includes(event.comment.commentId)) { review.comments.push(event.comment); review.commentIds.push(event.comment.commentId); }
+    if (event.type === "review.finalize" && review) { Object.assign(review, event.review, { state: "submitted" }); }
+    if (event.type === "review.receipt" && review && !review.receipts.some((item) => item.idempotencyKey === event.receipt.idempotencyKey)) { review.receipts.push(event.receipt); review.state = event.receipt.phase === "resolved" ? "resolved" : event.receipt.phase === "processing" ? "processing" : review.state; }
+    if (event.idempotencyKey) this.keys.set(event.idempotencyKey, event.receipt ?? { ref: event.reviewId ?? event.review?.sessionId, deduped: true });
+  }
+  async append(event) {
+    if (event.idempotencyKey && this.keys.has(event.idempotencyKey)) return { ...this.keys.get(event.idempotencyKey), deduped: true };
+    const receivedAt = new Date(this.now()).toISOString();
+    await appendFile(monthFile(this.dataDir, new Date(receivedAt)), `${JSON.stringify({ ...event, receivedAt })}\n`, "utf8");
+    this.apply(event);
+    return event.receipt ?? { ref: event.reviewId ?? event.review?.sessionId };
+  }
+  create(review) { if (!review?.sessionId || !review?.subject?.specId || !review?.subject?.specRevision) throw new Error("review requires sessionId and pinned subject revision"); return this.append({ type: "review.create", review, idempotencyKey: review.idempotencyKey ?? `review-create-${review.sessionId}` }); }
+  addComment(reviewId, comment) { const review = this.reviews.get(reviewId); if (!review) throw new Error("review not found"); if (review.state !== "open" && review.state !== "in_review") throw new Error("review is immutable after submission"); if (!comment?.commentId || !comment?.bundle?.reviewed) throw new Error("reviewed comment required"); if (comment.subjectRevision !== review.subject.specRevision) throw new Error("cross-revision comment rejected"); return this.append({ type: "review.comment", reviewId, comment, idempotencyKey: comment.bundle.idempotencyKey }); }
+  finalize(reviewId, review, idempotencyKey) { const saved = this.reviews.get(reviewId); if (!saved) throw new Error("review not found"); if (!saved.comments.length) throw new Error("review needs a comment"); if (!review?.summaryReview?.approved) throw new Error("review summary approval required"); return this.append({ type: "review.finalize", reviewId, review, idempotencyKey: idempotencyKey ?? review.idempotencyKey ?? `review-finalize-${reviewId}` }); }
+  receipt(reviewId, receipt) { if (!this.reviews.has(reviewId)) throw new Error("review not found"); if (!receipt?.phase || !receipt?.idempotencyKey) throw new Error("receipt phase and idempotencyKey required"); return this.append({ type: "review.receipt", reviewId, receipt, idempotencyKey: receipt.idempotencyKey }); }
+  list(specId, specRevision) { return [...this.reviews.values()].filter((review) => review.subject.specId === specId && (!specRevision || review.subject.specRevision === specRevision)); }
+}
+
 /** Build a standalone server. IPs exist only in the in-memory rate limiter. */
 export async function createIntakeServer({ dataDir, rateLimits, now } = {}) {
   if (!dataDir) throw new TypeError("feedback-intake: dataDir is required");
   await mkdir(dataDir, { recursive: true });
+  const reviewStore = await new ReviewStore({ dataDir, now: now ?? (() => Date.now()) }).load();
   const seen = new Map();
   const remember = (key, receipt) => { seen.set(key, receipt); if (seen.size > MAX_DEDUPE) seen.delete(seen.keys().next().value); };
   try {
@@ -70,7 +105,23 @@ export async function createIntakeServer({ dataDir, rateLimits, now } = {}) {
   const buckets = new TokenBuckets({ ...rateLimits, now });
   const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && req.url === "/api/feedback/health") return json(res, 200, { ok: true });
-    if (req.method !== "POST" || req.url !== "/api/feedback") return json(res, 404, { error: "not found" });
+    const url = new URL(req.url, "http://localhost");
+    if (req.method === "GET" && url.pathname === "/api/reviews") return json(res, 200, { reviews: reviewStore.list(url.searchParams.get("specId"), url.searchParams.get("specRevision")) });
+    const match = url.pathname.match(/^\/api\/reviews\/([^/]+)(?:\/(comments|finalize|receipts))?$/);
+    if (req.method === "GET" && match && !match[2]) { const review = reviewStore.reviews.get(decodeURIComponent(match[1])); return review ? json(res, 200, review) : json(res, 404, { error: "review not found" }); }
+    if (req.method === "POST" && (url.pathname === "/api/reviews" || match)) {
+      if (!String(req.headers["content-type"] || "").toLowerCase().startsWith("application/json")) return json(res, 415, { error: "content-type must be application/json" });
+      try {
+        const body = await readJsonBody(req); let receipt;
+        if (url.pathname === "/api/reviews") receipt = await reviewStore.create(body);
+        else if (match[2] === "comments") receipt = await reviewStore.addComment(decodeURIComponent(match[1]), body);
+        else if (match[2] === "finalize") receipt = await reviewStore.finalize(decodeURIComponent(match[1]), body, req.headers["idempotency-key"]);
+        else if (match[2] === "receipts") receipt = await reviewStore.receipt(decodeURIComponent(match[1]), body);
+        else return json(res, 404, { error: "not found" });
+        return json(res, receipt.deduped ? 200 : 201, receipt);
+      } catch (error) { return json(res, /not found/.test(error.message) ? 404 : 422, { error: error.message }); }
+    }
+    if (req.method !== "POST" || url.pathname !== "/api/feedback") return json(res, 404, { error: "not found" });
     if (!String(req.headers["content-type"] || "").toLowerCase().startsWith("application/json")) return json(res, 415, { error: "content-type must be application/json" });
     try {
       const bundle = await readJsonBody(req);
