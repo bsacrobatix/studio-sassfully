@@ -331,6 +331,15 @@ nodes:
     edges: {}
   # --- requirements (product) ---------------------------------------------
   - schema: sassfully/requirement/v0
+    id: req-conflict-safe-landing
+    title: Landing preserves dirty work and resolves integration conflicts in isolation
+    status: in-progress
+    visibility: public
+    summary: A protected-main landing captures pre-existing tracked work on a recovery branch, integrates a feature in a disposable worktree, offers an injected resolver and lost-work review, and only promotes an audited integration result. It never uses shared stash state or silently discards either side.
+    sources: [source-concept]
+    edges:
+      part_of: [product-sassfully]
+  - schema: sassfully/requirement/v0
     id: req-generic-kinds
     title: Feedback is generic by kind
     status: draft

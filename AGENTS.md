@@ -24,9 +24,12 @@ belong in `.context/`, never in tracked files.
   `reference-transaction` git hook blocks branch switches and off-tip detaches
   here. All implementation work happens in branch worktrees:
   `git worktree add .worktrees/<name> -b <branch> main`.
-- **Landing path.** Land a branch with `scripts/merge-to-main.sh <branch>`
+- **Landing path.** Land a clean branch with `scripts/merge-to-main.sh <branch>`
   (fast-forward only), or `scripts/land-branch.sh <branch> [--gate "<cmd>"]`
-  when main has advanced. No direct-to-main commits, including docs.
+  when main has advanced. When tracked main work overlaps a feature, use
+  `scripts/integrate-branch.sh <branch> --auto-resolve --resolver-command <cmd> --promote`;
+  it snapshots the work on a recovery branch and resolves only in an isolated
+  integration worktree. No direct-to-main commits, including docs.
 - **Private-by-default folders** (all gitignored, never committed):
   `.context/` transient working markdown, `.artifacts/` generated review and
   build output, `.worktrees/` branch worktrees.
