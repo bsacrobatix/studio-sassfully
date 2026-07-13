@@ -113,3 +113,10 @@ test("http sink exposes non-success responses for retry", async () => {
   const sink = httpSink({ url: "https://feedback.example/api/feedback", fetch: async () => ({ ok: false, status: 503 }) });
   await assert.rejects(() => sink.submit({ reviewed: true }), /503/);
 });
+
+test("http sink rejects receipts without a string ref and refuses bad construction", async () => {
+  const sink = httpSink({ url: "https://feedback.example/api/feedback", fetch: async () => ({ ok: true, status: 200, json: async () => ({}) }) });
+  await assert.rejects(() => sink.submit({ reviewed: true }), /string ref/);
+  assert.throws(() => httpSink({}), TypeError);
+  assert.throws(() => httpSink({ url: "https://x", fetch: null }), TypeError);
+});
