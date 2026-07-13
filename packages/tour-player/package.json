@@ -1,1 +1,1 @@
-{"name":"@sassfully/tour-player","version":"0.1.0","type":"module","main":"src/index.mjs","license":"Apache-2.0","dependencies":{"@sassfully/tour-schema":"file:../tour-schema"},"scripts":{"test":"node --test test/*.test.mjs"}}
+{"name":"@sassfully/tour-player","version":"0.1.0","type":"module","main":"src/index.mjs","license":"Apache-2.0","dependencies":{"@sassfully/tour-schema":"file:../tour-schema"},"scripts":{"build":"node scripts/build.mjs","test":"node --test test/*.test.mjs"}}

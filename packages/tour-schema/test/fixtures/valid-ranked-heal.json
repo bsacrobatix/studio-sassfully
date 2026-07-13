@@ -1,1 +1,1 @@
-{"version":2,"id":"synthetic-ranked-heal","origin":"https://fixture.invalid","steps":[{"id":"welcome","kind":"highlight","target":[{"role":"button","name":"Welcome"},{"testid":"welcome"}],"advanceOn":["click"]},{"id":"continue","kind":"act","action":"click","target":{"testid":"continue"}}]}
+{"version":2,"id":"synthetic-ranked-heal","origin":"https://fixture.invalid","steps":[{"id":"welcome","kind":"highlight","target":{"role":"button","name":"Welcome","testid":"welcome"}},{"id":"continue","kind":"act","act":{"kind":"click"},"target":{"testid":"continue"}}]}

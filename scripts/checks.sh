@@ -2,8 +2,7 @@
 # checks.sh - sassfully's deterministic gate: exit 0 or the landing waits.
 #
 #   1. pog-doctor  — conventions lint (CI-safe: skips the hook check in CI)
-#   2. tests       — empty suite today, green by definition; real tests hang
-#                    off this hook as feedback-core lands
+#   2. tests       — every package with a package.json test script
 #   3. graph lint  — pog/catalog.yaml validated by the kitsoki engine.
 #      Resolution order: $KITSOKI_BIN (prebuilt binary), else build from
 #      $POG_KITSOKI_SRC (a kitsoki checkout with the object-graph engine;
@@ -19,10 +18,22 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 scripts/pog-doctor .
 
-node --test packages/feedback-core/test/*.test.mjs
-node --test packages/feedback-vue/test/*.test.mjs
-node --test packages/feedback-intake/test/*.test.mjs
-echo "tests: feedback packages green"
+# Prepare all sibling file: links before testing. A package can depend on a
+# sibling that itself has a sibling dependency, so setup must precede tests.
+while IFS= read -r package; do
+  if node -e 'const p=require("./" + process.argv[1]); process.exit(Object.values(p.dependencies || {}).some((v) => v.startsWith("file:")) ? 0 : 1)' "$package"; then
+    dir="$(dirname "$package")"
+    npm --prefix "$dir" install --ignore-scripts --no-audit --no-fund --package-lock=false
+  fi
+done < <(find packages -mindepth 2 -maxdepth 2 -name package.json -type f | sort)
+
+while IFS= read -r package; do
+  if node -e 'const p=require("./" + process.argv[1]); process.exit(p.scripts && p.scripts.test ? 0 : 1)' "$package"; then
+    dir="$(dirname "$package")"
+    echo "tests: $dir"
+    npm --prefix "$dir" test
+  fi
+done < <(find packages -mindepth 2 -maxdepth 2 -name package.json -type f | sort)
 
 lint_catalog() {
   if [ -n "${KITSOKI_BIN:-}" ] && [ -x "${KITSOKI_BIN}" ]; then
