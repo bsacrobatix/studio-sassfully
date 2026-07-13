@@ -1,0 +1,9 @@
+{
+  "name": "@sassfully/tour-schema",
+  "version": "0.1.0",
+  "description": "Strict, host-neutral TourManifestV2 compatibility contract.",
+  "type": "module",
+  "main": "src/index.mjs",
+  "license": "Apache-2.0",
+  "scripts": { "test": "node --test test/*.test.mjs" }
+}

@@ -1,0 +1,1 @@
+{"name":"synthetic-tour-fixture","private":true,"type":"module","dependencies":{"@sassfully/browser-tour-core":"file:../../packages/browser-tour-core"},"scripts":{"test":"node --test test.mjs"}}

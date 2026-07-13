@@ -5,3 +5,4 @@ export { idempotencyKey, contentDigest, fnv1a64 } from "./idempotency.mjs";
 export { createDraft, attachEvidence, setUserText, beginReview, approveReview, submit } from "./machine.mjs";
 export { localJsonlSink, bundleSink, dryRunSink, httpSink, createRouter } from "./sinks.mjs";
 export { mountReporter } from "./reporter.mjs";
+export { createArtifactRevision, createReviewSession, addReviewedComment, setCommentDisposition, submitReviewSession } from "./review-session.mjs";
