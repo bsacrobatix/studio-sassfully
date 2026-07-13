@@ -26,7 +26,6 @@ catalog:
       - id: source-kitsoki-feedback-proposal
         kind: external-document
         path: "../Kitsoki/docs/proposals/generic-feedback-sdk-slidey-reports.md"
-
 type_registry:
   - id: core-node
     schema: graph-type/v0
@@ -67,6 +66,23 @@ type_registry:
       - id: acceptance
         target_type: requirement
         cardinality: many
+    artifact:
+      format: json
+      presentation: media
+      schema: sassfully/artifact/mockup-packet/v0
+    materialize:
+      context_edges:
+        - acceptance
+      gates:
+        - journey
+        - for_persona
+      params:
+        - id: audience
+          type: enum
+          values:
+            - internal
+            - public
+      story: stories/mockup-packet
   - id: limitation
     schema: graph-type/v0
     extends: core-node
@@ -93,6 +109,20 @@ type_registry:
         target_type: milestone
         cardinality: one
         acyclic: true
+  - id: feature
+    schema: graph-type/v0
+    extends: core-node
+    summary: A durable product capability grouping requirements and use cases under one deliverable-facing name; realness derives from its acceptance requirements' status and the deliverables that demonstrate/prove it, same convention as POG's own `pog/feature/v0`.
+    edge_fields:
+      - id: part_of
+        target_type: product
+        cardinality: one
+      - id: requirements
+        target_type: requirement
+        cardinality: many
+      - id: use_cases
+        target_type: use-case
+        cardinality: many
   - id: component
     schema: graph-type/v0
     extends: core-node
@@ -103,20 +133,6 @@ type_registry:
         cardinality: one
       - id: satisfies
         target_type: requirement
-        cardinality: many
-  - id: feature
-    schema: graph-type/v0
-    extends: core-node
-    summary: A durable product capability grouping requirements and use cases.
-    edge_fields:
-      - id: part_of
-        target_type: product
-        cardinality: one
-      - id: requirements
-        target_type: requirement
-        cardinality: many
-      - id: use_cases
-        target_type: use-case
         cardinality: many
   # Deliverable layer — POG materialization-first taxonomy (2026-07-11):
   # deliverable nodes are SPECS of real evidence/functionality artifacts
@@ -144,19 +160,28 @@ type_registry:
       format: json
       presentation: document
     materialize:
-      story: stories/record-flow-evidence
-      context_edges: [proves]
-      params:
-        - {id: record_command, type: string, default: "scripts/record-flow-evidence.sh"}
       checks:
-        - id: gate
-          script: scripts/checks/flows_recorded.star
+        - capabilities:
+            fs:
+              read:
+                - pog/evidence/**
+          id: gate
           inputs_field: check_inputs
-          capabilities: {fs: {read: ["pog/evidence/**"]}}
+          script: scripts/checks/flows_recorded.star
+      context_edges:
+        - proves
+      params:
+        - default: scripts/record-flow-evidence.sh
+          id: record_command
+          type: string
+        - default: .
+          id: repo_root
+          type: string
+      story: stories/record-flow-evidence
   - id: demo
     schema: graph-type/v0
     extends: core-node
-    summary: A recorded demonstration packet (tours + rrweb clips) of a use case; spec-only until its capture story is wired.
+    summary: A recorded demonstration packet (tours + rrweb clips + deck) of a use case; real when the committed packet satisfies the type-provided demo_packet assertion.
     edge_fields:
       - id: part_of
         target_type: product
@@ -168,10 +193,27 @@ type_registry:
       schema: sassfully/artifact/demo-packet/v0
       format: json
       presentation: media
+    materialize:
+      checks:
+        - capabilities:
+            fs:
+              read:
+                - stories/**
+                - .artifacts/**
+          id: gate
+          inputs_field: check_inputs
+          script: scripts/checks/demo_packet.star
+      context_edges:
+        - demonstrates
+      params:
+        - default: ""
+          id: target_url
+          type: string
+      story: stories/demo-packet
   - id: doc
     schema: graph-type/v0
     extends: core-node
-    summary: A generated document deliverable; spec-only until its producer story is wired.
+    summary: A generated document projected from the node's graph context; real when the declared artifact paths exist per the type-provided artifact_exists assertion.
     edge_fields:
       - id: part_of
         target_type: product
@@ -183,10 +225,32 @@ type_registry:
       schema: sassfully/artifact/doc/v0
       format: markdown
       presentation: document
+    materialize:
+      checks:
+        - capabilities:
+            fs:
+              read:
+                - .artifacts/**
+                - docs/**
+          id: gate
+          inputs_field: check_inputs
+          script: scripts/checks/artifact_exists.star
+      context_edges:
+        - documents
+      params:
+        - default: 2
+          id: depth
+          type: int
+        - id: audience
+          type: enum
+          values:
+            - internal
+            - public
+      story: stories/materialize-doc
   - id: tutorial
     schema: graph-type/v0
     extends: core-node
-    summary: A step-by-step walkthrough teaching a use case; spec-only until its producer story is wired.
+    summary: A step-by-step walkthrough teaching a use case; real when the declared artifact paths exist per the type-provided artifact_exists assertion.
     edge_fields:
       - id: part_of
         target_type: product
@@ -198,6 +262,28 @@ type_registry:
       schema: sassfully/artifact/doc/v0
       format: markdown
       presentation: document
+    materialize:
+      checks:
+        - capabilities:
+            fs:
+              read:
+                - .artifacts/**
+                - docs/**
+          id: gate
+          inputs_field: check_inputs
+          script: scripts/checks/artifact_exists.star
+      context_edges:
+        - teaches
+      params:
+        - default: 2
+          id: depth
+          type: int
+        - id: audience
+          type: enum
+          values:
+            - internal
+            - public
+      story: stories/materialize-doc
   # The structured write primitive (cribbed from the POG program catalog):
   # system-authored writes — materialize write-backs, derived status flips —
   # land as changeset nodes, so every catalog mutation has provenance.
@@ -205,6 +291,34 @@ type_registry:
     schema: graph-type/v0
     extends: core-node
     summary: A reviewable, structured edit to this catalog; content writes are changesets, lifecycle flips are direct writes with provenance.
+  - artifact:
+      format: json
+      presentation: document
+      schema: sassfully/artifact/qa-target-check/v0
+    edge_fields:
+      - cardinality: one
+        id: part_of
+        target_type: product
+      - cardinality: many
+        id: verifies
+        target_type: requirement
+    extends: core-node
+    id: qa-target
+    materialize:
+      context_edges:
+        - verifies
+      gates:
+        - gate
+      params:
+        - default: pog/catalog.yaml
+          id: catalog_path
+          type: string
+        - default: .
+          id: repo_root
+          type: string
+      story: stories/qa-compliance-gate-runner
+    schema: graph-type/v0
+    summary: Deterministically checkable proof that a requirement is satisfied; status is derived by a runner, never hand-edited.
 nodes:
   # --- product -----------------------------------------------------------
   - schema: sassfully/product/v0
@@ -337,7 +451,6 @@ nodes:
     edges:
       part_of: [product-sassfully]
       motivated_by: [uc-bug-report-with-replay, uc-deck-feedback]
-
   # --- requirements (gaps found vs. kitsoki's current bug-reporting mechanism,
   #     see source-kitsoki-feedback-proposal) --------------------------------
   - schema: sassfully/requirement/v0
@@ -345,10 +458,7 @@ nodes:
     title: Sinks support erasure and evidence replacement
     status: draft
     visibility: public
-    summary: A submitted item is not append-only. A sink implements erase(id,
-      reason) for data-subject deletion requests and replaceEvidence(id,
-      bundle) for correcting/upgrading a filed item's evidence, in addition to
-      submit(). Frontend and core never assume a sink is create-only.
+    summary: A submitted item is not append-only. A sink implements erase(id, reason) for data-subject deletion requests and replaceEvidence(id, bundle) for correcting/upgrading a filed item's evidence, in addition to submit(). Frontend and core never assume a sink is create-only.
     sources: [source-kitsoki-feedback-proposal]
     edges:
       part_of: [product-sassfully]
@@ -358,9 +468,7 @@ nodes:
     title: Submission is idempotent
     status: draft
     visibility: public
-    summary: Every reviewed bundle carries a stable idempotency key; retrying a
-      submit (network failure, duplicate click) must not create a second
-      ticket/note at the sink.
+    summary: Every reviewed bundle carries a stable idempotency key; retrying a submit (network failure, duplicate click) must not create a second ticket/note at the sink.
     sources: [source-kitsoki-feedback-proposal]
     edges:
       part_of: [product-sassfully]
@@ -370,10 +478,7 @@ nodes:
     title: Unclassified or high-risk fields block submission
     status: draft
     visibility: public
-    summary: Submit is blocked, not silently allowed, when a plugin/provider
-      contributes a field with unknown sensitivity or a high-risk field lacking
-      a host-declared policy. The reporter or host must resolve it before the
-      bundle can leave the browser.
+    summary: Submit is blocked, not silently allowed, when a plugin/provider contributes a field with unknown sensitivity or a high-risk field lacking a host-declared policy. The reporter or host must resolve it before the bundle can leave the browser.
     sources: [source-kitsoki-feedback-proposal]
     edges:
       part_of: [product-sassfully]
@@ -383,10 +488,7 @@ nodes:
     title: Bundles record a legal basis for personal data
     status: draft
     visibility: public
-    summary: When a bundle contains personal data, it records a legal basis
-      (consent, legitimate interest, contract, legal obligation, or
-      host-declared) distinct from the field-level handling policy. The core
-      never invents this basis on the host's behalf.
+    summary: When a bundle contains personal data, it records a legal basis (consent, legitimate interest, contract, legal obligation, or host-declared) distinct from the field-level handling policy. The core never invents this basis on the host's behalf.
     sources: [source-kitsoki-feedback-proposal]
     edges:
       part_of: [product-sassfully]
@@ -396,10 +498,7 @@ nodes:
     title: Public, unauthenticated submission paths resist abuse
     status: draft
     visibility: public
-    summary: A sink reachable by an anonymous visitor (e.g. a generated product
-      site) enforces edge-level abuse controls — rate limits, proof-of-work, or
-      captcha-equivalent checks — before accepting a submission, rather than
-      relying on persistent reporter identity.
+    summary: A sink reachable by an anonymous visitor (e.g. a generated product site) enforces edge-level abuse controls — rate limits, proof-of-work, or captcha-equivalent checks — before accepting a submission, rather than relying on persistent reporter identity.
     sources: [source-kitsoki-feedback-proposal]
     edges:
       part_of: [product-sassfully]
@@ -429,12 +528,7 @@ nodes:
     title: Reviewed bundles carry an AI-authored triage narrative
     status: draft
     visibility: public
-    summary: Beyond the user's own text, the reviewed bundle can carry a
-      generated narrative — distilled problem statement, suspected
-      category/component, reproduction hints, and confidence — produced from
-      the bundle's own evidence. This is the artifact's differentiator over a
-      plain evidence dump; it is dependency-injected and cassette/stubbed in
-      tests so no automated run calls a live LLM.
+    summary: Beyond the user's own text, the reviewed bundle can carry a generated narrative — distilled problem statement, suspected category/component, reproduction hints, and confidence — produced from the bundle's own evidence. This is the artifact's differentiator over a plain evidence dump; it is dependency-injected and cassette/stubbed in tests so no automated run calls a live LLM.
     sources: [source-kitsoki-feedback-proposal]
     edges:
       part_of: [product-sassfully]
@@ -444,16 +538,11 @@ nodes:
     title: An anchor can carry a deterministic reproduction pointer
     status: draft
     visibility: public
-    summary: When the producer has one, the anchor envelope's extra field can
-      carry a stable pointer to a deterministic, replayable interaction trace
-      (not just a narrative description), so a downstream automated fix
-      pipeline can reproduce the reported state rather than only read about
-      it.
+    summary: When the producer has one, the anchor envelope's extra field can carry a stable pointer to a deterministic, replayable interaction trace (not just a narrative description), so a downstream automated fix pipeline can reproduce the reported state rather than only read about it.
     sources: [source-kitsoki-feedback-proposal]
     edges:
       part_of: [product-sassfully]
       motivated_by: [uc-bug-report-with-replay]
-
   # --- use cases ------------------------------------------------------------
   - schema: sassfully/use-case/v0
     id: uc-deck-feedback
@@ -474,9 +563,7 @@ nodes:
     sources: [source-concept]
     edges:
       part_of: [product-sassfully]
-      acceptance: [req-generic-kinds, req-multi-sink-routing,
-        req-sink-lifecycle-ops, req-idempotent-submission,
-        req-public-sink-abuse-controls]
+      acceptance: [req-generic-kinds, req-multi-sink-routing, req-sink-lifecycle-ops, req-idempotent-submission, req-public-sink-abuse-controls]
   - schema: sassfully/use-case/v0
     id: uc-pm-portal-feedback
     title: PM-portal feedback
@@ -486,9 +573,14 @@ nodes:
     sources: [source-concept]
     edges:
       part_of: [product-sassfully]
-      acceptance: [req-ai-actionable-bundle, req-multi-sink-routing,
-        req-sink-lifecycle-ops, req-idempotent-submission,
-        req-ai-triage-narrative]
+      acceptance: [req-ai-actionable-bundle, req-multi-sink-routing, req-sink-lifecycle-ops, req-idempotent-submission, req-ai-triage-narrative]
+    journey:
+      - A PM reviewing a catalog/portal surface (a node, a changeset diff, a deliverable) spots something worth flagging.
+      - Annotates in place via the same widget (host = the POG portal itself, dogfooding its own feedback channel — feature-pm-portal).
+      - Review step applies the same privacy-fail-closed gate as any other host; the PM's annotation anchors to the portal surface it was made against.
+      - On submit, an ai_instruction outcome dispatches the reviewed bundle toward an authoring/refine flow rather than a plain local note — the portal's own feedback becomes graph-actionable, not just a log line.
+    outcome: Feedback about the tracking tool itself flows through the tool being tracked, landing as a bundle an authoring flow can act on — closing the loop described in plan.md §6 point 4.
+    stakes: v0.1's sink is local JSONL (decision FD4); the catalog-sink (feedback -> proposed ask/req node) lands once graph-MCP P6's feedback-routing patterns are reusable here, already true as of graph-mcp P6 landing on kitsoki main.
   - schema: sassfully/use-case/v0
     id: uc-bug-report-with-replay
     title: Bug report with replay evidence
@@ -498,10 +590,32 @@ nodes:
     sources: [source-slidey-brief]
     edges:
       part_of: [product-sassfully]
-      acceptance: [req-host-policy-gates-evidence, req-privacy-metadata-first-class, req-capture-review-submit,
-        req-privacy-fail-closed, req-legal-basis-metadata, req-ai-triage-narrative,
-        req-reproducible-anchor-trace]
-
+      acceptance: [req-host-policy-gates-evidence, req-privacy-metadata-first-class, req-capture-review-submit, req-privacy-fail-closed, req-legal-basis-metadata, req-ai-triage-narrative, req-reproducible-anchor-trace]
+    journey:
+      - User hits an issue in a host app embedding the widget; triggers the reporter (floating, chromeless trigger).
+      - Widget captures an anchor at the trigger point (producer-owned, per req-producer-owned-anchors) plus an optional rrweb replay clip and network summary, opt-in per host policy.
+      - Review step surfaces the privacy manifest before submission — fields the manifest has not classified block submit (req-privacy-fail-closed); raw capture never leaves the device pre-review (req-raw-drafts-stay-local).
+      - User adds prose + picks a kind (bug is one of several, not privileged — lim-not-bug-specific) and submits; a client-side idempotency key dedupes accidental double-submits (req-idempotent-submission).
+      - Bundle routes to a configured sink (local/bundle/dry-run in v0.1; GitHub is a later parity follow-on, never required — lim-not-github-specific).
+    outcome: A reviewed, privacy-scrubbed feedback bundle lands in the configured sink with a reproducible anchor trace, ready for triage without a bespoke reporter per host app.
+    stakes: v0.1 (feature-feedback-core, Stage 2.3) proves capture->review->submit + privacy fail-closed + anchors end to end; the rrweb replay plugin itself, GitHub sink, and spatial anchors are kitsoki-parity follow-ons layered on afterward (see plan.md scope ledger), not blocking this use case's v0.1 acceptance.
+    for_persona: An end user of a host app that embeds the feedback widget — hits a bug mid-task and files a report with replay evidence without leaving the page.
+    materialization:
+      artifacts: []
+      job_id: 01KXA84RWB2N7TPC6CZ9G8FYAK
+      stages:
+        - id: project
+          status: complete
+        - id: mockup
+          status: complete
+        - id: tours
+          status: complete
+        - id: capture
+          status: complete
+        - id: doctor
+          status: complete
+      status: complete
+      story: stories/mockup-packet
   # --- explicit non-requirements ---------------------------------------------
   - schema: sassfully/limitation/v0
     id: lim-not-bug-specific
@@ -802,9 +916,9 @@ nodes:
   - schema: sassfully/test-suite/v0
     id: ts-sassfully-dev-story-flows
     title: Recorded no-LLM dev-story flow run against this repo
-    status: missing
+    status: verified
     visibility: public
-    summary: The sassfully half of the POG program's dev-story onboarding proof — a recorded `kitsoki test flows` run against .kitsoki/stories/studio-sassfully-dev, judged by the test-suite type's flows_recorded assertion. Materializing runs scripts/record-flow-evidence.sh (writes pog/evidence/ even on failure) and the engine judges the fresh evidence.
+    summary: Recorded no-LLM flow run against this repo's own story suite (stories/app.yaml, record_run flow) — green as of 2026-07-12. The imports.core host drift (missing host.capsule_workspace after the base dev-story grew a capsule-workspace interface) is fixed in .kitsoki/stories/studio-sassfully-dev/app.yaml. The dev-story instance itself carries no flow fixtures yet; adding cassette flows there is follow-on work, and this node records the repo's flow-bearing suite the same way POG's own ts-dev-story-flows records stories/materialize-doc.
     check_inputs:
       reports:
         - {repo: studio-sassfully, path: pog/evidence/flows-studio-sassfully.json}
@@ -816,42 +930,114 @@ nodes:
       artifacts: []
       checks:
         - id: gate
-          ok: false
-          reasons:
-            - 'studio-sassfully: recorded run exited 2 (flows did not run clean)'
+          ok: true
           reproduce: kitsoki starlark run scripts/checks/flows_recorded.star --inputs '{"reports":[{"path":"pog/evidence/flows-studio-sassfully.json","repo":"studio-sassfully"}]}' --capabilities '{"fs":{"read":["pog/evidence/**"]}}'
           script: scripts/checks/flows_recorded.star
           script_sha256: 34aebdba4eff5b14944ecb1b124a758290e8011ff704d8cf9898aed1c71b9f90
-      job_id: 01KX7TE1XQF3FVYHE7P1XXDKT1
+      job_id: 01KXAA77H50GADJD9MNWS8M2E0
       stages:
         - id: record
           status: complete
         - id: done
           status: complete
         - id: check:gate
-          status: failed
-      status: failed
+          status: complete
+      status: complete
       story: stories/record-flow-evidence
   - schema: sassfully/demo/v0
     id: demo-capture-widget
     title: Recorded demo — capture, review, submit in a host page
-    status: missing
+    status: verified
     visibility: public
-    summary: Spec of a captured demo packet walking uc-bug-report-with-replay against a real host page embedding the widget. Does not exist yet; sits in the derived work queue until the widget is real enough to capture.
+    summary: 'REAL-mode demo packet (Stage 2.4): slidey capture --tours (via kitsoki record-tour.mjs, the productized mechanism) drives the example host page (examples/host-page) embedding packages/feedback-core''s reporter through uc-bug-report-with-replay''s journey — trigger, describe, privacy review (fail-closed), submit to the local JSONL sink. The Stage 2.2 mockup packet remains as labeled stale evidence.'
     sources: [source-concept]
     edges:
       part_of: [product-sassfully]
       demonstrates: [uc-bug-report-with-replay]
+    check_inputs:
+      clips:
+        - stories/demo-packet/fixtures/capture-widget/clips/capture-widget-journey.rrweb.json
+      manifest: stories/demo-packet/fixtures/capture-widget/capture-widget.demo.json
+    evidence:
+      - kind: doc
+        path: stories/demo-packet/fixtures/capture-widget/capture-widget.demo.json
+        title: REAL demo packet manifest — slidey capture --tours of the example host page embedding the real widget
+      - kind: video
+        path: stories/demo-packet/fixtures/capture-widget/clips/capture-widget-journey.rrweb.json
+        title: 'Journey clip (real rrweb capture: trigger, describe, privacy review, submit to local sink)'
+      - kind: doc
+        path: stories/mockup-packet/fixtures/bug-report-with-replay/bug-report-with-replay.demo.json
+        stale: true
+        title: Mockup packet manifest (Stage 2.2 evidence — STALE, superseded by the real capture)
+      - kind: video
+        path: stories/mockup-packet/fixtures/bug-report-with-replay/clips/bug-report-with-replay-journey.rrweb.json
+        stale: true
+        title: Mockup journey clip (Stage 2.2 evidence — STALE, superseded by the real capture)
+    materialization:
+      artifacts: []
+      checks:
+        - id: gate
+          ok: true
+          reproduce: kitsoki starlark run scripts/checks/demo_packet.star --inputs '{"clips":["stories/demo-packet/fixtures/capture-widget/clips/capture-widget-journey.rrweb.json"],"manifest":"stories/demo-packet/fixtures/capture-widget/capture-widget.demo.json"}' --capabilities '{"fs":{"read":["stories/**",".artifacts/**"]}}'
+          script: scripts/checks/demo_packet.star
+          script_sha256: 90381aa7894c2990252dac1f7ff18a02e9e8107ba5a3ad76c7dcd74db76b61ca
+      job_id: 01KXA9WKXCDQWBKZBKG68PZ6G3
+      stages:
+        - id: plan
+          status: complete
+        - id: launch
+          status: complete
+        - id: capture
+          status: complete
+        - id: doctor
+          status: complete
+        - id: check:gate
+          status: complete
+      status: complete
+      story: stories/demo-packet
   - schema: sassfully/tutorial/v0
     id: tutorial-integrate-widget
     title: Tutorial — integrate the feedback widget into a host app
-    status: missing
+    status: verified
     visibility: public
     summary: Spec of a walkthrough from install to first routed feedback item. Does not exist yet; the derived work queue carries it until materialized.
     sources: [source-concept]
     edges:
       part_of: [product-sassfully]
       teaches: [uc-deck-feedback]
+    check_inputs:
+      paths:
+        - .artifacts/tutorial-integrate-widget/brief.md
+    evidence:
+      - kind: doc
+        path: .artifacts/tutorial-integrate-widget/brief.md
+        title: Doc
+    materialization:
+      artifacts:
+        - kind: doc
+          path: .artifacts/tutorial-integrate-widget/brief.md
+          produced_at: "2026-07-12T04:07:42Z"
+          title: Doc
+      checks:
+        - id: gate
+          ok: true
+          reproduce: kitsoki starlark run scripts/checks/artifact_exists.star --inputs '{"paths":[".artifacts/tutorial-integrate-widget/brief.md"]}' --capabilities '{"fs":{"read":[".artifacts/**","docs/**"]}}'
+          script: scripts/checks/artifact_exists.star
+          script_sha256: 46ebb871c1b4e6a7e9615c5b01483ba5ee1193289a210d02cbad9bc1f3aa44d6
+      job_id: 01KXA84VS343N0MF3W68E03RM7
+      stages:
+        - id: gather
+          status: complete
+        - id: draft
+          status: complete
+        - id: verify
+          status: complete
+        - id: done
+          status: complete
+        - id: check:gate
+          status: complete
+      status: complete
+      story: stories/materialize-doc
   - id: cs-1
     operations:
       - changes:
@@ -921,4 +1107,1873 @@ nodes:
     schema: graph/changeset/v1
     status: notified
     title: 'materialize ts-sassfully-dev-story-flows: write back status "failed"'
+    visibility: internal
+  - created_at: "2026-07-12T00:23:44Z"
+    id: cs-3
+    operations: []
+    schema: graph/changeset/v1
+    status: proposed
+    title: probe
+    visibility: internal
+  - created_at: "2026-07-12T00:24:35Z"
+    id: cs-4
+    operations:
+      - after:
+          edges:
+            part_of:
+              - product-sassfully
+            requirements:
+              - req-generic-kinds
+              - req-producer-owned-anchors
+              - req-capture-review-submit
+              - req-privacy-fail-closed
+              - req-raw-drafts-stay-local
+              - req-multi-sink-routing
+              - req-idempotent-submission
+            use_cases:
+              - uc-bug-report-with-replay
+              - uc-pm-portal-feedback
+          id: feature-feedback-core
+          schema: sassfully/feature/v0
+          sources:
+            - source-slidey-brief
+            - source-concept
+          status: planned
+          summary: 'Anchor contract + capture widget + local-note outcome, generalized from the kitsoki bug-report lineage into a framework-neutral feedback SDK any host app can embed. v0.1 slice: kinds, producer-owned anchors, capture-review-submit state machine, privacy fail-closed, local/bundle/dry-run sinks, idempotency — ms-1-feedback-core is the delivery milestone this feature anchors.'
+          title: Feedback-core — framework-neutral contextual feedback capture
+          visibility: public
+        kind: added
+    schema: graph/changeset/v1
+    status: notified
+    title: 'Author feature: feature-feedback-core (Stage 2.1, promoted from ms-1-feedback-core scope)'
+    visibility: internal
+    authorized_at: "2026-07-12T00:24:41Z"
+    applied_at: "2026-07-12T00:24:41Z"
+  - created_at: "2026-07-12T00:25:36Z"
+    id: cs-5
+    operations:
+      - changes:
+          - after:
+              - User hits an issue in a host app embedding the widget; triggers the reporter (floating, chromeless trigger).
+              - Widget captures an anchor at the trigger point (producer-owned, per req-producer-owned-anchors) plus an optional rrweb replay clip and network summary, opt-in per host policy.
+              - Review step surfaces the privacy manifest before submission — fields the manifest has not classified block submit (req-privacy-fail-closed); raw capture never leaves the device pre-review (req-raw-drafts-stay-local).
+              - User adds prose + picks a kind (bug is one of several, not privileged — lim-not-bug-specific) and submits; a client-side idempotency key dedupes accidental double-submits (req-idempotent-submission).
+              - Bundle routes to a configured sink (local/bundle/dry-run in v0.1; GitHub is a later parity follow-on, never required — lim-not-github-specific).
+            path:
+              - fields
+              - journey
+          - after: A reviewed, privacy-scrubbed feedback bundle lands in the configured sink with a reproducible anchor trace, ready for triage without a bespoke reporter per host app.
+            path:
+              - fields
+              - outcome
+          - after: v0.1 (feature-feedback-core, Stage 2.3) proves capture->review->submit + privacy fail-closed + anchors end to end; the rrweb replay plugin itself, GitHub sink, and spatial anchors are kitsoki-parity follow-ons layered on afterward (see plan.md scope ledger), not blocking this use case's v0.1 acceptance.
+            path:
+              - fields
+              - stakes
+        kind: modified
+        node: uc-bug-report-with-replay
+      - changes:
+          - after:
+              - A PM reviewing a catalog/portal surface (a node, a changeset diff, a deliverable) spots something worth flagging.
+              - Annotates in place via the same widget (host = the POG portal itself, dogfooding its own feedback channel — feature-pm-portal).
+              - Review step applies the same privacy-fail-closed gate as any other host; the PM's annotation anchors to the portal surface it was made against.
+              - On submit, an ai_instruction outcome dispatches the reviewed bundle toward an authoring/refine flow rather than a plain local note — the portal's own feedback becomes graph-actionable, not just a log line.
+            path:
+              - fields
+              - journey
+          - after: Feedback about the tracking tool itself flows through the tool being tracked, landing as a bundle an authoring flow can act on — closing the loop described in plan.md §6 point 4.
+            path:
+              - fields
+              - outcome
+          - after: v0.1's sink is local JSONL (decision FD4); the catalog-sink (feedback -> proposed ask/req node) lands once graph-MCP P6's feedback-routing patterns are reusable here, already true as of graph-mcp P6 landing on kitsoki main.
+            path:
+              - fields
+              - stakes
+        kind: modified
+        node: uc-pm-portal-feedback
+    schema: graph/changeset/v1
+    status: notified
+    title: Refine uc-bug-report-with-replay + uc-pm-portal-feedback for feature-feedback-core v0.1 scope (Stage 2.1)
+    visibility: internal
+    authorized_at: "2026-07-12T00:26:20Z"
+    applied_at: "2026-07-12T00:26:20Z"
+  - created_at: "2026-07-12T00:50:25Z"
+    id: cs-6
+    operations:
+      - changes:
+          - after: planned
+            before: missing
+            path:
+              - status
+        kind: modified
+        node: demo-capture-widget
+    schema: graph/changeset/v1
+    status: withdrawn
+    title: probe
+    visibility: internal
+  - created_at: "2026-07-12T00:50:52Z"
+    id: cs-7
+    operations:
+      - changes:
+          - after: x
+            before: Spec of a captured demo packet walking uc-bug-report-with-replay against a real host page embedding the widget. Does not exist yet; sits in the derived work queue until the widget is real enough to capture.
+            path:
+              - fields
+              - summary
+        kind: modified
+        node: demo-capture-widget
+    schema: graph/changeset/v1
+    status: withdrawn
+    title: probe2
+    visibility: internal
+  - created_at: "2026-07-12T00:51:07Z"
+    id: cs-8
+    operations:
+      - changes:
+          - after: planned
+            before: missing
+            path:
+              - status
+          - after: A hand-authored mockup-mode demo packet (5-zone gravytanker-template HTML + real rrweb capture + deck) walking uc-bug-report-with-replay's full journey, doctor-green via stories/mockup-packet's gate. Stands in for the real host-page capture until feature-feedback-core's widget is built (Stage 2.3+); re-materializing at that point replaces this packet's clip with a live capture, the same way POG's own demo-roadmap-diff-real-app superseded its mockup placeholder.
+            before: Spec of a captured demo packet walking uc-bug-report-with-replay against a real host page embedding the widget. Does not exist yet; sits in the derived work queue until the widget is real enough to capture.
+            path:
+              - fields
+              - summary
+          - after:
+              clips:
+                - ../POG/stories/mockup-packet/fixtures/bug-report-with-replay/clips/bug-report-with-replay-journey.rrweb.json
+              manifest: ../POG/stories/mockup-packet/fixtures/bug-report-with-replay/bug-report-with-replay.demo.json
+            path:
+              - fields
+              - check_inputs
+          - after:
+              - kind: doc
+                path: ../POG/stories/mockup-packet/fixtures/bug-report-with-replay/bug-report-with-replay.demo.json
+                title: Mockup packet manifest (committed fixture, mockup mode)
+              - kind: video
+                path: ../POG/stories/mockup-packet/fixtures/bug-report-with-replay/clips/bug-report-with-replay-journey.rrweb.json
+                title: Journey clip (real rrweb capture of the hand-authored mockup)
+            path:
+              - fields
+              - evidence
+        kind: modified
+        node: demo-capture-widget
+    schema: graph/changeset/v1
+    status: notified
+    title: Materialize demo-capture-widget in mockup mode (Stage 2.2)
+    visibility: internal
+    authorized_at: "2026-07-12T00:51:13Z"
+    applied_at: "2026-07-12T00:51:13Z"
+  - created_at: "2026-07-12T03:55:38Z"
+    id: cs-9
+    operations:
+      - changes:
+          - after:
+              checks:
+                - capabilities:
+                    fs:
+                      read:
+                        - stories/**
+                        - .artifacts/**
+                  id: gate
+                  inputs_field: check_inputs
+                  script: scripts/checks/demo_packet.star
+              context_edges:
+                - demonstrates
+              params:
+                - default: ""
+                  id: target_url
+                  type: string
+              story: stories/demo-packet
+            path:
+              - materialize
+          - after: A recorded demonstration packet (tours + rrweb clips + deck) of a use case; real when the committed packet satisfies the type-provided demo_packet assertion.
+            before: A recorded demonstration packet (tours + rrweb clips) of a use case; spec-only until its capture story is wired.
+            path:
+              - summary
+        kind: registry_type_modified
+        node: demo
+      - changes:
+          - after:
+              checks:
+                - capabilities:
+                    fs:
+                      read:
+                        - .artifacts/**
+                        - docs/**
+                  id: gate
+                  inputs_field: check_inputs
+                  script: scripts/checks/artifact_exists.star
+              context_edges:
+                - documents
+              params:
+                - default: 2
+                  id: depth
+                  type: int
+                - id: audience
+                  type: enum
+                  values:
+                    - internal
+                    - public
+              story: stories/materialize-doc
+            path:
+              - materialize
+          - after: A generated document projected from the node's graph context; real when the declared artifact paths exist per the type-provided artifact_exists assertion.
+            before: A generated document deliverable; spec-only until its producer story is wired.
+            path:
+              - summary
+        kind: registry_type_modified
+        node: doc
+      - changes:
+          - after:
+              checks:
+                - capabilities:
+                    fs:
+                      read:
+                        - .artifacts/**
+                        - docs/**
+                  id: gate
+                  inputs_field: check_inputs
+                  script: scripts/checks/artifact_exists.star
+              context_edges:
+                - teaches
+              params:
+                - default: 2
+                  id: depth
+                  type: int
+                - id: audience
+                  type: enum
+                  values:
+                    - internal
+                    - public
+              story: stories/materialize-doc
+            path:
+              - materialize
+          - after: A step-by-step walkthrough teaching a use case; real when the declared artifact paths exist per the type-provided artifact_exists assertion.
+            before: A step-by-step walkthrough teaching a use case; spec-only until its producer story is wired.
+            path:
+              - summary
+        kind: registry_type_modified
+        node: tutorial
+      - changes:
+          - after:
+              format: json
+              presentation: media
+              schema: sassfully/artifact/mockup-packet/v0
+            path:
+              - artifact
+          - after:
+              context_edges:
+                - acceptance
+              gates:
+                - journey
+                - for_persona
+              params:
+                - id: audience
+                  type: enum
+                  values:
+                    - internal
+                    - public
+              story: stories/mockup-packet
+            path:
+              - materialize
+        kind: registry_type_modified
+        node: use-case
+      - after:
+          artifact:
+            format: json
+            presentation: document
+            schema: sassfully/artifact/qa-target-check/v0
+          edge_fields:
+            - cardinality: one
+              id: part_of
+              target_type: product
+            - cardinality: many
+              id: verifies
+              target_type: requirement
+          extends: core-node
+          id: qa-target
+          materialize:
+            context_edges:
+              - verifies
+            gates:
+              - gate
+            params:
+              - default: pog/catalog.yaml
+                id: catalog_path
+                type: string
+            story: stories/qa-compliance-gate-runner
+          schema: graph-type/v0
+          summary: Deterministically checkable proof that a requirement is satisfied; status is derived by a runner, never hand-edited.
+        kind: registry_type_added
+    schema: graph/changeset/v1
+    status: notified
+    title: 'Wire deliverable materialize contracts: demo/doc/tutorial/use-case + qa-target type (Stage 2 enabler)'
+    visibility: internal
+    authorized_at: "2026-07-12T03:56:06Z"
+    applied_at: "2026-07-12T03:56:06Z"
+  - created_at: "2026-07-12T04:01:23Z"
+    id: cs-10
+    operations:
+      - changes:
+          - after:
+              clips:
+                - stories/mockup-packet/fixtures/bug-report-with-replay/clips/bug-report-with-replay-journey.rrweb.json
+              manifest: stories/mockup-packet/fixtures/bug-report-with-replay/bug-report-with-replay.demo.json
+            before:
+              clips:
+                - ../POG/stories/mockup-packet/fixtures/bug-report-with-replay/clips/bug-report-with-replay-journey.rrweb.json
+              manifest: ../POG/stories/mockup-packet/fixtures/bug-report-with-replay/bug-report-with-replay.demo.json
+            path:
+              - fields
+              - check_inputs
+          - after:
+              - kind: doc
+                path: stories/mockup-packet/fixtures/bug-report-with-replay/bug-report-with-replay.demo.json
+                title: Mockup packet manifest (committed fixture, mockup mode)
+              - kind: video
+                path: stories/mockup-packet/fixtures/bug-report-with-replay/clips/bug-report-with-replay-journey.rrweb.json
+                title: Journey clip (real rrweb capture of the hand-authored mockup)
+            before:
+              - kind: doc
+                path: ../POG/stories/mockup-packet/fixtures/bug-report-with-replay/bug-report-with-replay.demo.json
+                title: Mockup packet manifest (committed fixture, mockup mode)
+              - kind: video
+                path: ../POG/stories/mockup-packet/fixtures/bug-report-with-replay/clips/bug-report-with-replay-journey.rrweb.json
+                title: Journey clip (real rrweb capture of the hand-authored mockup)
+            path:
+              - fields
+              - evidence
+        kind: modified
+        node: demo-capture-widget
+      - changes:
+          - after: An end user of a host app that embeds the feedback widget — hits a bug mid-task and files a report with replay evidence without leaving the page.
+            path:
+              - fields
+              - for_persona
+        kind: modified
+        node: uc-bug-report-with-replay
+      - after:
+          check_inputs:
+            paths:
+              - .artifacts/doc-anchor-contract/brief.md
+          edges:
+            documents:
+              - req-producer-owned-anchors
+            part_of:
+              - product-sassfully
+          id: doc-anchor-contract
+          schema: sassfully/doc/v0
+          sources:
+            - source-kitsoki-feedback-proposal
+          status: missing
+          summary: 'Generated brief documenting the anchor envelope contract (req-producer-owned-anchors): what a producer must stamp on every captured anchor, how hosts extend it, and why anchors are producer-owned rather than sink-inferred. Stage 2.6''s doc deliverable; materialize projects it from the requirement''s graph context.'
+          title: Anchor contract — producer-owned anchors and the envelope shape
+          visibility: public
+        kind: added
+      - after:
+          check_inputs:
+            reports:
+              - path: pog/evidence/feedback-core-unit.json
+                repo: studio-sassfully
+          edges:
+            part_of:
+              - product-sassfully
+            proves:
+              - req-capture-review-submit
+          id: ts-feedback-core-unit
+          schema: sassfully/test-suite/v0
+          sources:
+            - source-kitsoki-feedback-proposal
+          status: missing
+          summary: 'Recorded unit-test evidence for packages/feedback-core (Stage 2.3). Honest red until the package exists: scripts/record-unit-evidence.sh records the node --test run (exit 2, report null pre-code) into pog/evidence/feedback-core-unit.json and flows_recorded.star judges it.'
+          title: feedback-core unit suite — capture, review, submit state machine
+          visibility: public
+        kind: added
+      - after:
+          edges:
+            part_of:
+              - product-sassfully
+            verifies:
+              - req-privacy-fail-closed
+              - req-raw-drafts-stay-local
+          gate: scripts/qa/feedback-privacy.sh
+          id: qa-feedback-privacy
+          schema: sassfully/qa-target/v0
+          sources:
+            - source-kitsoki-feedback-proposal
+          status: missing
+          summary: 'Deterministic proof of req-privacy-fail-closed and req-raw-drafts-stay-local: an unclassified field blocks submit; no sink/network call happens before review. Runner-derived status via scripts/qa/feedback-privacy.sh; honest red until packages/feedback-core exists (Stage 2.3/2.5).'
+          title: QA — privacy fails closed, raw drafts stay local
+          visibility: public
+        kind: added
+      - after:
+          edges:
+            part_of:
+              - product-sassfully
+            verifies:
+              - req-idempotent-submission
+          gate: scripts/qa/feedback-idempotency.sh
+          id: qa-feedback-idempotency
+          schema: sassfully/qa-target/v0
+          sources:
+            - source-kitsoki-feedback-proposal
+          status: missing
+          summary: 'Deterministic proof of req-idempotent-submission: submitting the same reviewed bundle twice yields one sink item keyed by the bundle''s idempotency key. Runner-derived status via scripts/qa/feedback-idempotency.sh; honest red until packages/feedback-core exists (Stage 2.3/2.5).'
+          title: QA — double-submit dedupes on the idempotency key
+          visibility: public
+        kind: added
+    schema: graph/changeset/v1
+    status: notified
+    title: Author Stage 2 deliverable + qa nodes; repoint demo-capture-widget at in-repo fixtures
+    visibility: internal
+    authorized_at: "2026-07-12T04:01:23Z"
+    applied_at: "2026-07-12T04:01:24Z"
+  - check_inputs:
+      paths:
+        - .artifacts/doc-anchor-contract/brief.md
+    edges:
+      documents:
+        - req-producer-owned-anchors
+      part_of:
+        - product-sassfully
+    id: doc-anchor-contract
+    schema: sassfully/doc/v0
+    sources:
+      - source-kitsoki-feedback-proposal
+    status: verified
+    summary: 'Generated brief documenting the anchor envelope contract (req-producer-owned-anchors): what a producer must stamp on every captured anchor, how hosts extend it, and why anchors are producer-owned rather than sink-inferred. Stage 2.6''s doc deliverable; materialize projects it from the requirement''s graph context.'
+    title: Anchor contract — producer-owned anchors and the envelope shape
+    visibility: public
+    evidence:
+      - kind: doc
+        path: .artifacts/doc-anchor-contract/brief.md
+        title: Doc
+    materialization:
+      artifacts:
+        - kind: doc
+          path: .artifacts/doc-anchor-contract/brief.md
+          produced_at: "2026-07-12T04:07:42Z"
+          title: Doc
+      checks:
+        - id: gate
+          ok: true
+          reproduce: kitsoki starlark run scripts/checks/artifact_exists.star --inputs '{"paths":[".artifacts/doc-anchor-contract/brief.md"]}' --capabilities '{"fs":{"read":[".artifacts/**","docs/**"]}}'
+          script: scripts/checks/artifact_exists.star
+          script_sha256: 46ebb871c1b4e6a7e9615c5b01483ba5ee1193289a210d02cbad9bc1f3aa44d6
+      job_id: 01KXA84WAVDFS1AB7J2QPQGPRV
+      stages:
+        - id: gather
+          status: complete
+        - id: draft
+          status: complete
+        - id: verify
+          status: complete
+        - id: done
+          status: complete
+        - id: check:gate
+          status: complete
+      status: complete
+      story: stories/materialize-doc
+  - check_inputs:
+      reports:
+        - path: pog/evidence/feedback-core-unit.json
+          repo: studio-sassfully
+    edges:
+      part_of:
+        - product-sassfully
+      proves:
+        - req-capture-review-submit
+    id: ts-feedback-core-unit
+    schema: sassfully/test-suite/v0
+    sources:
+      - source-kitsoki-feedback-proposal
+    status: verified
+    summary: 'Recorded unit-test evidence for packages/feedback-core (Stage 2.3): scripts/record-unit-evidence.sh records the node --test run into pog/evidence/feedback-core-unit.json and flows_recorded.star judges it. Green since v0.1 landed (11 tests, capture->review->submit machine, anchors, kinds).'
+    title: feedback-core unit suite — capture, review, submit state machine
+    visibility: public
+    materialization:
+      artifacts: []
+      checks:
+        - id: gate
+          ok: true
+          reproduce: kitsoki starlark run scripts/checks/flows_recorded.star --inputs '{"reports":[{"path":"pog/evidence/feedback-core-unit.json","repo":"studio-sassfully"}]}' --capabilities '{"fs":{"read":["pog/evidence/**"]}}'
+          script: scripts/checks/flows_recorded.star
+          script_sha256: 34aebdba4eff5b14944ecb1b124a758290e8011ff704d8cf9898aed1c71b9f90
+      job_id: 01KXA9ANC00DXYG9G2PK7THPSY
+      stages:
+        - id: record
+          status: complete
+        - id: done
+          status: complete
+        - id: check:gate
+          status: complete
+      status: complete
+      story: stories/record-flow-evidence
+  - edges:
+      part_of:
+        - product-sassfully
+      verifies:
+        - req-privacy-fail-closed
+        - req-raw-drafts-stay-local
+    gate: scripts/qa/feedback-privacy.sh
+    id: qa-feedback-privacy
+    schema: sassfully/qa-target/v0
+    sources:
+      - source-kitsoki-feedback-proposal
+    status: verified
+    summary: 'Deterministic proof of req-privacy-fail-closed and req-raw-drafts-stay-local: an unclassified field blocks submit; no sink/network call happens before review. Runner-derived status via scripts/qa/feedback-privacy.sh; honest red until packages/feedback-core exists (Stage 2.3/2.5).'
+    title: QA — privacy fails closed, raw drafts stay local
+    visibility: public
+    evidence:
+      - kind: doc
+        path: .artifacts/qa-feedback-privacy/qa-check.log
+        title: Qa target check
+    materialization:
+      artifacts:
+        - kind: doc
+          path: .artifacts/qa-feedback-privacy/qa-check.log
+          produced_at: "2026-07-12T04:32:19Z"
+          title: Qa target check
+      job_id: 01KXA9HYW83ZKK8KTGZPG1FW1T
+      stages:
+        - id: check
+          status: complete
+        - id: attest
+          status: complete
+      status: complete
+      story: stories/qa-compliance-gate-runner
+  - edges:
+      part_of:
+        - product-sassfully
+      verifies:
+        - req-idempotent-submission
+    gate: scripts/qa/feedback-idempotency.sh
+    id: qa-feedback-idempotency
+    schema: sassfully/qa-target/v0
+    sources:
+      - source-kitsoki-feedback-proposal
+    status: verified
+    summary: 'Deterministic proof of req-idempotent-submission: submitting the same reviewed bundle twice yields one sink item keyed by the bundle''s idempotency key. Runner-derived status via scripts/qa/feedback-idempotency.sh; honest red until packages/feedback-core exists (Stage 2.3/2.5).'
+    title: QA — double-submit dedupes on the idempotency key
+    visibility: public
+    evidence:
+      - kind: doc
+        path: .artifacts/qa-feedback-idempotency/qa-check.log
+        title: Qa target check
+    materialization:
+      artifacts:
+        - kind: doc
+          path: .artifacts/qa-feedback-idempotency/qa-check.log
+          produced_at: "2026-07-12T04:32:20Z"
+          title: Qa target check
+      job_id: 01KXA9HZGZ4ZF69FPWF95CBE1Q
+      stages:
+        - id: check
+          status: complete
+        - id: attest
+          status: complete
+      status: complete
+      story: stories/qa-compliance-gate-runner
+  - created_at: "2026-07-12T04:03:13Z"
+    id: cs-11
+    operations:
+      - changes:
+          - after:
+              paths:
+                - .artifacts/tutorial-integrate-widget/brief.md
+            path:
+              - fields
+              - check_inputs
+        kind: modified
+        node: tutorial-integrate-widget
+    schema: graph/changeset/v1
+    status: notified
+    title: Declare check_inputs for tutorial-integrate-widget
+    visibility: internal
+    authorized_at: "2026-07-12T04:03:13Z"
+    applied_at: "2026-07-12T04:03:14Z"
+  - created_at: "2026-07-12T04:07:38Z"
+    id: cs-12
+    operations:
+      - changes:
+          - after:
+              paths:
+                - .artifacts/tutorial-integrate-widget/brief.md
+            before:
+              paths:
+                - .artifacts/tutorial-integrate-widget/brief.md
+            path:
+              - fields
+              - check_inputs
+        kind: modified
+        node: tutorial-integrate-widget
+    schema: graph/changeset/v1
+    status: notified
+    title: Declare check_inputs for tutorial-integrate-widget
+    visibility: internal
+    authorized_at: "2026-07-12T04:07:38Z"
+    applied_at: "2026-07-12T04:07:38Z"
+  - authored_by: materialize
+    created_at: "2026-07-12T04:07:39Z"
+    id: cs-13
+    operations:
+      - changes:
+          - after:
+              artifacts: []
+              job_id: 01KXA84RWB2N7TPC6CZ9G8FYAK
+              stages:
+                - id: project
+                  status: complete
+                - id: mockup
+                  status: complete
+                - id: tours
+                  status: complete
+                - id: capture
+                  status: complete
+                - id: doctor
+                  status: complete
+              status: complete
+              story: stories/mockup-packet
+            path:
+              - fields
+              - materialization
+        kind: modified
+        node: uc-bug-report-with-replay
+    provenance:
+      job_id: 01KXA84RWB2N7TPC6CZ9G8FYAK
+      story: stories/mockup-packet
+    schema: graph/changeset/v1
+    status: notified
+    title: 'materialize uc-bug-report-with-replay: write back status "complete"'
+    visibility: internal
+    applied_at: "2026-07-12T04:07:39Z"
+  - authored_by: materialize
+    created_at: "2026-07-12T04:07:41Z"
+    id: cs-14
+    operations:
+      - changes:
+          - after:
+              artifacts: []
+              checks:
+                - id: gate
+                  ok: false
+                  reasons:
+                    - 'studio-sassfully: recorded run exited 2 (flows did not run clean)'
+                  reproduce: kitsoki starlark run scripts/checks/flows_recorded.star --inputs '{"reports":[{"path":"pog/evidence/flows-studio-sassfully.json","repo":"studio-sassfully"}]}' --capabilities '{"fs":{"read":["pog/evidence/**"]}}'
+                  script: scripts/checks/flows_recorded.star
+                  script_sha256: 34aebdba4eff5b14944ecb1b124a758290e8011ff704d8cf9898aed1c71b9f90
+              job_id: 01KXA84TNJ7H468SNH1FSM98D8
+              stages:
+                - id: record
+                  status: complete
+                - id: done
+                  status: complete
+                - id: check:gate
+                  status: failed
+              status: failed
+              story: stories/record-flow-evidence
+            before:
+              artifacts: []
+              checks:
+                - id: gate
+                  ok: false
+                  reasons:
+                    - 'studio-sassfully: recorded run exited 2 (flows did not run clean)'
+                  reproduce: kitsoki starlark run scripts/checks/flows_recorded.star --inputs '{"reports":[{"path":"pog/evidence/flows-studio-sassfully.json","repo":"studio-sassfully"}]}' --capabilities '{"fs":{"read":["pog/evidence/**"]}}'
+                  script: scripts/checks/flows_recorded.star
+                  script_sha256: 34aebdba4eff5b14944ecb1b124a758290e8011ff704d8cf9898aed1c71b9f90
+              job_id: 01KX7TE1XQF3FVYHE7P1XXDKT1
+              stages:
+                - id: record
+                  status: complete
+                - id: done
+                  status: complete
+                - id: check:gate
+                  status: failed
+              status: failed
+              story: stories/record-flow-evidence
+            path:
+              - fields
+              - materialization
+        kind: modified
+        node: ts-sassfully-dev-story-flows
+    provenance:
+      job_id: 01KXA84TNJ7H468SNH1FSM98D8
+      story: stories/record-flow-evidence
+    schema: graph/changeset/v1
+    status: notified
+    title: 'materialize ts-sassfully-dev-story-flows: write back status "failed"'
+    visibility: internal
+    applied_at: "2026-07-12T04:07:41Z"
+  - authored_by: materialize
+    created_at: "2026-07-12T04:07:41Z"
+    id: cs-15
+    operations:
+      - changes:
+          - after:
+              artifacts: []
+              checks:
+                - id: gate
+                  ok: false
+                  reasons:
+                    - clip stories/mockup-packet/fixtures/bug-report-with-replay/clips/bug-report-with-replay-journey.rrweb.json is not a non-empty rrweb event list
+                  reproduce: kitsoki starlark run scripts/checks/demo_packet.star --inputs '{"clips":["stories/mockup-packet/fixtures/bug-report-with-replay/clips/bug-report-with-replay-journey.rrweb.json"],"manifest":"stories/mockup-packet/fixtures/bug-report-with-replay/bug-report-with-replay.demo.json"}' --capabilities '{"fs":{"read":["stories/**",".artifacts/**"]}}'
+                  script: scripts/checks/demo_packet.star
+                  script_sha256: 837c7aaf5f9f0bfd7d582cbbd7c0aad17eaa9996131532a003102b389695dc73
+              job_id: 01KXA84V7G27V77QPYHFS2J047
+              stages:
+                - id: plan
+                  status: complete
+                - id: launch
+                  status: complete
+                - id: capture
+                  status: complete
+                - id: doctor
+                  status: complete
+                - id: check:gate
+                  status: failed
+              status: failed
+              story: stories/demo-packet
+            path:
+              - fields
+              - materialization
+        kind: modified
+        node: demo-capture-widget
+    provenance:
+      job_id: 01KXA84V7G27V77QPYHFS2J047
+      story: stories/demo-packet
+    schema: graph/changeset/v1
+    status: notified
+    title: 'materialize demo-capture-widget: write back status "failed"'
+    visibility: internal
+    applied_at: "2026-07-12T04:07:41Z"
+  - authored_by: materialize
+    created_at: "2026-07-12T04:07:42Z"
+    id: cs-16
+    operations:
+      - changes:
+          - after:
+              - kind: doc
+                path: .artifacts/tutorial-integrate-widget/brief.md
+                title: Doc
+            path:
+              - fields
+              - evidence
+        kind: modified
+        node: tutorial-integrate-widget
+    provenance:
+      job_id: 01KXA84VS343N0MF3W68E03RM7
+      story: stories/materialize-doc
+    schema: graph/changeset/v1
+    status: notified
+    title: 'materialize tutorial-integrate-widget: append evidence .artifacts/tutorial-integrate-widget/brief.md'
+    visibility: internal
+    applied_at: "2026-07-12T04:07:42Z"
+  - authored_by: materialize
+    created_at: "2026-07-12T04:07:42Z"
+    id: cs-17
+    operations:
+      - changes:
+          - after:
+              artifacts:
+                - kind: doc
+                  path: .artifacts/tutorial-integrate-widget/brief.md
+                  produced_at: "2026-07-12T04:07:42Z"
+                  title: Doc
+              checks:
+                - id: gate
+                  ok: true
+                  reproduce: kitsoki starlark run scripts/checks/artifact_exists.star --inputs '{"paths":[".artifacts/tutorial-integrate-widget/brief.md"]}' --capabilities '{"fs":{"read":[".artifacts/**","docs/**"]}}'
+                  script: scripts/checks/artifact_exists.star
+                  script_sha256: 46ebb871c1b4e6a7e9615c5b01483ba5ee1193289a210d02cbad9bc1f3aa44d6
+              job_id: 01KXA84VS343N0MF3W68E03RM7
+              stages:
+                - id: gather
+                  status: complete
+                - id: draft
+                  status: complete
+                - id: verify
+                  status: complete
+                - id: done
+                  status: complete
+                - id: check:gate
+                  status: complete
+              status: complete
+              story: stories/materialize-doc
+            path:
+              - fields
+              - materialization
+        kind: modified
+        node: tutorial-integrate-widget
+    provenance:
+      job_id: 01KXA84VS343N0MF3W68E03RM7
+      story: stories/materialize-doc
+    schema: graph/changeset/v1
+    status: notified
+    title: 'materialize tutorial-integrate-widget: write back status "complete"'
+    visibility: internal
+    applied_at: "2026-07-12T04:07:42Z"
+  - authored_by: materialize
+    created_at: "2026-07-12T04:07:42Z"
+    id: cs-18
+    operations:
+      - changes:
+          - after:
+              - kind: doc
+                path: .artifacts/doc-anchor-contract/brief.md
+                title: Doc
+            path:
+              - fields
+              - evidence
+        kind: modified
+        node: doc-anchor-contract
+    provenance:
+      job_id: 01KXA84WAVDFS1AB7J2QPQGPRV
+      story: stories/materialize-doc
+    schema: graph/changeset/v1
+    status: notified
+    title: 'materialize doc-anchor-contract: append evidence .artifacts/doc-anchor-contract/brief.md'
+    visibility: internal
+    applied_at: "2026-07-12T04:07:42Z"
+  - authored_by: materialize
+    created_at: "2026-07-12T04:07:42Z"
+    id: cs-19
+    operations:
+      - changes:
+          - after:
+              artifacts:
+                - kind: doc
+                  path: .artifacts/doc-anchor-contract/brief.md
+                  produced_at: "2026-07-12T04:07:42Z"
+                  title: Doc
+              checks:
+                - id: gate
+                  ok: true
+                  reproduce: kitsoki starlark run scripts/checks/artifact_exists.star --inputs '{"paths":[".artifacts/doc-anchor-contract/brief.md"]}' --capabilities '{"fs":{"read":[".artifacts/**","docs/**"]}}'
+                  script: scripts/checks/artifact_exists.star
+                  script_sha256: 46ebb871c1b4e6a7e9615c5b01483ba5ee1193289a210d02cbad9bc1f3aa44d6
+              job_id: 01KXA84WAVDFS1AB7J2QPQGPRV
+              stages:
+                - id: gather
+                  status: complete
+                - id: draft
+                  status: complete
+                - id: verify
+                  status: complete
+                - id: done
+                  status: complete
+                - id: check:gate
+                  status: complete
+              status: complete
+              story: stories/materialize-doc
+            path:
+              - fields
+              - materialization
+        kind: modified
+        node: doc-anchor-contract
+    provenance:
+      job_id: 01KXA84WAVDFS1AB7J2QPQGPRV
+      story: stories/materialize-doc
+    schema: graph/changeset/v1
+    status: notified
+    title: 'materialize doc-anchor-contract: write back status "complete"'
+    visibility: internal
+    applied_at: "2026-07-12T04:07:42Z"
+  - authored_by: materialize
+    created_at: "2026-07-12T04:07:43Z"
+    id: cs-20
+    operations:
+      - changes:
+          - after:
+              artifacts: []
+              checks:
+                - id: gate
+                  ok: false
+                  reasons:
+                    - 'studio-sassfully: no evidence recorded (run scripts/record-flow-evidence.sh)'
+                  reproduce: kitsoki starlark run scripts/checks/flows_recorded.star --inputs '{"reports":[{"path":"pog/evidence/feedback-core-unit.json","repo":"studio-sassfully"}]}' --capabilities '{"fs":{"read":["pog/evidence/**"]}}'
+                  script: scripts/checks/flows_recorded.star
+                  script_sha256: 34aebdba4eff5b14944ecb1b124a758290e8011ff704d8cf9898aed1c71b9f90
+              job_id: 01KXA84WY36QD2K5JBNYEX5QRC
+              stages:
+                - id: record
+                  status: complete
+                - id: done
+                  status: complete
+                - id: check:gate
+                  status: failed
+              status: failed
+              story: stories/record-flow-evidence
+            path:
+              - fields
+              - materialization
+        kind: modified
+        node: ts-feedback-core-unit
+    provenance:
+      job_id: 01KXA84WY36QD2K5JBNYEX5QRC
+      story: stories/record-flow-evidence
+    schema: graph/changeset/v1
+    status: notified
+    title: 'materialize ts-feedback-core-unit: write back status "failed"'
+    visibility: internal
+    applied_at: "2026-07-12T04:07:43Z"
+  - authored_by: materialize
+    created_at: "2026-07-12T04:07:44Z"
+    id: cs-21
+    operations:
+      - changes:
+          - after:
+              - kind: doc
+                path: .artifacts/qa-feedback-privacy/qa-check.log
+                title: Qa target check
+            path:
+              - fields
+              - evidence
+        kind: modified
+        node: qa-feedback-privacy
+    provenance:
+      job_id: 01KXA84XHV9AK0P4SK8YPAG693
+      story: stories/qa-compliance-gate-runner
+    schema: graph/changeset/v1
+    status: notified
+    title: 'materialize qa-feedback-privacy: append evidence .artifacts/qa-feedback-privacy/qa-check.log'
+    visibility: internal
+    applied_at: "2026-07-12T04:07:44Z"
+  - authored_by: materialize
+    created_at: "2026-07-12T04:07:44Z"
+    id: cs-22
+    operations:
+      - changes:
+          - after:
+              artifacts:
+                - kind: doc
+                  path: .artifacts/qa-feedback-privacy/qa-check.log
+                  produced_at: "2026-07-12T04:07:44Z"
+                  title: Qa target check
+              job_id: 01KXA84XHV9AK0P4SK8YPAG693
+              stages:
+                - id: check
+                  status: complete
+                - id: attest
+                  status: complete
+              status: complete
+              story: stories/qa-compliance-gate-runner
+            path:
+              - fields
+              - materialization
+        kind: modified
+        node: qa-feedback-privacy
+    provenance:
+      job_id: 01KXA84XHV9AK0P4SK8YPAG693
+      story: stories/qa-compliance-gate-runner
+    schema: graph/changeset/v1
+    status: notified
+    title: 'materialize qa-feedback-privacy: write back status "complete"'
+    visibility: internal
+    applied_at: "2026-07-12T04:07:44Z"
+  - authored_by: materialize
+    created_at: "2026-07-12T04:07:44Z"
+    id: cs-23
+    operations:
+      - changes:
+          - after:
+              - kind: doc
+                path: .artifacts/qa-feedback-idempotency/qa-check.log
+                title: Qa target check
+            path:
+              - fields
+              - evidence
+        kind: modified
+        node: qa-feedback-idempotency
+    provenance:
+      job_id: 01KXA84Y5149GK0QC5NFHKPGA2
+      story: stories/qa-compliance-gate-runner
+    schema: graph/changeset/v1
+    status: notified
+    title: 'materialize qa-feedback-idempotency: append evidence .artifacts/qa-feedback-idempotency/qa-check.log'
+    visibility: internal
+    applied_at: "2026-07-12T04:07:44Z"
+  - authored_by: materialize
+    created_at: "2026-07-12T04:07:44Z"
+    id: cs-24
+    operations:
+      - changes:
+          - after:
+              artifacts:
+                - kind: doc
+                  path: .artifacts/qa-feedback-idempotency/qa-check.log
+                  produced_at: "2026-07-12T04:07:44Z"
+                  title: Qa target check
+              job_id: 01KXA84Y5149GK0QC5NFHKPGA2
+              stages:
+                - id: check
+                  status: complete
+                - id: attest
+                  status: complete
+              status: complete
+              story: stories/qa-compliance-gate-runner
+            path:
+              - fields
+              - materialization
+        kind: modified
+        node: qa-feedback-idempotency
+    provenance:
+      job_id: 01KXA84Y5149GK0QC5NFHKPGA2
+      story: stories/qa-compliance-gate-runner
+    schema: graph/changeset/v1
+    status: notified
+    title: 'materialize qa-feedback-idempotency: write back status "complete"'
+    visibility: internal
+    applied_at: "2026-07-12T04:07:44Z"
+  - authored_by: materialize
+    created_at: "2026-07-12T04:09:19Z"
+    id: cs-25
+    operations:
+      - changes:
+          - after:
+              artifacts: []
+              checks:
+                - id: gate
+                  ok: true
+                  reproduce: kitsoki starlark run scripts/checks/demo_packet.star --inputs '{"clips":["stories/mockup-packet/fixtures/bug-report-with-replay/clips/bug-report-with-replay-journey.rrweb.json"],"manifest":"stories/mockup-packet/fixtures/bug-report-with-replay/bug-report-with-replay.demo.json"}' --capabilities '{"fs":{"read":["stories/**",".artifacts/**"]}}'
+                  script: scripts/checks/demo_packet.star
+                  script_sha256: 90381aa7894c2990252dac1f7ff18a02e9e8107ba5a3ad76c7dcd74db76b61ca
+              job_id: 01KXA87TF23S04ZBPGW62QQW4A
+              stages:
+                - id: plan
+                  status: complete
+                - id: launch
+                  status: complete
+                - id: capture
+                  status: complete
+                - id: doctor
+                  status: complete
+                - id: check:gate
+                  status: complete
+              status: complete
+              story: stories/demo-packet
+            before:
+              artifacts: []
+              checks:
+                - id: gate
+                  ok: false
+                  reasons:
+                    - clip stories/mockup-packet/fixtures/bug-report-with-replay/clips/bug-report-with-replay-journey.rrweb.json is not a non-empty rrweb event list
+                  reproduce: kitsoki starlark run scripts/checks/demo_packet.star --inputs '{"clips":["stories/mockup-packet/fixtures/bug-report-with-replay/clips/bug-report-with-replay-journey.rrweb.json"],"manifest":"stories/mockup-packet/fixtures/bug-report-with-replay/bug-report-with-replay.demo.json"}' --capabilities '{"fs":{"read":["stories/**",".artifacts/**"]}}'
+                  script: scripts/checks/demo_packet.star
+                  script_sha256: 837c7aaf5f9f0bfd7d582cbbd7c0aad17eaa9996131532a003102b389695dc73
+              job_id: 01KXA84V7G27V77QPYHFS2J047
+              stages:
+                - id: plan
+                  status: complete
+                - id: launch
+                  status: complete
+                - id: capture
+                  status: complete
+                - id: doctor
+                  status: complete
+                - id: check:gate
+                  status: failed
+              status: failed
+              story: stories/demo-packet
+            path:
+              - fields
+              - materialization
+        kind: modified
+        node: demo-capture-widget
+    provenance:
+      job_id: 01KXA87TF23S04ZBPGW62QQW4A
+      story: stories/demo-packet
+    schema: graph/changeset/v1
+    status: notified
+    title: 'materialize demo-capture-widget: write back status "complete"'
+    visibility: internal
+    applied_at: "2026-07-12T04:09:19Z"
+  - created_at: "2026-07-12T04:12:17Z"
+    id: cs-26
+    operations:
+      - changes:
+          - after: failed
+            before: missing
+            path:
+              - status
+        kind: modified
+        node: qa-feedback-privacy
+    schema: graph/changeset/v1
+    status: notified
+    title: 'QA runner: qa-feedback-privacy gate check'
+    visibility: internal
+    authorized_at: "2026-07-12T04:12:49Z"
+    applied_at: "2026-07-12T04:12:49Z"
+  - authored_by: materialize
+    created_at: "2026-07-12T04:12:17Z"
+    id: cs-27
+    operations:
+      - changes:
+          - after:
+              artifacts:
+                - kind: doc
+                  path: .artifacts/qa-feedback-privacy/qa-check.log
+                  produced_at: "2026-07-12T04:12:17Z"
+                  title: Qa target check
+              job_id: 01KXA8D8HRASAKRJNWW93KS3Q1
+              stages:
+                - id: check
+                  status: complete
+                - id: attest
+                  status: complete
+              status: complete
+              story: stories/qa-compliance-gate-runner
+            before:
+              artifacts:
+                - kind: doc
+                  path: .artifacts/qa-feedback-privacy/qa-check.log
+                  produced_at: "2026-07-12T04:07:44Z"
+                  title: Qa target check
+              job_id: 01KXA84XHV9AK0P4SK8YPAG693
+              stages:
+                - id: check
+                  status: complete
+                - id: attest
+                  status: complete
+              status: complete
+              story: stories/qa-compliance-gate-runner
+            path:
+              - fields
+              - materialization
+        kind: modified
+        node: qa-feedback-privacy
+    provenance:
+      job_id: 01KXA8D8HRASAKRJNWW93KS3Q1
+      story: stories/qa-compliance-gate-runner
+    schema: graph/changeset/v1
+    status: notified
+    title: 'materialize qa-feedback-privacy: write back status "complete"'
+    visibility: internal
+    applied_at: "2026-07-12T04:12:17Z"
+  - created_at: "2026-07-12T04:12:17Z"
+    id: cs-28
+    operations:
+      - changes:
+          - after: failed
+            before: missing
+            path:
+              - status
+        kind: modified
+        node: qa-feedback-idempotency
+    schema: graph/changeset/v1
+    status: notified
+    title: 'QA runner: qa-feedback-idempotency gate check'
+    visibility: internal
+    authorized_at: "2026-07-12T04:12:49Z"
+    applied_at: "2026-07-12T04:12:49Z"
+  - authored_by: materialize
+    created_at: "2026-07-12T04:12:18Z"
+    id: cs-29
+    operations:
+      - changes:
+          - after:
+              artifacts:
+                - kind: doc
+                  path: .artifacts/qa-feedback-idempotency/qa-check.log
+                  produced_at: "2026-07-12T04:12:18Z"
+                  title: Qa target check
+              job_id: 01KXA8D95D6MB8KP5BP6TB3T88
+              stages:
+                - id: check
+                  status: complete
+                - id: attest
+                  status: complete
+              status: complete
+              story: stories/qa-compliance-gate-runner
+            before:
+              artifacts:
+                - kind: doc
+                  path: .artifacts/qa-feedback-idempotency/qa-check.log
+                  produced_at: "2026-07-12T04:07:44Z"
+                  title: Qa target check
+              job_id: 01KXA84Y5149GK0QC5NFHKPGA2
+              stages:
+                - id: check
+                  status: complete
+                - id: attest
+                  status: complete
+              status: complete
+              story: stories/qa-compliance-gate-runner
+            path:
+              - fields
+              - materialization
+        kind: modified
+        node: qa-feedback-idempotency
+    provenance:
+      job_id: 01KXA8D95D6MB8KP5BP6TB3T88
+      story: stories/qa-compliance-gate-runner
+    schema: graph/changeset/v1
+    status: notified
+    title: 'materialize qa-feedback-idempotency: write back status "complete"'
+    visibility: internal
+    applied_at: "2026-07-12T04:12:18Z"
+  - authored_by: materialize
+    created_at: "2026-07-12T04:28:20Z"
+    id: cs-30
+    operations:
+      - changes:
+          - after:
+              artifacts: []
+              checks:
+                - id: gate
+                  ok: true
+                  reproduce: kitsoki starlark run scripts/checks/flows_recorded.star --inputs '{"reports":[{"path":"pog/evidence/feedback-core-unit.json","repo":"studio-sassfully"}]}' --capabilities '{"fs":{"read":["pog/evidence/**"]}}'
+                  script: scripts/checks/flows_recorded.star
+                  script_sha256: 34aebdba4eff5b14944ecb1b124a758290e8011ff704d8cf9898aed1c71b9f90
+              job_id: 01KXA9ANC00DXYG9G2PK7THPSY
+              stages:
+                - id: record
+                  status: complete
+                - id: done
+                  status: complete
+                - id: check:gate
+                  status: complete
+              status: complete
+              story: stories/record-flow-evidence
+            before:
+              artifacts: []
+              checks:
+                - id: gate
+                  ok: false
+                  reasons:
+                    - 'studio-sassfully: no evidence recorded (run scripts/record-flow-evidence.sh)'
+                  reproduce: kitsoki starlark run scripts/checks/flows_recorded.star --inputs '{"reports":[{"path":"pog/evidence/feedback-core-unit.json","repo":"studio-sassfully"}]}' --capabilities '{"fs":{"read":["pog/evidence/**"]}}'
+                  script: scripts/checks/flows_recorded.star
+                  script_sha256: 34aebdba4eff5b14944ecb1b124a758290e8011ff704d8cf9898aed1c71b9f90
+              job_id: 01KXA84WY36QD2K5JBNYEX5QRC
+              stages:
+                - id: record
+                  status: complete
+                - id: done
+                  status: complete
+                - id: check:gate
+                  status: failed
+              status: failed
+              story: stories/record-flow-evidence
+            path:
+              - fields
+              - materialization
+        kind: modified
+        node: ts-feedback-core-unit
+    provenance:
+      job_id: 01KXA9ANC00DXYG9G2PK7THPSY
+      story: stories/record-flow-evidence
+    schema: graph/changeset/v1
+    status: notified
+    title: 'materialize ts-feedback-core-unit: write back status "complete"'
+    visibility: internal
+    applied_at: "2026-07-12T04:28:20Z"
+  - created_at: "2026-07-12T04:28:21Z"
+    id: cs-31
+    operations:
+      - changes:
+          - after: failed
+            before: failed
+            path:
+              - status
+        kind: modified
+        node: qa-feedback-privacy
+    schema: graph/changeset/v1
+    status: notified
+    title: 'QA runner: qa-feedback-privacy gate check'
+    visibility: internal
+    authorized_at: "2026-07-12T04:28:36Z"
+    applied_at: "2026-07-12T04:28:36Z"
+  - authored_by: materialize
+    created_at: "2026-07-12T04:28:21Z"
+    id: cs-32
+    operations:
+      - changes:
+          - after:
+              artifacts:
+                - kind: doc
+                  path: .artifacts/qa-feedback-privacy/qa-check.log
+                  produced_at: "2026-07-12T04:28:21Z"
+                  title: Qa target check
+              job_id: 01KXA9ANZNCADR6WCYPZ2FWS0J
+              stages:
+                - id: check
+                  status: complete
+                - id: attest
+                  status: complete
+              status: complete
+              story: stories/qa-compliance-gate-runner
+            before:
+              artifacts:
+                - kind: doc
+                  path: .artifacts/qa-feedback-privacy/qa-check.log
+                  produced_at: "2026-07-12T04:12:17Z"
+                  title: Qa target check
+              job_id: 01KXA8D8HRASAKRJNWW93KS3Q1
+              stages:
+                - id: check
+                  status: complete
+                - id: attest
+                  status: complete
+              status: complete
+              story: stories/qa-compliance-gate-runner
+            path:
+              - fields
+              - materialization
+        kind: modified
+        node: qa-feedback-privacy
+    provenance:
+      job_id: 01KXA9ANZNCADR6WCYPZ2FWS0J
+      story: stories/qa-compliance-gate-runner
+    schema: graph/changeset/v1
+    status: notified
+    title: 'materialize qa-feedback-privacy: write back status "complete"'
+    visibility: internal
+    applied_at: "2026-07-12T04:28:21Z"
+  - created_at: "2026-07-12T04:28:22Z"
+    id: cs-33
+    operations:
+      - changes:
+          - after: failed
+            before: failed
+            path:
+              - status
+        kind: modified
+        node: qa-feedback-idempotency
+    schema: graph/changeset/v1
+    status: notified
+    title: 'QA runner: qa-feedback-idempotency gate check'
+    visibility: internal
+    authorized_at: "2026-07-12T04:28:36Z"
+    applied_at: "2026-07-12T04:28:36Z"
+  - authored_by: materialize
+    created_at: "2026-07-12T04:28:22Z"
+    id: cs-34
+    operations:
+      - changes:
+          - after:
+              artifacts:
+                - kind: doc
+                  path: .artifacts/qa-feedback-idempotency/qa-check.log
+                  produced_at: "2026-07-12T04:28:22Z"
+                  title: Qa target check
+              job_id: 01KXA9APJKCETWMPWAB3J5CAAK
+              stages:
+                - id: check
+                  status: complete
+                - id: attest
+                  status: complete
+              status: complete
+              story: stories/qa-compliance-gate-runner
+            before:
+              artifacts:
+                - kind: doc
+                  path: .artifacts/qa-feedback-idempotency/qa-check.log
+                  produced_at: "2026-07-12T04:12:18Z"
+                  title: Qa target check
+              job_id: 01KXA8D95D6MB8KP5BP6TB3T88
+              stages:
+                - id: check
+                  status: complete
+                - id: attest
+                  status: complete
+              status: complete
+              story: stories/qa-compliance-gate-runner
+            path:
+              - fields
+              - materialization
+        kind: modified
+        node: qa-feedback-idempotency
+    provenance:
+      job_id: 01KXA9APJKCETWMPWAB3J5CAAK
+      story: stories/qa-compliance-gate-runner
+    schema: graph/changeset/v1
+    status: notified
+    title: 'materialize qa-feedback-idempotency: write back status "complete"'
+    visibility: internal
+    applied_at: "2026-07-12T04:28:22Z"
+  - created_at: "2026-07-12T04:32:19Z"
+    id: cs-35
+    operations:
+      - changes:
+          - after:
+              context_edges:
+                - verifies
+              gates:
+                - gate
+              params:
+                - default: pog/catalog.yaml
+                  id: catalog_path
+                  type: string
+                - default: .
+                  id: repo_root
+                  type: string
+              story: stories/qa-compliance-gate-runner
+            path:
+              - materialize
+        kind: registry_type_modified
+        node: qa-target
+    schema: graph/changeset/v1
+    status: notified
+    title: 'qa-target materialize: declare repo_root param (host.run cwd under federation)'
+    visibility: internal
+    authorized_at: "2026-07-12T04:32:19Z"
+    applied_at: "2026-07-12T04:32:19Z"
+  - created_at: "2026-07-12T04:32:19Z"
+    id: cs-36
+    operations:
+      - changes:
+          - after: verified
+            before: failed
+            path:
+              - status
+        kind: modified
+        node: qa-feedback-privacy
+    schema: graph/changeset/v1
+    status: notified
+    title: 'QA runner: qa-feedback-privacy gate check'
+    visibility: internal
+    authorized_at: "2026-07-12T04:32:21Z"
+    applied_at: "2026-07-12T04:32:21Z"
+  - authored_by: materialize
+    created_at: "2026-07-12T04:32:19Z"
+    id: cs-37
+    operations:
+      - changes:
+          - after:
+              artifacts:
+                - kind: doc
+                  path: .artifacts/qa-feedback-privacy/qa-check.log
+                  produced_at: "2026-07-12T04:32:19Z"
+                  title: Qa target check
+              job_id: 01KXA9HYW83ZKK8KTGZPG1FW1T
+              stages:
+                - id: check
+                  status: complete
+                - id: attest
+                  status: complete
+              status: complete
+              story: stories/qa-compliance-gate-runner
+            before:
+              artifacts:
+                - kind: doc
+                  path: .artifacts/qa-feedback-privacy/qa-check.log
+                  produced_at: "2026-07-12T04:28:21Z"
+                  title: Qa target check
+              job_id: 01KXA9ANZNCADR6WCYPZ2FWS0J
+              stages:
+                - id: check
+                  status: complete
+                - id: attest
+                  status: complete
+              status: complete
+              story: stories/qa-compliance-gate-runner
+            path:
+              - fields
+              - materialization
+        kind: modified
+        node: qa-feedback-privacy
+    provenance:
+      job_id: 01KXA9HYW83ZKK8KTGZPG1FW1T
+      story: stories/qa-compliance-gate-runner
+    schema: graph/changeset/v1
+    status: notified
+    title: 'materialize qa-feedback-privacy: write back status "complete"'
+    visibility: internal
+    applied_at: "2026-07-12T04:32:19Z"
+  - created_at: "2026-07-12T04:32:20Z"
+    id: cs-38
+    operations:
+      - changes:
+          - after: verified
+            before: failed
+            path:
+              - status
+        kind: modified
+        node: qa-feedback-idempotency
+    schema: graph/changeset/v1
+    status: notified
+    title: 'QA runner: qa-feedback-idempotency gate check'
+    visibility: internal
+    authorized_at: "2026-07-12T04:32:21Z"
+    applied_at: "2026-07-12T04:32:21Z"
+  - authored_by: materialize
+    created_at: "2026-07-12T04:32:20Z"
+    id: cs-39
+    operations:
+      - changes:
+          - after:
+              artifacts:
+                - kind: doc
+                  path: .artifacts/qa-feedback-idempotency/qa-check.log
+                  produced_at: "2026-07-12T04:32:20Z"
+                  title: Qa target check
+              job_id: 01KXA9HZGZ4ZF69FPWF95CBE1Q
+              stages:
+                - id: check
+                  status: complete
+                - id: attest
+                  status: complete
+              status: complete
+              story: stories/qa-compliance-gate-runner
+            before:
+              artifacts:
+                - kind: doc
+                  path: .artifacts/qa-feedback-idempotency/qa-check.log
+                  produced_at: "2026-07-12T04:28:22Z"
+                  title: Qa target check
+              job_id: 01KXA9APJKCETWMPWAB3J5CAAK
+              stages:
+                - id: check
+                  status: complete
+                - id: attest
+                  status: complete
+              status: complete
+              story: stories/qa-compliance-gate-runner
+            path:
+              - fields
+              - materialization
+        kind: modified
+        node: qa-feedback-idempotency
+    provenance:
+      job_id: 01KXA9HZGZ4ZF69FPWF95CBE1Q
+      story: stories/qa-compliance-gate-runner
+    schema: graph/changeset/v1
+    status: notified
+    title: 'materialize qa-feedback-idempotency: write back status "complete"'
+    visibility: internal
+    applied_at: "2026-07-12T04:32:20Z"
+  - created_at: "2026-07-12T04:33:06Z"
+    id: cs-40
+    operations:
+      - changes:
+          - after: verified
+            before: missing
+            path:
+              - status
+          - after: 'Recorded unit-test evidence for packages/feedback-core (Stage 2.3): scripts/record-unit-evidence.sh records the node --test run into pog/evidence/feedback-core-unit.json and flows_recorded.star judges it. Green since v0.1 landed (11 tests, capture->review->submit machine, anchors, kinds).'
+            path:
+              - summary
+        kind: modified
+        node: ts-feedback-core-unit
+      - changes:
+          - after: verified
+            before: missing
+            path:
+              - status
+        kind: modified
+        node: doc-anchor-contract
+      - changes:
+          - after: verified
+            before: missing
+            path:
+              - status
+        kind: modified
+        node: tutorial-integrate-widget
+    schema: graph/changeset/v1
+    status: notified
+    title: Flip gate-green deliverables to verified (2.3 unit suite green; docs/tutorial artifacts re-judged ok)
+    visibility: internal
+    authorized_at: "2026-07-12T04:33:06Z"
+    applied_at: "2026-07-12T04:33:06Z"
+  - created_at: "2026-07-12T04:38:07Z"
+    id: cs-41
+    operations:
+      - changes:
+          - after:
+              clips:
+                - stories/demo-packet/fixtures/capture-widget/clips/capture-widget-journey.rrweb.json
+              manifest: stories/demo-packet/fixtures/capture-widget/capture-widget.demo.json
+            before:
+              clips:
+                - stories/mockup-packet/fixtures/bug-report-with-replay/clips/bug-report-with-replay-journey.rrweb.json
+              manifest: stories/mockup-packet/fixtures/bug-report-with-replay/bug-report-with-replay.demo.json
+            path:
+              - fields
+              - check_inputs
+          - after:
+              - kind: doc
+                path: stories/demo-packet/fixtures/capture-widget/capture-widget.demo.json
+                title: REAL demo packet manifest — slidey capture --tours of the example host page embedding the real widget
+              - kind: video
+                path: stories/demo-packet/fixtures/capture-widget/clips/capture-widget-journey.rrweb.json
+                title: 'Journey clip (real rrweb capture: trigger, describe, privacy review, submit to local sink)'
+              - kind: doc
+                path: stories/mockup-packet/fixtures/bug-report-with-replay/bug-report-with-replay.demo.json
+                stale: true
+                title: Mockup packet manifest (Stage 2.2 evidence — STALE, superseded by the real capture)
+              - kind: video
+                path: stories/mockup-packet/fixtures/bug-report-with-replay/clips/bug-report-with-replay-journey.rrweb.json
+                stale: true
+                title: Mockup journey clip (Stage 2.2 evidence — STALE, superseded by the real capture)
+            before:
+              - kind: doc
+                path: stories/mockup-packet/fixtures/bug-report-with-replay/bug-report-with-replay.demo.json
+                title: Mockup packet manifest (committed fixture, mockup mode)
+              - kind: video
+                path: stories/mockup-packet/fixtures/bug-report-with-replay/clips/bug-report-with-replay-journey.rrweb.json
+                title: Journey clip (real rrweb capture of the hand-authored mockup)
+              - kind: deck
+                path: stories/mockup-packet/fixtures/bug-report-with-replay/bug-report-with-replay-demo.slidey.json
+                title: Slidey deck (title card + narrated journey clip)
+            path:
+              - fields
+              - evidence
+          - after: 'REAL-mode demo packet (Stage 2.4): slidey capture --tours (via kitsoki record-tour.mjs, the productized mechanism) drives the example host page (examples/host-page) embedding packages/feedback-core''s reporter through uc-bug-report-with-replay''s journey — trigger, describe, privacy review (fail-closed), submit to the local JSONL sink. The Stage 2.2 mockup packet remains as labeled stale evidence.'
+            path:
+              - summary
+        kind: modified
+        node: demo-capture-widget
+    schema: graph/changeset/v1
+    status: notified
+    title: 'demo-capture-widget: flip to REAL mode (Stage 2.4) — real capture packet; mockup evidence marked stale'
+    visibility: internal
+    authorized_at: "2026-07-12T04:38:07Z"
+    applied_at: "2026-07-12T04:38:08Z"
+  - authored_by: materialize
+    created_at: "2026-07-12T04:38:09Z"
+    id: cs-42
+    operations:
+      - changes:
+          - after:
+              artifacts: []
+              checks:
+                - id: gate
+                  ok: true
+                  reproduce: kitsoki starlark run scripts/checks/demo_packet.star --inputs '{"clips":["stories/demo-packet/fixtures/capture-widget/clips/capture-widget-journey.rrweb.json"],"manifest":"stories/demo-packet/fixtures/capture-widget/capture-widget.demo.json"}' --capabilities '{"fs":{"read":["stories/**",".artifacts/**"]}}'
+                  script: scripts/checks/demo_packet.star
+                  script_sha256: 90381aa7894c2990252dac1f7ff18a02e9e8107ba5a3ad76c7dcd74db76b61ca
+              job_id: 01KXA9WKXCDQWBKZBKG68PZ6G3
+              stages:
+                - id: plan
+                  status: complete
+                - id: launch
+                  status: complete
+                - id: capture
+                  status: complete
+                - id: doctor
+                  status: complete
+                - id: check:gate
+                  status: complete
+              status: complete
+              story: stories/demo-packet
+            before:
+              artifacts: []
+              checks:
+                - id: gate
+                  ok: true
+                  reproduce: kitsoki starlark run scripts/checks/demo_packet.star --inputs '{"clips":["stories/mockup-packet/fixtures/bug-report-with-replay/clips/bug-report-with-replay-journey.rrweb.json"],"manifest":"stories/mockup-packet/fixtures/bug-report-with-replay/bug-report-with-replay.demo.json"}' --capabilities '{"fs":{"read":["stories/**",".artifacts/**"]}}'
+                  script: scripts/checks/demo_packet.star
+                  script_sha256: 90381aa7894c2990252dac1f7ff18a02e9e8107ba5a3ad76c7dcd74db76b61ca
+              job_id: 01KXA87TF23S04ZBPGW62QQW4A
+              stages:
+                - id: plan
+                  status: complete
+                - id: launch
+                  status: complete
+                - id: capture
+                  status: complete
+                - id: doctor
+                  status: complete
+                - id: check:gate
+                  status: complete
+              status: complete
+              story: stories/demo-packet
+            path:
+              - fields
+              - materialization
+        kind: modified
+        node: demo-capture-widget
+    provenance:
+      job_id: 01KXA9WKXCDQWBKZBKG68PZ6G3
+      story: stories/demo-packet
+    schema: graph/changeset/v1
+    status: notified
+    title: 'materialize demo-capture-widget: write back status "complete"'
+    visibility: internal
+    applied_at: "2026-07-12T04:38:09Z"
+  - created_at: "2026-07-12T04:38:09Z"
+    id: cs-43
+    operations:
+      - changes:
+          - after: verified
+            before: planned
+            path:
+              - status
+        kind: modified
+        node: demo-capture-widget
+    schema: graph/changeset/v1
+    status: notified
+    title: 'demo-capture-widget: verified (real-mode packet gate-green)'
+    visibility: internal
+    authorized_at: "2026-07-12T04:38:09Z"
+    applied_at: "2026-07-12T04:38:10Z"
+  - created_at: "2026-07-12T04:43:56Z"
+    id: cs-44
+    operations:
+      - changes:
+          - after:
+              checks:
+                - capabilities:
+                    fs:
+                      read:
+                        - pog/evidence/**
+                  id: gate
+                  inputs_field: check_inputs
+                  script: scripts/checks/flows_recorded.star
+              context_edges:
+                - proves
+              params:
+                - default: scripts/record-flow-evidence.sh
+                  id: record_command
+                  type: string
+                - default: .
+                  id: repo_root
+                  type: string
+              story: stories/record-flow-evidence
+            path:
+              - materialize
+        kind: registry_type_modified
+        node: test-suite
+    schema: graph/changeset/v1
+    status: notified
+    title: 'test-suite materialize: declare repo_root param (host.run cwd under federation)'
+    visibility: internal
+    authorized_at: "2026-07-12T04:43:56Z"
+    applied_at: "2026-07-12T04:43:56Z"
+  - authored_by: materialize
+    created_at: "2026-07-12T04:43:56Z"
+    id: cs-45
+    operations:
+      - changes:
+          - after:
+              artifacts: []
+              checks:
+                - id: gate
+                  ok: true
+                  reproduce: kitsoki starlark run scripts/checks/flows_recorded.star --inputs '{"reports":[{"path":"pog/evidence/flows-studio-sassfully.json","repo":"studio-sassfully"}]}' --capabilities '{"fs":{"read":["pog/evidence/**"]}}'
+                  script: scripts/checks/flows_recorded.star
+                  script_sha256: 34aebdba4eff5b14944ecb1b124a758290e8011ff704d8cf9898aed1c71b9f90
+              job_id: 01KXAA77H50GADJD9MNWS8M2E0
+              stages:
+                - id: record
+                  status: complete
+                - id: done
+                  status: complete
+                - id: check:gate
+                  status: complete
+              status: complete
+              story: stories/record-flow-evidence
+            before:
+              artifacts: []
+              checks:
+                - id: gate
+                  ok: false
+                  reasons:
+                    - 'studio-sassfully: recorded run exited 2 (flows did not run clean)'
+                  reproduce: kitsoki starlark run scripts/checks/flows_recorded.star --inputs '{"reports":[{"path":"pog/evidence/flows-studio-sassfully.json","repo":"studio-sassfully"}]}' --capabilities '{"fs":{"read":["pog/evidence/**"]}}'
+                  script: scripts/checks/flows_recorded.star
+                  script_sha256: 34aebdba4eff5b14944ecb1b124a758290e8011ff704d8cf9898aed1c71b9f90
+              job_id: 01KXA84TNJ7H468SNH1FSM98D8
+              stages:
+                - id: record
+                  status: complete
+                - id: done
+                  status: complete
+                - id: check:gate
+                  status: failed
+              status: failed
+              story: stories/record-flow-evidence
+            path:
+              - fields
+              - materialization
+        kind: modified
+        node: ts-sassfully-dev-story-flows
+    provenance:
+      job_id: 01KXAA77H50GADJD9MNWS8M2E0
+      story: stories/record-flow-evidence
+    schema: graph/changeset/v1
+    status: notified
+    title: 'materialize ts-sassfully-dev-story-flows: write back status "complete"'
+    visibility: internal
+    applied_at: "2026-07-12T04:43:56Z"
+  - created_at: "2026-07-12T04:44:29Z"
+    id: cs-46
+    operations:
+      - changes:
+          - after: verified
+            before: missing
+            path:
+              - status
+          - after: Recorded no-LLM flow run against this repo's own story suite (stories/app.yaml, record_run flow) — green as of 2026-07-12. The imports.core host drift (missing host.capsule_workspace after the base dev-story grew a capsule-workspace interface) is fixed in .kitsoki/stories/studio-sassfully-dev/app.yaml. The dev-story instance itself carries no flow fixtures yet; adding cassette flows there is follow-on work, and this node records the repo's flow-bearing suite the same way POG's own ts-dev-story-flows records stories/materialize-doc.
+            path:
+              - summary
+        kind: modified
+        node: ts-sassfully-dev-story-flows
+    schema: graph/changeset/v1
+    status: notified
+    title: 'ts-sassfully-dev-story-flows: verified — imports.core drift fixed, repo story suite records green (0.2)'
+    visibility: internal
+    authorized_at: "2026-07-12T04:44:29Z"
+    applied_at: "2026-07-12T04:44:29Z"
+  - authored_by: pog-gitflow-brief
+    created_at: "2026-07-13T06:21:26Z"
+    id: cs-47
+    operations:
+      - after:
+          edges:
+            part_of:
+              - product-sassfully
+            motivated_by:
+              - uc-pm-portal-feedback
+              - uc-product-site-feedback
+          id: req-env-sink-routing
+          schema: sassfully/requirement/v0
+          sources:
+            - source-concept
+          status: draft
+          summary: 'The widget selects its sink set from the serving environment — hostname heuristic with an injected host-config override — so the same embed posts to a local intake in dev and an httpSink endpoint when hosted, without per-host forks. First consumer: the POG portal (POG .context/portal-sassfully-feedback-plan.md, D-F1); feedback report 01KXD22YE5T1FW7TFX1DY4Q81X covers the httpSink upstreaming this depends on (req-http-sink).'
+          title: Environment-aware sink selection (hostname heuristic + injected config override)
+          visibility: public
+        kind: added
+      - after:
+          edges:
+            part_of:
+              - product-sassfully
+            motivated_by:
+              - uc-pm-portal-feedback
+          id: req-fix-loop-outcome
+          schema: sassfully/requirement/v0
+          sources:
+            - source-concept
+          status: draft
+          summary: 'A filed bundle can carry/receive a fix-loop outcome: the host dispatches the bundle to a fix flow (e.g. an embedded agent chat), and the resulting outcome — fixed with receipt, declined, deferred — is recordable against the bundle ref so the loop is auditable end to end. First consumer: the POG portal fix-it-now loop (portal-feedback-fixer story); generalizes uc-pm-portal-feedback''s ai_instruction outcome beyond authoring flows.'
+          title: Filed bundles support a recordable fix-loop outcome
+          visibility: public
+        kind: added
+      - changes:
+          - after:
+              - req-ai-actionable-bundle
+              - req-multi-sink-routing
+              - req-sink-lifecycle-ops
+              - req-idempotent-submission
+              - req-ai-triage-narrative
+              - req-env-sink-routing
+              - req-fix-loop-outcome
+            before:
+              - req-ai-actionable-bundle
+              - req-multi-sink-routing
+              - req-sink-lifecycle-ops
+              - req-idempotent-submission
+              - req-ai-triage-narrative
+            path:
+              - edges
+              - acceptance
+        kind: modified
+        node: uc-pm-portal-feedback
+    schema: graph/changeset/v1
+    status: proposed
+    title: 'Portal feedback loop (POG 2.4b): env-aware sink routing + fix-loop outcome requirements'
     visibility: internal
