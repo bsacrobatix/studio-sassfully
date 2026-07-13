@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Protect the primary checkout: only the default branch at its current tip.
+set -euo pipefail
+[ "${1:-}" = prepared ] || exit 0
+gitdir="$(git rev-parse --git-dir 2>/dev/null || true)"
+commondir="$(git rev-parse --git-common-dir 2>/dev/null || true)"
+[ -n "$gitdir" ] && [ "$gitdir" = "$commondir" ] || exit 0
+parent_cmd="$(ps -o command= -p "$PPID" 2>/dev/null || true)"
+case "$parent_cmd" in *git*worktree*) exit 0 ;; esac
+default_branch="$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's@^origin/@@' || true)"
+[ -n "$default_branch" ] || default_branch=main
+main_tip="$(git rev-parse --verify --quiet "refs/heads/$default_branch" 2>/dev/null || true)"
+zero=0000000000000000000000000000000000000000
+while read -r _old new ref; do
+  [ "$ref" = HEAD ] || continue
+  case "$new" in
+    "$zero"|ref:refs/heads/"$default_branch") continue ;;
+    ref:refs/heads/*) what="switch to branch '${new#ref:refs/heads/}'" ;;
+    ref:*) what="point HEAD at '${new#ref:}'" ;;
+    *) [ -n "$main_tip" ] && [ "$new" = "$main_tip" ] && continue; what="detach HEAD off '$default_branch'" ;;
+  esac
+  echo "Blocked: primary checkout must remain '$default_branch' at its tip ($what). Use a worktree or capsule." >&2
+  exit 1
+done
+exit 0

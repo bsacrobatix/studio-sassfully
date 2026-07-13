@@ -1,0 +1,13 @@
+# Copy to .kitsoki.local.yaml on each operator machine.
+agent_launch_policy:
+  enabled: true
+  require_capsule: false
+  protected_roots:
+    - .
+    - ../Kitsoki
+    - ../POG
+    - ../slidey
+  protected_branches:
+    - main
+  allowed_roots:
+    - ./.capsules/workspaces
