@@ -2977,3 +2977,62 @@ nodes:
     status: proposed
     title: 'Portal feedback loop (POG 2.4b): env-aware sink routing + fix-loop outcome requirements'
     visibility: internal
+  - authored_by: pog-gitflow-brief
+    created_at: "2026-07-13T06:50:48Z"
+    id: cs-48
+    operations:
+      - changes:
+          - after: implemented
+            before: in-progress
+            path:
+              - status
+        kind: modified
+        node: req-http-sink
+    schema: graph/changeset/v1
+    status: proposed
+    summary: 'httpSink is upstream in packages/feedback-core/src/sinks.mjs (landed in commit 5bd60af, byte-identical to slidey''s vendored copy, so a vendor re-sync is a no-op); receipt contract — reviewed bundle POSTed as JSON, {ref} receipt passthrough, non-2xx surfaced for idempotent retry, string-ref validation, constructor guards — pinned green in packages/feedback-core/test/unit.test.mjs. Evidence: commits 5bd60af (implementation + base tests) and 2310ac6 (receipt-validation/constructor-guard pins). F0 of POG''s portal-feedback plan.'
+    title: 'req-http-sink: implemented — httpSink upstreamed in feedback-core with contract tests (F0)'
+    visibility: internal
+  - authored_by: pog-gitflow-brief
+    created_at: "2026-07-13T06:50:48Z"
+    id: cs-49
+    operations:
+      - changes:
+          - after:
+              - uc-deck-feedback
+              - uc-product-site-feedback
+              - uc-bug-report-with-replay
+              - uc-pm-portal-feedback
+            before:
+              - uc-deck-feedback
+              - uc-product-site-feedback
+            path:
+              - edges
+              - use_cases
+          - after:
+              - req-generic-kinds
+              - req-capture-review-submit
+              - req-privacy-fail-closed
+              - req-idempotent-submission
+              - req-submission-context
+              - req-http-sink
+              - req-producer-owned-anchors
+              - req-raw-drafts-stay-local
+              - req-multi-sink-routing
+            before:
+              - req-generic-kinds
+              - req-capture-review-submit
+              - req-privacy-fail-closed
+              - req-idempotent-submission
+              - req-submission-context
+              - req-http-sink
+            path:
+              - edges
+              - requirements
+        kind: modified
+        node: feature-feedback-core
+    schema: graph/changeset/v1
+    status: proposed
+    summary: 'cs-4 authored feature-feedback-core with use_cases [uc-bug-report-with-replay, uc-pm-portal-feedback] and requirements including req-producer-owned-anchors, req-raw-drafts-stay-local, req-multi-sink-routing; commit 5bd60af independently re-authored the node from scratch on a branch that lacked the cs-4-materialized copy, and the f49a9c2 reconcile kept 5bd60af''s node body verbatim without unioning edge sets. This changeset restores the union; proposed only — not applied to the node.'
+    title: 'Restore cs-4 edges on feature-feedback-core clobbered by independent re-authoring in 5bd60af (never unioned at f49a9c2 reconcile)'
+    visibility: internal
