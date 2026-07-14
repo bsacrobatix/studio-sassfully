@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createIntakeServer } from "../index.mjs";
@@ -48,14 +48,36 @@ test("rejects malformed JSON", async (t) => {
 test("evidence is bundle-first, validated, deduped, capped, and stored outside JSONL", async (t) => {
   const intake = await start(); t.after(() => intake.close());
   const evidenceUrl = intake.url.replace(/\/api\/feedback$/, "/api/feedback/evidence");
-  const envelope = { $schema: "sassfully/feedback-sidecar-envelope/v1", version: 1, bundleFirst: true, idempotencyKey: "fb-sidecar", digest: "0123456789abcdef", contentType: "application/json", size: 17, payload: { redacted: true } };
+  const envelope = { $schema: "sassfully/feedback-sidecar-envelope/v1", version: 1, bundleFirst: true, idempotencyKey: "fb-sidecar", digest: "e63ce1834313a807", contentType: "application/json", size: 17, payload: { redacted: true } };
   assert.equal((await post(evidenceUrl, JSON.stringify(envelope))).status, 409);
   await post(intake.url, JSON.stringify(bundle("fb-sidecar")));
   assert.equal((await post(evidenceUrl, JSON.stringify(envelope))).status, 201);
   assert.equal((await post(evidenceUrl, JSON.stringify(envelope))).status, 200);
-  assert.equal(await readFile(path.join(intake.dataDir, "evidence", "fb-sidecar", "0123456789abcdef.json"), "utf8"), JSON.stringify({ redacted: true }));
+  assert.equal(await readFile(path.join(intake.dataDir, "evidence", "fb-sidecar", "e63ce1834313a807.json"), "utf8"), JSON.stringify({ redacted: true }));
   assert.equal((await post(evidenceUrl, JSON.stringify({ ...envelope, digest: "../../escape" }))).status, 422);
   assert.equal((await post(evidenceUrl, "x".repeat(2 * 1024 * 1024 + 1))).status, 413);
+});
+
+test("rejects a syntactically valid but non-canonical evidence digest without storing it", async (t) => {
+  const intake = await start(); t.after(() => intake.close());
+  const evidenceUrl = intake.url.replace(/\/api\/feedback$/, "/api/feedback/evidence");
+  await post(intake.url, JSON.stringify(bundle("fb-digest-mismatch")));
+  const response = await post(evidenceUrl, JSON.stringify({ $schema: "sassfully/feedback-sidecar-envelope/v1", version: 1, bundleFirst: true, idempotencyKey: "fb-digest-mismatch", digest: "0123456789abcdef", size: 17, payload: { redacted: true } }));
+  assert.equal(response.status, 422);
+  assert.deepEqual(await readdir(path.join(intake.dataDir, "evidence")).catch((error) => error.code === "ENOENT" ? [] : Promise.reject(error)), []);
+});
+
+test("concurrent bundle and evidence retries are atomic and deduped", async (t) => {
+  const intake = await start({ rateLimits: { minuteLimit: 100, dayLimit: 100 } }); t.after(() => intake.close());
+  const key = "fb-concurrent", evidenceUrl = intake.url.replace(/\/api\/feedback$/, "/api/feedback/evidence");
+  const bundleResponses = await Promise.all(Array.from({ length: 8 }, () => post(intake.url, JSON.stringify(bundle(key)))));
+  assert.deepEqual(bundleResponses.map((response) => response.status).sort(), [200, 200, 200, 200, 200, 200, 200, 201]);
+  const ledger = await readFile(path.join(intake.dataDir, `feedback-${new Date().toISOString().slice(0, 7)}.jsonl`), "utf8");
+  assert.equal(ledger.trim().split("\n").length, 1);
+  const envelope = { $schema: "sassfully/feedback-sidecar-envelope/v1", version: 1, bundleFirst: true, idempotencyKey: key, digest: "e63ce1834313a807", contentType: "application/json", size: 17, payload: { redacted: true } };
+  const evidenceResponses = await Promise.all(Array.from({ length: 8 }, () => post(evidenceUrl, JSON.stringify(envelope))));
+  assert.deepEqual(evidenceResponses.map((response) => response.status).sort(), [200, 200, 200, 200, 200, 200, 200, 201]);
+  assert.deepEqual(await readdir(path.join(intake.dataDir, "evidence", key)), ["e63ce1834313a807.json"]);
 });
 
 test("bundle lookup rebuilds from older monthly ledger for a sidecar retry", async (t) => {
@@ -63,6 +85,6 @@ test("bundle lookup rebuilds from older monthly ledger for a sidecar retry", asy
   const old = "2026-06"; await (await import("node:fs/promises")).writeFile(path.join(dataDir, `feedback-${old}.jsonl`), `${JSON.stringify(bundle("fb-old"))}\n`);
   const server = await createIntakeServer({ dataDir }); await new Promise((resolve) => server.listen(0, resolve)); t.after(async () => { await new Promise((resolve) => server.close(resolve)); await rm(dataDir, { recursive: true, force: true }); });
   const evidenceUrl = `http://127.0.0.1:${server.address().port}/api/feedback/evidence`;
-  const response = await post(evidenceUrl, JSON.stringify({ $schema: "sassfully/feedback-sidecar-envelope/v1", version: 1, bundleFirst: true, idempotencyKey: "fb-old", digest: "fedcba9876543210", size: 2, payload: {} }));
+  const response = await post(evidenceUrl, JSON.stringify({ $schema: "sassfully/feedback-sidecar-envelope/v1", version: 1, bundleFirst: true, idempotencyKey: "fb-old", digest: "08f44b07b5901a25", size: 2, payload: {} }));
   assert.equal(response.status, 201);
 });
