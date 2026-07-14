@@ -1,0 +1,11 @@
+{
+  "$schema": "sassfully/feedback-sidecar-envelope/v1",
+  "version": 1,
+  "bundleFirst": true,
+  "idempotencyKey": "fb-0123456789abcdef",
+  "digest": "0123456789abcdef",
+  "contentType": "application/json",
+  "size": 31,
+  "transport": "sidecar-json",
+  "payload": { "redacted": true }
+}

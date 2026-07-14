@@ -9,7 +9,7 @@ import {
   KINDS, KIND_CONFIG,
   createAnchor, anchorDisplayFields,
   createPrivacyManifest,
-  createDraft, attachEvidence, setUserText, beginReview, approveReview, submit,
+  createDraft, attachEvidence, setEvidenceUpload, setUserText, beginReview, approveReview, submit, sidecarItems, uploadEvidence,
   bundleSink, httpSink, createRouter,
 } from "../src/index.mjs";
 
@@ -119,4 +119,32 @@ test("http sink rejects receipts without a string ref and refuses bad constructi
   await assert.rejects(() => sink.submit({ reviewed: true }), /string ref/);
   assert.throws(() => httpSink({}), TypeError);
   assert.throws(() => httpSink({ url: "https://x", fetch: null }), TypeError);
+});
+
+test("sidecars are opt-in lean metadata, bundle-first, and deduped by key plus digest", async () => {
+  const manifest = createPrivacyManifest({ fields: {
+    kind: "public", "anchor.producer": "public", "anchor.artifactId": "public", userText: "user_provided",
+    "evidence.kind": "low", "evidence.label": "low", "evidence.digest": "public", "evidence.snippet": "low", "evidence.contentType": "low", "evidence.size": "low", "evidence.transport": "low", "evidence.uploadApproved": "public",
+  } });
+  const draft = createDraft("bug", { producer: "host", artifactId: "a" });
+  attachEvidence(draft, { kind: "har", label: "request", payload: { authorization: "secret" }, snippet: "GET /x", contentType: "application/json", transport: "sidecar-json" });
+  const digest = draft.evidence[0].digest;
+  assert.equal(draft.evidence[0].uploadApproved, false);
+  assert.throws(() => sidecarItems(draft), /bundle submit/);
+  await assert.rejects(() => uploadEvidence(draft, createRouter({ sinks: [bundleSink()] })), /bundle submit/);
+  setEvidenceUpload(draft, digest, true); setUserText(draft, "broken");
+  assert.ok(beginReview(draft, manifest).verdict.ok);
+  const bundle = approveReview(draft, manifest);
+  assert.ok(!JSON.stringify(bundle).includes("secret"));
+  const sink = bundleSink(), router = createRouter({ sinks: [sink] });
+  await submit(draft, router);
+  const first = await uploadEvidence(draft, router), second = await uploadEvidence(draft, router);
+  assert.equal(first[0].status, "uploaded"); assert.equal(second[0].deduped, true); assert.equal(sink.blobs.get(`${bundle.idempotencyKey}:${digest}`).authorization, "secret");
+});
+
+test("unsupported sidecar sinks degrade to digest-only without failure", async () => {
+  const router = createRouter({ sinks: [{ id: "no-sidecars", async submit(bundle) { return { ref: bundle.idempotencyKey }; } }] });
+  const bundle = { reviewed: true, kind: "bug", idempotencyKey: "fb-sidecar", evidence: [] };
+  await router.submit(bundle);
+  assert.deepEqual(await router.uploadEvidence(bundle, { digest: "0123456789abcdef", payload: "raw" }), { digest: "0123456789abcdef", status: "skipped", reason: "unsupported-sink" });
 });

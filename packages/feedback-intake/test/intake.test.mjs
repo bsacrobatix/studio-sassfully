@@ -44,3 +44,25 @@ test("rejects malformed JSON", async (t) => {
   const response = await post(intake.url, "{not JSON");
   assert.equal(response.status, 400);
 });
+
+test("evidence is bundle-first, validated, deduped, capped, and stored outside JSONL", async (t) => {
+  const intake = await start(); t.after(() => intake.close());
+  const evidenceUrl = intake.url.replace(/\/api\/feedback$/, "/api/feedback/evidence");
+  const envelope = { $schema: "sassfully/feedback-sidecar-envelope/v1", version: 1, bundleFirst: true, idempotencyKey: "fb-sidecar", digest: "0123456789abcdef", contentType: "application/json", size: 17, payload: { redacted: true } };
+  assert.equal((await post(evidenceUrl, JSON.stringify(envelope))).status, 409);
+  await post(intake.url, JSON.stringify(bundle("fb-sidecar")));
+  assert.equal((await post(evidenceUrl, JSON.stringify(envelope))).status, 201);
+  assert.equal((await post(evidenceUrl, JSON.stringify(envelope))).status, 200);
+  assert.equal(await readFile(path.join(intake.dataDir, "evidence", "fb-sidecar", "0123456789abcdef.json"), "utf8"), JSON.stringify({ redacted: true }));
+  assert.equal((await post(evidenceUrl, JSON.stringify({ ...envelope, digest: "../../escape" }))).status, 422);
+  assert.equal((await post(evidenceUrl, "x".repeat(2 * 1024 * 1024 + 1))).status, 413);
+});
+
+test("bundle lookup rebuilds from older monthly ledger for a sidecar retry", async (t) => {
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "feedback-intake-rollover-"));
+  const old = "2026-06"; await (await import("node:fs/promises")).writeFile(path.join(dataDir, `feedback-${old}.jsonl`), `${JSON.stringify(bundle("fb-old"))}\n`);
+  const server = await createIntakeServer({ dataDir }); await new Promise((resolve) => server.listen(0, resolve)); t.after(async () => { await new Promise((resolve) => server.close(resolve)); await rm(dataDir, { recursive: true, force: true }); });
+  const evidenceUrl = `http://127.0.0.1:${server.address().port}/api/feedback/evidence`;
+  const response = await post(evidenceUrl, JSON.stringify({ $schema: "sassfully/feedback-sidecar-envelope/v1", version: 1, bundleFirst: true, idempotencyKey: "fb-old", digest: "fedcba9876543210", size: 2, payload: {} }));
+  assert.equal(response.status, 201);
+});

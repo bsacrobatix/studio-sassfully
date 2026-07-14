@@ -23,6 +23,9 @@ catalog:
       - id: source-slidey-brief
         kind: document
         path: docs/requirements/slidey-generic-feedback-brief.md
+      - id: source-rich-evidence-sidecars
+        kind: document
+        path: docs/requirements/rich-evidence-sidecars.md
       - id: source-kitsoki-feedback-proposal
         kind: external-document
         path: "../Kitsoki/docs/proposals/generic-feedback-sdk-slidey-reports.md"
@@ -445,8 +448,8 @@ nodes:
     title: Raw draft data stays local by default
     status: draft
     visibility: public
-    summary: Remote sinks and AI processors receive only the reviewed bundle; user-entered text is shown in the review step and marked user-provided.
-    sources: [source-slidey-brief]
+    summary: Remote sinks and AI processors receive only the lean reviewed bundle by default. Raw evidence remains local unless a reviewer individually approves a bundle-first sidecar upload under req-reviewed-sidecar-lifecycle; user-entered text is shown in review and marked user-provided.
+    sources: [source-slidey-brief, source-rich-evidence-sidecars]
     edges:
       part_of: [product-sassfully]
       motivated_by: [uc-agent-files-tool-gap]
@@ -455,8 +458,8 @@ nodes:
     title: Host policies gate high-risk evidence
     status: draft
     visibility: public
-    summary: HAR, replay (rrweb), screenshots, console capture, source excerpts, and raw scene JSON are capabilities a host explicitly enables per feedback kind — never always-on defaults. HAR and rrweb are optional everywhere and off by default.
-    sources: [source-slidey-brief]
+    summary: Hosts gate high-risk evidence and may retain bounded local HAR/rrweb rings with capture-time redaction and input masking. Raw upload is unchecked by default and requires reviewer approval per item; no annotation screenshot is permitted. This supersedes the prior blanket HAR/rrweb-off wording.
+    sources: [source-slidey-brief, source-rich-evidence-sidecars]
     edges:
       part_of: [product-sassfully]
       motivated_by: [uc-bug-report-with-replay, uc-deck-feedback]
@@ -552,6 +555,36 @@ nodes:
     edges:
       part_of: [product-sassfully]
       motivated_by: [uc-bug-report-with-replay]
+  - schema: sassfully/requirement/v0
+    id: req-reviewed-sidecar-lifecycle
+    title: Raw evidence uses approved, bundle-first sidecars
+    status: accepted
+    visibility: public
+    summary: A reviewed bundle projects only lean evidence metadata (kind, label, digest, snippet, content type, size, transport, and approved state), never raw payload. Each raw sidecar starts unchecked; only approved items upload after a successful or deduped bundle receipt, keyed by idempotency key plus digest. Unsupported sinks return digest-only skipped results and failed items remain retryable.
+    sources: [source-rich-evidence-sidecars]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-bug-report-with-replay]
+  - schema: sassfully/requirement/v0
+    id: req-capture-time-sidecar-privacy
+    title: Sidecar capture is bounded and redacted before review
+    status: accepted
+    visibility: public
+    summary: Always-on capture, where a host enables it, is bounded in local rings and snapshots on attach. Header/query/body redaction and input masking happen at capture time; server-trace markers exclude browser trace bodies; annotations carry no screenshot. Any unclassified reviewed metadata fails closed.
+    sources: [source-rich-evidence-sidecars]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-bug-report-with-replay]
+  - schema: sassfully/requirement/v0
+    id: req-sidecar-intake-safety
+    title: Hosted intake safely persists approved sidecars
+    status: accepted
+    visibility: public
+    summary: The versioned sidecar envelope is bundle-first. Hosted/local intake enforces the existing rate policy and a 2 MiB sidecar cap, validates key and digest before path construction, writes only evidence/key/digest.ext, rebuilds bundle-key lookup across relevant monthly ledgers, and never persists client IPs.
+    sources: [source-rich-evidence-sidecars]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-bug-report-with-replay, uc-product-site-feedback]
   # --- use cases ------------------------------------------------------------
   - schema: sassfully/use-case/v0
     id: uc-deck-feedback
@@ -599,7 +632,7 @@ nodes:
     sources: [source-slidey-brief]
     edges:
       part_of: [product-sassfully]
-      acceptance: [req-host-policy-gates-evidence, req-privacy-metadata-first-class, req-capture-review-submit, req-privacy-fail-closed, req-legal-basis-metadata, req-ai-triage-narrative, req-reproducible-anchor-trace]
+      acceptance: [req-host-policy-gates-evidence, req-privacy-metadata-first-class, req-capture-review-submit, req-privacy-fail-closed, req-legal-basis-metadata, req-ai-triage-narrative, req-reproducible-anchor-trace, req-reviewed-sidecar-lifecycle, req-capture-time-sidecar-privacy, req-sidecar-intake-safety]
     journey:
       - User hits an issue in a host app embedding the widget; triggers the reporter (floating, chromeless trigger).
       - Widget captures an anchor at the trigger point (producer-owned, per req-producer-owned-anchors) plus an optional rrweb replay clip and network summary, opt-in per host policy.
@@ -3044,4 +3077,29 @@ nodes:
     status: proposed
     summary: 'cs-4 authored feature-feedback-core with use_cases [uc-bug-report-with-replay, uc-pm-portal-feedback] and requirements including req-producer-owned-anchors, req-raw-drafts-stay-local, req-multi-sink-routing; commit 5bd60af independently re-authored the node from scratch on a branch that lacked the cs-4-materialized copy, and the f49a9c2 reconcile kept 5bd60af''s node body verbatim without unioning edge sets. This changeset restores the union; proposed only — not applied to the node.'
     title: 'Restore cs-4 edges on feature-feedback-core clobbered by independent re-authoring in 5bd60af (never unioned at f49a9c2 reconcile)'
+    visibility: internal
+
+  - authored_by: brad-task-authorization
+    authorized_at: "2026-07-14T00:00:00Z"
+    applied_at: "2026-07-14T00:00:00Z"
+    created_at: "2026-07-14T00:00:00Z"
+    id: cs-50
+    operations:
+      - kind: added
+        after: [req-reviewed-sidecar-lifecycle, req-capture-time-sidecar-privacy, req-sidecar-intake-safety]
+      - kind: modified
+        node: req-raw-drafts-stay-local
+        changes:
+          - path: [summary]
+            before: Remote sinks and AI processors receive only the reviewed bundle; user-entered text is shown in the review step and marked user-provided.
+            after: Lean reviewed bundle by default; individually approved raw sidecars follow a successful bundle receipt.
+      - kind: modified
+        node: req-host-policy-gates-evidence
+        changes:
+          - path: [summary]
+            before: HAR and rrweb are optional everywhere and off by default.
+            after: Bounded local capture is permitted with capture-time privacy controls and per-item raw upload approval.
+    schema: graph/changeset/v1
+    status: applied
+    title: "SASS-CAT: accept bounded, privacy-gated evidence sidecars"
     visibility: internal

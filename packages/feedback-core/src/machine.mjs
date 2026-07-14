@@ -1,12 +1,5 @@
-// machine.mjs — req-capture-review-submit: collect a draft locally, show it
-// for review, submit ONLY the reviewed bundle — even for low-friction kinds.
-// req-raw-drafts-stay-local: raw evidence stays on the draft (local); the
-// reviewed bundle carries only privacy-passed fields plus evidence DIGESTS
-// and short reviewed snippets; user-entered text is marked user_provided.
-//
-// States: draft -> in_review -> (blocked <-> in_review) -> reviewed -> submitted.
-// Feedback is not mutation: the reviewed note is the artifact.
-
+// Capture -> review -> bundle-first sidecar submission. Raw evidence remains
+// local until an individual reviewer approves that item's sidecar upload.
 import { createAnchor } from "./anchor.mjs";
 import { isKind, KIND_CONFIG } from "./kinds.mjs";
 import { privacyVerdict } from "./privacy.mjs";
@@ -14,96 +7,75 @@ import { contentDigest, idempotencyKey } from "./idempotency.mjs";
 
 export function createDraft(kind, anchorSpec, { draftId, context } = {}) {
   if (!isKind(kind)) throw new TypeError(`draft: unknown kind ${kind}`);
-  const anchor = anchorSpec.producer ? createAnchor(anchorSpec) : anchorSpec; // pre-built frozen anchors pass through
-  return {
-    state: "draft",
-    draftId: draftId ?? `draft-${contentDigest({ kind, anchor })}`,
-    kind,
-    anchor,
-    evidence: [], // raw items live HERE and nowhere else pre-review
-    userText: "",
-    // Context is producer-owned diagnostic data.  It is deliberately carried
-    // through the same reviewed projection and privacy verdict as every other
-    // outbound field; unclassified paths therefore fail closed.
-    ...(context === undefined ? {} : { context }),
-  };
+  const anchor = anchorSpec.producer ? createAnchor(anchorSpec) : anchorSpec;
+  return { state: "draft", draftId: draftId ?? `draft-${contentDigest({ kind, anchor })}`, kind, anchor, evidence: [], userText: "", ...(context === undefined ? {} : { context }) };
 }
 
-/**
- * Attach a raw evidence item to the local draft. Raw payloads never leave
- * the draft: review projects each item to {kind, label, digest, snippet?}.
- */
-export function attachEvidence(draft, { kind, label, payload, snippet }) {
-  if (draft.state !== "draft" && draft.state !== "in_review") throw new Error(`evidence: cannot attach in state ${draft.state}`);
-  draft.evidence.push({ kind, label, payload, snippet: snippet ?? null, digest: contentDigest(payload) });
+/** Attach local-only raw evidence. Metadata is lean and reviewable; raw payload
+ * is deliberately absent from reviewedPayload and sidecar upload is opt-in. */
+export function attachEvidence(draft, { kind, label, payload, snippet, contentType, size, transport } = {}) {
+  if (draft.state !== "draft" && draft.state !== "in_review" && draft.state !== "blocked") throw new Error(`evidence: cannot attach in state ${draft.state}`);
+  const encodedSize = new TextEncoder().encode(JSON.stringify(payload ?? null)).byteLength;
+  if (size !== undefined && (!Number.isSafeInteger(size) || size < 0)) throw new TypeError("evidence: size must be a non-negative integer");
+  draft.evidence.push({ kind, label, payload, snippet: snippet ?? null, digest: contentDigest(payload), ...(contentType === undefined ? {} : { contentType }), size: size ?? encodedSize, sizeProvided: size !== undefined, ...(transport === undefined ? {} : { transport }), uploadApproved: false });
   return draft;
 }
 
-export function setUserText(draft, text) {
-  draft.userText = String(text);
-  return draft;
+/** Toggle an individual raw upload decision before bundle approval. */
+export function setEvidenceUpload(draft, digest, uploadApproved) {
+  if (draft.state !== "draft" && draft.state !== "in_review" && draft.state !== "blocked") throw new Error(`evidence: cannot change upload approval in state ${draft.state}`);
+  if (typeof uploadApproved !== "boolean") throw new TypeError("evidence: uploadApproved must be boolean");
+  const item = draft.evidence.find((candidate) => candidate.digest === digest);
+  if (!item) throw new Error(`evidence: unknown digest ${digest}`);
+  item.uploadApproved = uploadApproved;
+  return item;
 }
 
-/**
- * Project the draft into its review view: what the user (and privacy
- * manifest) actually judges. Raw payloads are NOT in the projection.
- */
-export function beginReview(draft, manifest) {
-  draft.state = "in_review";
-  const payload = reviewedPayload(draft);
-  const verdict = privacyVerdict(payload, manifest);
-  draft.lastVerdict = verdict;
-  if (!verdict.ok) draft.state = "blocked";
-  return { payload, verdict, kindConfig: KIND_CONFIG[draft.kind] };
-}
+export function setUserText(draft, text) { draft.userText = String(text); return draft; }
 
-function reviewedPayload(draft) {
+export function reviewedPayload(draft) {
   return {
-    kind: draft.kind,
-    anchor: { ...draft.anchor },
-    userText: draft.userText, // marked user_provided by the manifest
-    evidence: draft.evidence.map((e) => ({ kind: e.kind, label: e.label, digest: e.digest, snippet: e.snippet })),
+    kind: draft.kind, anchor: { ...draft.anchor }, userText: draft.userText,
+    evidence: draft.evidence.map(({ kind, label, digest, snippet, contentType, size, sizeProvided, transport, uploadApproved }) => ({ kind, label, digest, snippet, ...(contentType === undefined ? {} : { contentType }), ...(sizeProvided ? { size } : {}), ...(transport === undefined ? {} : { transport }), ...(uploadApproved ? { uploadApproved: true } : {}) })),
     ...(draft.context === undefined ? {} : { context: draft.context }),
   };
 }
 
-/**
- * Approve the review: only legal from a passing in_review state. Produces
- * the frozen reviewed bundle — the ONLY thing a sink may ever receive —
- * with its stable idempotency key.
- */
-export function approveReview(draft, manifest) {
-  const required = KIND_CONFIG[draft.kind].requiredFields;
-  if (required.includes("userText") && !draft.userText.trim()) {
-    throw new Error(`review: kind ${draft.kind} requires userText`);
-  }
-  const payload = reviewedPayload(draft);
-  const verdict = privacyVerdict(payload, manifest);
-  if (!verdict.ok) {
-    draft.state = "blocked";
-    const reasons = verdict.violations.map((v) => `${v.path}: ${v.reason}`).join("; ");
-    throw new Error(`review: privacy fails closed — ${reasons}`);
-  }
-  draft.state = "reviewed";
-  const bundle = Object.freeze({
-    ...payload,
-    reviewed: true,
-    idempotencyKey: idempotencyKey(payload),
-  });
-  draft.reviewedBundle = bundle;
-  return bundle;
+export function beginReview(draft, manifest) {
+  draft.state = "in_review";
+  const payload = reviewedPayload(draft); const verdict = privacyVerdict(payload, manifest);
+  draft.lastVerdict = verdict; if (!verdict.ok) draft.state = "blocked";
+  return { payload, verdict, kindConfig: KIND_CONFIG[draft.kind] };
 }
 
-/**
- * Submit via a router/sink. Refuses anything that is not a reviewed bundle —
- * this is the code-level guarantee behind req-raw-drafts-stay-local.
- */
+export function approveReview(draft, manifest) {
+  const required = KIND_CONFIG[draft.kind].requiredFields;
+  if (required.includes("userText") && !draft.userText.trim()) throw new Error(`review: kind ${draft.kind} requires userText`);
+  const payload = reviewedPayload(draft); const verdict = privacyVerdict(payload, manifest);
+  if (!verdict.ok) { draft.state = "blocked"; throw new Error(`review: privacy fails closed — ${verdict.violations.map((v) => `${v.path}: ${v.reason}`).join("; ")}`); }
+  draft.state = "reviewed";
+  draft.reviewedBundle = Object.freeze({ ...payload, reviewed: true, idempotencyKey: idempotencyKey(payload) });
+  return draft.reviewedBundle;
+}
+
 export async function submit(draft, router) {
-  if (draft.state !== "reviewed" || !draft.reviewedBundle?.reviewed) {
-    throw new Error(`submit: only a reviewed bundle may be submitted (state: ${draft.state})`);
-  }
-  const receipt = await router.submit(draft.reviewedBundle);
-  draft.state = "submitted";
-  draft.receipt = receipt;
-  return receipt;
+  if ((draft.state !== "reviewed" && draft.state !== "submitted") || !draft.reviewedBundle?.reviewed) throw new Error(`submit: only a reviewed bundle may be submitted (state: ${draft.state})`);
+  const receipt = await router.submit(draft.reviewedBundle); draft.state = "submitted"; draft.receipt = receipt; return receipt;
+}
+
+/** Raw sidecars may only leave after the successful bundle receipt. Each item
+ * returns a result instead of throwing, allowing failed/skipped items to retry. */
+export function sidecarItems(draft) {
+  if (draft.state !== "submitted" || !draft.receipt) throw new Error("evidence: bundle submit must succeed before sidecars");
+  return draft.evidence.filter((item) => item.uploadApproved);
+}
+
+export async function uploadEvidence(draft, router) {
+  const items = sidecarItems(draft);
+  const results = await Promise.all(items.map(async (item) => {
+    try { return await router.uploadEvidence(draft.reviewedBundle, item); }
+    catch (error) { return { digest: item.digest, status: "failed", evidenceError: error.message }; }
+  }));
+  draft.evidenceReceipt = results;
+  return results;
 }

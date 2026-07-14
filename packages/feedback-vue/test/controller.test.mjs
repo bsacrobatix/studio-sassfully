@@ -17,3 +17,13 @@ test("controller keeps submit blocked for an unclassified context field", async 
   assert.equal(reporter.review().verdict.ok, false);
   await assert.rejects(() => reporter.submit(), /privacy review must pass/);
 });
+
+test("controller submits the bundle before approved sidecars and retries only failed evidence", async () => {
+  const calls = []; let fail = true;
+  const sink = { id: "evidence", async submit(bundle) { calls.push("bundle"); return { ref: bundle.idempotencyKey }; }, async uploadEvidence(_bundle, item) { calls.push(`sidecar:${item.digest}`); if (fail) { fail = false; throw new Error("temporary blob failure"); } return { digest: item.digest, status: "uploaded" }; } };
+  const manifest = createPrivacyManifest({ fields: { ...fields, "evidence.kind": "low", "evidence.label": "low", "evidence.digest": "public", "evidence.snippet": "low", "evidence.size": "low", "evidence.uploadApproved": "public" } });
+  const reporter = createFeedbackReporter({ anchorFor: () => ({ producer: "host", artifactId: "item" }), manifest, router: createRouter({ sinks: [sink] }), context: { build: "v1" } });
+  reporter.choose("bug"); reporter.setText("broken"); reporter.attach({ kind: "trace", label: "trace", payload: { secret: "raw" } }); const digest = reporter.state.draft.evidence[0].digest; reporter.toggleUpload(digest, true); reporter.review();
+  const receipt = await reporter.submit(); assert.match(receipt.evidenceError, /temporary/); assert.equal(calls[0], "bundle");
+  await reporter.retryEvidence(); assert.equal(reporter.state.evidenceResults[0].status, "uploaded"); assert.equal(calls.filter((x) => x === "bundle").length, 1, "deduped bundle receipt still precedes retry");
+});
