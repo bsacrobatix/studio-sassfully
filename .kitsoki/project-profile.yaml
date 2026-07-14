@@ -8,7 +8,7 @@ summary: |
 
 commands:
   dev: ""
-  test: ""
+  test: "scripts/checks.sh"
   build: ""
   check: "scripts/checks.sh"
 

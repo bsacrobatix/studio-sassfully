@@ -5,3 +5,17 @@ project_profile: .kitsoki/project-profile.yaml
 
 root:
   import: dev-story
+
+# pog-drive: the sanctioned launch profile for agents driving this repo's
+# object-graph catalog (pog/catalog.yaml) via `kitsoki agent launch --profile
+# pog-drive`. Ambient Claude auth, no secrets — machine-specific overrides
+# (synthetic endpoints, quotas) belong in .kitsoki.local.yaml, which
+# deep-merges on top and wins by profile name.
+default_profile: pog-drive
+harness_profiles:
+  pog-drive:
+    backend: claude
+    model: opus
+    models: [opus, sonnet, haiku]
+    effort: medium
+    efforts: [low, medium, high, xhigh, max]

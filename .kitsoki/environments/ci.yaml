@@ -1,0 +1,17 @@
+schema: capsule-environment/v1
+id: ci
+source:
+  host_probe: true
+# No lockfiles: the packages/* workspaces are lockfile-free today; add them
+# here the moment one lands so the drift-lock covers dependency resolution.
+# `host` is an explicitly trusted local compatibility placement: process
+# supervision, no portable egress confinement, so it only ever honestly
+# advertises `network: live` — matching POG's and Kitsoki's own dogfooded
+# environments/ci.yaml (see docs/guide/development/capsule-ci.md
+# "Enforcement boundary").
+network: live
+caches:
+  - id: project-build
+    scope: project
+    mode: read_write
+sandbox: supervised

@@ -1,0 +1,33 @@
+schema: capsule-ci/v1
+project_profile: .kitsoki/project-profile.yaml
+default_environment: ci
+
+cleanup:
+  keep_runs: 20
+  require_hygiene_check: true
+
+pipelines:
+  change:
+    story: .kitsoki/stories/capsule-ci/app.yaml
+    # local only for now; branch_update/pull_request/staging triggers wait on
+    # the merge queue + GitHub check-run adapter (parallel-agent gitflow K2/P4).
+    triggers: [local]
+    environment: ci
+    # `host` runs scripts/checks.sh directly in this checkout: process
+    # supervision, no portable egress confinement, so it can only honestly
+    # advertise network: live (see environments/ci.yaml). Capsule CI is the
+    # envelope + typed verdict + receipt + drift-lock around checks.sh's
+    # existing substance, not a sandboxing claim.
+    executor: host
+    mode: one-shot
+    required: true
+    permissions:
+      network: live
+      external_write: allow
+    agents:
+      policy: deny
+    result:
+      schema: capsule-ci-verdict/v1
+      pass_exits: [passed]
+      fail_exits: [failed]
+      park_exits: [needs_input]

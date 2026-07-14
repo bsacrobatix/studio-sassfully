@@ -5,3 +5,6 @@ node_modules/
 # Kitsoki local runtime
 .kitsoki.local.yaml
 .kitsoki/sessions/
+
+# Kitsoki-managed capsule workspaces (clone-backed; lease+reap lifecycle)
+.capsules/

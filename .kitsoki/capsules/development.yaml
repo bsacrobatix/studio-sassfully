@@ -1,0 +1,7 @@
+schema: capsule-definition/v1
+id: development
+description: Generic clone-backed workspace for the current studio-sassfully checkout.
+source:
+  kind: self
+policy:
+  network: none
