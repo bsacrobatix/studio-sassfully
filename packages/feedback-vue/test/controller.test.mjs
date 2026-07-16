@@ -27,3 +27,19 @@ test("controller submits the bundle before approved sidecars and retries only fa
   const receipt = await reporter.submit(); assert.match(receipt.evidenceError, /temporary/); assert.equal(calls[0], "bundle");
   await reporter.retryEvidence(); assert.equal(reporter.state.evidenceResults[0].status, "uploaded"); assert.equal(calls.filter((x) => x === "bundle").length, 1, "deduped bundle receipt still precedes retry");
 });
+
+test("controller captures host-provided evidence locally and keeps upload unchecked", async () => {
+  const reporter = createFeedbackReporter({ anchorFor: () => ({ producer: "host", artifactId: "item" }), manifest: createPrivacyManifest({ fields }), router: createRouter({ sinks: [bundleSink()] }), captureProviders: [{ id: "screenshot", label: "Screenshot", async capture() { return { kind: "screenshot", label: "Current view", payload: { image: "local-only" }, contentType: "application/json" }; } }] });
+  reporter.choose("bug");
+  await reporter.capture("screenshot");
+  assert.equal(reporter.state.draft.evidence.length, 1);
+  assert.equal(reporter.state.draft.evidence[0].uploadApproved, false);
+  assert.equal(reporter.state.captureProviders[0].label, "Screenshot");
+});
+
+test("controller keeps capture failures local and visible", async () => {
+  const reporter = createFeedbackReporter({ anchorFor: () => ({ producer: "host", artifactId: "item" }), manifest: createPrivacyManifest({ fields }), router: createRouter({ sinks: [bundleSink()] }), captureProviders: [{ id: "broken", async capture() { throw new Error("capture unavailable"); } }] });
+  reporter.choose("bug");
+  assert.deepEqual(await reporter.capture("broken"), []);
+  assert.match(reporter.state.captureError, /capture unavailable/);
+});

@@ -9,6 +9,7 @@ const props = defineProps({
   manifest: { type: Object, required: true },
   router: { type: Object, required: true },
   context: { default: undefined },
+  captureProviders: { type: Array, default: () => [] },
 });
 const emit = defineEmits(["close", "submitted"]);
 const reporter = useFeedbackReporter(props);
@@ -16,6 +17,8 @@ const text = ref("");
 function select(kind) { reporter.choose(kind.id ?? kind.kind ?? kind); text.value = ""; }
 function review() { reporter.setText(text.value); reporter.review(); }
 async function send() { const receipt = await reporter.submit(); emit("submitted", receipt); }
+async function capture(id) { await reporter.capture(id); }
+function setUpload(digest, event) { reporter.toggleUpload(digest, event.target.checked); }
 </script>
 
 <template>
@@ -39,11 +42,23 @@ async function send() { const receipt = await reporter.submit(); emit("submitted
       </div>
       <div v-else-if="reporter.state.phase === 'draft'" class="fb-draft">
         <textarea v-model="text" class="fb-textarea" aria-label="Feedback" placeholder="Tell us what happened…" />
+        <div v-if="reporter.state.captureProviders.length" class="fb-evidence-capture">
+          <h3>Attach evidence</h3>
+          <p>Evidence stays on this device until you review and approve an individual upload.</p>
+          <button v-for="provider in reporter.state.captureProviders" :key="provider.id" class="fb-btn" type="button" @click="capture(provider.id)">{{ provider.label }}</button>
+          <p v-if="reporter.state.captureError" class="fb-capture-error">{{ reporter.state.captureError }}</p>
+          <ul v-if="reporter.state.draft.evidence.length" class="fb-evidence-list"><li v-for="item in reporter.state.draft.evidence" :key="item.digest"><strong>{{ item.label ?? item.kind }}</strong><span>{{ item.size }} bytes</span><button class="fb-remove-evidence" type="button" @click="reporter.detach(item.digest)">Remove</button></li></ul>
+        </div>
         <button class="fb-btn fb-btn-primary" type="button" @click="review">Review</button>
       </div>
       <div v-else-if="reporter.state.phase === 'review'" class="fb-review">
         <p class="fb-verdict" :data-ok="reporter.state.review.verdict.ok">{{ reporter.state.review.verdict.ok ? 'Ready to send' : "Can't send yet" }}</p>
         <ul class="fb-anchor-fields"><li v-for="([key, value]) in anchorDisplayFields(reporter.state.review.payload.anchor)" :key="key"><strong>{{ key }}</strong>: {{ value }}</li></ul>
+        <section v-if="reporter.state.draft.evidence.length" class="fb-evidence-review" aria-label="Evidence upload review">
+          <h3>Evidence upload approval</h3>
+          <p>Submit the reviewed feedback first. Only checked items upload afterward.</p>
+          <label v-for="item in reporter.state.draft.evidence" :key="item.digest" class="fb-evidence-approval"><input type="checkbox" :checked="item.uploadApproved" @change="setUpload(item.digest, $event)" /><span><strong>{{ item.label ?? item.kind }}</strong> · {{ item.contentType ?? 'local evidence' }} · {{ item.size }} bytes</span></label>
+        </section>
         <pre class="fb-payload">{{ JSON.stringify(reporter.state.review.payload, null, 2) }}</pre>
         <ul v-if="!reporter.state.review.verdict.ok" class="fb-violations"><li v-for="violation in reporter.state.review.verdict.violations" :key="violation.path">{{ violation.path }}: {{ violation.reason }}</li></ul>
         <button class="fb-btn fb-btn-primary" type="button" :disabled="!reporter.state.review.verdict.ok" @click="send">Submit</button>
@@ -66,6 +81,7 @@ async function send() { const receipt = await reporter.submit(); emit("submitted
 .fb-kind { display: block; width: 100%; margin: 0 0 6px; padding: 10px 12px; border: 1px solid var(--fb-border, #30363d); border-radius: 8px; background: transparent; color: var(--fb-fg, #f0f6fc); font-size: 14px; text-align: left; cursor: pointer; }
 .fb-kind:hover, .fb-kind:focus-visible { border-color: var(--fb-accent, #58a6ff); background: #1f6feb22; outline: none; }
 .fb-textarea { display: block; width: 100%; min-height: 8rem; margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--fb-border, #30363d); border-radius: 8px; background: #010409; color: var(--fb-fg, #f0f6fc); font: inherit; font-size: 14px; resize: vertical; box-sizing: border-box; }
+.fb-evidence-capture, .fb-evidence-review { margin: 0 0 14px; padding: 12px; border: 1px solid var(--fb-border, #30363d); border-radius: 8px; background: #161b22; } .fb-evidence-capture h3, .fb-evidence-review h3 { margin: 0 0 4px; font-size: 13px; } .fb-evidence-capture p, .fb-evidence-review p { margin: 0 0 9px; color: #8b949e; font-size: 12px; } .fb-evidence-capture .fb-btn { margin: 0 6px 6px 0; } .fb-evidence-list { margin: 6px 0 0; padding: 0; list-style: none; font-size: 12px; } .fb-evidence-list li { display: flex; align-items: center; gap: 7px; margin-top: 5px; } .fb-evidence-list span { color: #8b949e; } .fb-remove-evidence { margin-left: auto; border: 0; background: transparent; color: #f85149; cursor: pointer; } .fb-capture-error { color: var(--fb-danger, #f85149) !important; } .fb-evidence-approval { display: flex; align-items: flex-start; gap: 8px; margin: 7px 0; font-size: 12px; } .fb-evidence-approval input { margin-top: 2px; }
 .fb-textarea:focus-visible { border-color: var(--fb-accent, #58a6ff); outline: none; } .fb-btn { padding: 8px 16px; border: 1px solid var(--fb-border, #30363d); border-radius: 8px; background: transparent; color: var(--fb-fg, #f0f6fc); font: 700 13px/1 inherit; cursor: pointer; }
 .fb-btn-primary { border-color: var(--fb-accent, #58a6ff); background: #1f6feb; color: #fff; } .fb-btn-primary:hover, .fb-btn-primary:focus-visible { background: #388bfd; outline: none; } .fb-btn:disabled { opacity: 0.4; cursor: default; }
 .fb-verdict { margin: 0 0 12px; font-size: 13px; font-weight: 700; } .fb-verdict[data-ok="false"] { color: var(--fb-danger, #f85149); } .fb-verdict[data-ok="true"] { color: var(--fb-success, #3fb950); }
