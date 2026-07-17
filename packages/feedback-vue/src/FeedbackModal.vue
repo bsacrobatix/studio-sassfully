@@ -10,6 +10,7 @@ const props = defineProps({
   router: { type: Object, required: true },
   context: { default: undefined },
   captureProviders: { type: Array, default: () => [] },
+  autoCapture: { type: Array, default: () => [] },
 });
 const emit = defineEmits(["close", "submitted"]);
 const reporter = useFeedbackReporter(props);

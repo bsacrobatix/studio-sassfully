@@ -43,3 +43,32 @@ test("controller keeps capture failures local and visible", async () => {
   assert.deepEqual(await reporter.capture("broken"), []);
   assert.match(reporter.state.captureError, /capture unavailable/);
 });
+
+test("controller auto-captures listed providers as soon as a draft exists", async () => {
+  let calls = 0;
+  const reporter = createFeedbackReporter({
+    anchorFor: () => ({ producer: "host", artifactId: "item" }),
+    manifest: createPrivacyManifest({ fields }),
+    router: createRouter({ sinks: [bundleSink()] }),
+    captureProviders: [{ id: "replay", label: "Replay", async capture() { calls += 1; return { kind: "replay", label: "Replay", payload: { events: [] }, contentType: "application/json" }; } }],
+    autoCapture: ["replay", "unregistered-id"],
+  });
+  reporter.choose("bug");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(calls, 1);
+  assert.equal(reporter.state.draft.evidence.length, 1);
+});
+
+test("controller does not auto-capture providers absent from autoCapture", async () => {
+  let calls = 0;
+  const reporter = createFeedbackReporter({
+    anchorFor: () => ({ producer: "host", artifactId: "item" }),
+    manifest: createPrivacyManifest({ fields }),
+    router: createRouter({ sinks: [bundleSink()] }),
+    captureProviders: [{ id: "screenshot", async capture() { calls += 1; return { kind: "screenshot", label: "s", payload: {} }; } }],
+  });
+  reporter.choose("bug");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(calls, 0);
+  assert.equal(reporter.state.draft.evidence.length, 0);
+});
