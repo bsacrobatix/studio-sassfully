@@ -59,6 +59,30 @@ test("controller auto-captures listed providers as soon as a draft exists", asyn
   assert.equal(reporter.state.draft.evidence.length, 1);
 });
 
+test("controller pre-approves upload for items from an autoApprove provider", async () => {
+  const reporter = createFeedbackReporter({
+    anchorFor: () => ({ producer: "host", artifactId: "item" }),
+    manifest: createPrivacyManifest({ fields }),
+    router: createRouter({ sinks: [bundleSink()] }),
+    captureProviders: [{ id: "replay", autoApprove: true, async capture() { return { kind: "replay", label: "Replay", payload: { events: [] } }; } }],
+  });
+  reporter.choose("bug");
+  await reporter.capture("replay");
+  assert.equal(reporter.state.draft.evidence[0].uploadApproved, true);
+});
+
+test("controller leaves upload unapproved when a provider omits autoApprove", async () => {
+  const reporter = createFeedbackReporter({
+    anchorFor: () => ({ producer: "host", artifactId: "item" }),
+    manifest: createPrivacyManifest({ fields }),
+    router: createRouter({ sinks: [bundleSink()] }),
+    captureProviders: [{ id: "screenshot", async capture() { return { kind: "screenshot", label: "s", payload: {} }; } }],
+  });
+  reporter.choose("bug");
+  await reporter.capture("screenshot");
+  assert.equal(reporter.state.draft.evidence[0].uploadApproved, false);
+});
+
 test("controller does not auto-capture providers absent from autoCapture", async () => {
   let calls = 0;
   const reporter = createFeedbackReporter({
