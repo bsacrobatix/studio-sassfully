@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Sassfully Feedback",
+  "version": "0.1.0",
+  "description": "Zero-integration contextual feedback: rrweb replay and browser telemetry, reviewed before anything leaves your browser.",
+  "background": { "service_worker": "background.mjs", "type": "module" },
+  "action": { "default_popup": "popup/popup.html", "default_title": "Sassfully feedback" },
+  "options_page": "options/options.html",
+  "permissions": ["storage", "scripting", "activeTab", "tabs"],
+  "optional_host_permissions": ["<all_urls>"],
+  "web_accessible_resources": [
+    { "resources": ["content/*", "vendor/*"], "matches": ["<all_urls>"] }
+  ]
+}

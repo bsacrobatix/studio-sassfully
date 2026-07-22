@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Sassfully — settings</title>
+  <style>
+    body { font: 14px/1.5 system-ui, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #222; }
+    label { display: block; margin: 12px 0 4px; font-weight: 600; }
+    input { width: 100%; box-sizing: border-box; padding: 6px; }
+    button { margin-top: 16px; padding: 8px 14px; cursor: pointer; }
+    .muted { color: #666; font-size: 12px; }
+    .saved { color: #2e7d32; }
+  </style>
+</head>
+<body>
+  <h1>Sassfully settings</h1>
+  <p class="muted">Feedback is local-first: reviewed bundles stay in this browser until you push or export them. Configure an intake to enable pushing.</p>
+  <label for="url">Intake bundle URL</label>
+  <input id="url" placeholder="https://feedback.example/api/feedback">
+  <label for="evidenceUrl">Intake evidence URL (optional)</label>
+  <input id="evidenceUrl" placeholder="https://feedback.example/api/feedback/evidence">
+  <button id="save">Save</button>
+  <span id="status"></span>
+  <script type="module" src="options.mjs"></script>
+</body>
+</html>

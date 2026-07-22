@@ -2,6 +2,8 @@
 .artifacts/
 .worktrees/
 node_modules/
+# Rebuilt by feedback-extension's build smoke test on every run
+packages/feedback-extension/dist/
 # Kitsoki local runtime
 .kitsoki.local.yaml
 .kitsoki/sessions/

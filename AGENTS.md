@@ -24,15 +24,72 @@ belong in `.context/`, never in tracked files.
   `reference-transaction` git hook blocks branch switches and off-tip detaches
   here. All implementation work happens in branch worktrees:
   `git worktree add .worktrees/<name> -b <branch> main`.
-- **Landing path.** Land a clean branch with `scripts/merge-to-main.sh <branch>`
-  (fast-forward only), or `scripts/land-branch.sh <branch> [--gate "<cmd>"]`
-  when main has advanced. When tracked main work overlaps a feature, use
-  `scripts/integrate-branch.sh <branch> --auto-resolve --resolver-command <cmd> --promote`;
-  it snapshots the work on a recovery branch and resolves only in an isolated
-  integration worktree. No direct-to-main commits, including docs.
+- **Agent-layer guard.** `.claude/hooks/block-bare-checkout.sh`, wired via
+  `.claude/settings.json` `PreToolUse` on the `Bash` matcher, blocks the same
+  bare `git checkout`/`git switch` off `main` from an agent's tool calls —
+  the companion to `reference-transaction` for the Claude Code agent layer.
+- **Capsule creation:** use `codex superagent` or `kitsoki capsule workspace
+  create-script --project <repo> --id <id> --owner <owner> --json`. Do not use
+  short-form `scripts/dev-workspace.sh create`; it is blocked because it
+  creates a legacy clone without the Capsule-control identity required by
+  Capsule CI and promotion.
+- **Promotion path.** From a managed Capsule, run
+  `scripts/promote-to-main.sh` with no branch argument. It publishes an
+  immutable source candidate, reuses a valid passed exact-SHA Capsule CI
+  receipt (or runs it once), submits the exact SHA plus
+  receipt to the durable queue, prints its queue identity, and exits; agents
+  must not wait on a promotion lock. In the primary checkout, the long-lived
+  `scripts/process-promotion-queue.sh` worker owns retries, conflict
+  integration, the full prospective-tree gate, and protected-main CAS.
+  A successful queue admission auto-starts that worker (`--watch`) when none
+  is alive, so a queued candidate never sits unprocessed
+  (`POG_PROMOTION_NO_AUTOSTART=1` opts out). A persistently red head is
+  parked as `needs_input` after bounded retries (`POG_PROMOTION_MAX_ATTEMPTS`,
+  default 5) — loudly, with retained evidence — rather than blocking every
+  later candidate forever. A (tree, gate) pair already validated green is
+  memoized in `.artifacts/gate-receipts/`, so a duplicate submission of an
+  already-landed candidate revalidates in seconds instead of re-running the
+  full gate (`POG_LANDING_GATE_MEMO=0` opts out; a red gate is never skipped).
+  For a blocked operational emergency, submit with
+  `scripts/promote-to-main.sh --emergency` or mark an already admitted item
+  using `scripts/mark-promotion-emergency.sh <candidate-id-or-sha>`. Emergency
+  candidates precede normal FIFO but are FIFO among themselves; they never
+  interrupt a running gate or bypass the final protected-main CAS.
+  **Human-only test waiver:** agents must never invoke `--skip-tests`, pass
+  `--gate ':'`, or describe a waived promotion as tested. When a production or
+  similarly time-critical incident requires the exception, stop and give the
+  responsible human this exact instruction: **“I cannot waive promotion tests.
+  Run this yourself only for an emergency, after accepting that both the
+  Capsule and prospective-tree gate commands will be `:`:
+  `scripts/promote-to-main.sh --emergency --skip-tests`.”** This keeps the
+  receipt-bound immutable candidate, durable waiver record, emergency FIFO,
+  integration, and protected-main CAS, but it does not execute the configured
+  gate at either test point. The human owns the waiver decision and follow-up
+  validation.
+  Candidate/integration refs and failure logs remain retained for retry;
+  Capsule-local `main` never moves. `POG_PROMOTION_LEGACY_DIRECT=1` is only
+  migration compatibility for already-running promotions. No direct commits
+  to `main`, including docs.
+  **Promotion completion:** a commit, immutable ref, running Capsule-CI job,
+  or `queued` state is not completion. For the exact candidate, use
+  `scripts/promotion-status.sh --candidate <id-or-sha> --json` before a retry
+  or worker invocation and follow its `next_action`. Do not start duplicate
+  Capsule CI or workers while it reports an active exact-candidate receipt or
+  queue worker. Continue until `landed` (and verify ancestry on protected
+  `main`), or stop with the durable `retry_wait`/`needs_input` evidence and
+  required human action. Details: `docs/promotion-operations.md`.
 - **Private-by-default folders** (all gitignored, never committed):
   `.context/` transient working markdown, `.artifacts/` generated review and
   build output, `.worktrees/` branch worktrees.
+- **Durable agent reports.** For implementation, investigation, or review work
+  that spans more than one substantive step, create
+  `.context/agent-reports/<task-or-branch>.md` when work begins and update it
+  at meaningful milestones. Record scope, decisions, changed paths, commands
+  and outcomes, and blockers there while context is still available. At handoff
+  or completion, return the report path plus compact status/gate facts; never
+  make a long prose report a required final structured response. Report files
+  are private working artifacts and must not be committed unless explicitly
+  requested.
 - **Validation:** `scripts/checks.sh` must exit 0 before landing.
 - **Testing rule:** no live LLM calls in tests or CI — cassettes, flows, and
   mocks only.

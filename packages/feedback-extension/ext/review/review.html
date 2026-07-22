@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Sassfully — review before submit</title>
+  <style>
+    body { font: 14px/1.5 system-ui, sans-serif; margin: 0 auto; max-width: 760px; padding: 24px; color: #222; }
+    h1 { font-size: 18px; }
+    pre { background: #f5f5f5; padding: 12px; border-radius: 6px; overflow-x: auto; }
+    .evidence { border: 1px solid #ddd; border-radius: 6px; padding: 10px; margin: 8px 0; }
+    .evidence label { display: flex; gap: 8px; align-items: baseline; }
+    .violations { color: #c62828; }
+    .receipt { color: #2e7d32; }
+    button { padding: 8px 14px; margin-right: 8px; cursor: pointer; }
+    .muted { color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>Review your feedback</h1>
+  <p class="muted">Only this lean bundle is submitted. Raw evidence stays in this browser unless you approve an item below; approved items upload only after the bundle lands.</p>
+  <div id="app">Loading draft…</div>
+  <script type="module" src="review.mjs"></script>
+</body>
+</html>

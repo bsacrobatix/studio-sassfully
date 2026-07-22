@@ -1,0 +1,12 @@
+{
+  "name": "@sassfully/feedback-extension",
+  "version": "0.1.0",
+  "description": "Zero-integration browser-extension mode: rrweb recording ring, browser telemetry relay, host-SDK enrichment bridge, and a local-first reviewed-bundle store.",
+  "type": "module",
+  "main": "src/index.mjs",
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test test/*.test.mjs"
+  }
+}

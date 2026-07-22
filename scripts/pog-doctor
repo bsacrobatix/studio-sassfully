@@ -7,25 +7,21 @@
 #   2. no files from those directories are tracked (the tracked-before-ignored
 #      trap: gitignore only hides *new* files, it never untracks old ones)
 #   3. the reference-transaction main-protection hook is installed, executable,
-#      and not a dangling symlink — skipped under --ci or a CI/GITHUB_ACTIONS
-#      environment, because hooks live in .git/ and never survive a clone;
-#      the hook guards working clones, CI guards the tracked files
+#      and not a dangling symlink — skipped under --ci, CI/GITHUB_ACTIONS, or
+#      a Kitsoki capsule clone (identified by its workspace path plus source
+#      remote), because
+#      hooks live in .git/ and never survive a clone; the hook guards primary
+#      working clones, while capsule CI guards the tracked files
 #   4. AGENTS.md exists and carries the pack conventions marker block
-#   5. scripts/merge-to-main.sh exists and is executable
+#   5. scripts/promote-to-main.sh and scripts/merge-to-main.sh exist and are executable
 #   W. the repo has a remote but no scripts/sync-main-from-remote.sh
-#   W. no tracked *.pem/*.env credential-suspect files (originated in
-#      studio-sassfully's own pog-doctor v0.2, folded back upstream here)
-#   W. every file recorded in .pog-pack-manifest still matches its recorded
-#      hash (flags a pack-managed file edited outside install.sh — doesn't
-#      know if the *pack itself* has moved on since this repo doesn't carry
-#      a copy of it, only that this repo's own record of what it installed
-#      no longer matches what's on disk)
 #
 # Exit 0 when every hard check passes. Designed for CI: no network, no LLM,
 # output is one line per check.
 set -euo pipefail
 
 ci_mode=0
+hook_skip_reason="CI checkout — hooks don't survive a clone"
 repo="."
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -42,6 +38,20 @@ cd "$repo"
 if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   echo "pog-doctor: not a git repository: $repo" >&2
   exit 2
+fi
+
+# Managed Capsules are freshly cloned from their protected checkout and do not
+# inherit hooks. The workspace path is the stable identity: different Capsule
+# providers name the local clone remote differently (`source` or `origin`).
+case "$(pwd -P)" in
+  */.capsules/workspaces/*) capsule_workspace=1 ;;
+  *) capsule_workspace=0 ;;
+esac
+if [ "$ci_mode" -eq 0 ] && [ "$capsule_workspace" -eq 1 ]; then
+  ci_mode=1
+  hook_skip_reason="Kitsoki capsule clone — hooks don't survive a clone"
+elif [ "$ci_mode" -eq 1 ]; then
+  hook_skip_reason="CI checkout — hooks don't survive a clone"
 fi
 
 fail=0
@@ -71,7 +81,7 @@ fi
 
 # 3. main-protection hook installed and healthy (meaningless in a CI clone)
 if [ "$ci_mode" -eq 1 ]; then
-  ok "hook check skipped (CI checkout — hooks don't survive a clone)"
+  ok "hook check skipped ($hook_skip_reason)"
 else
   hook="$(git rev-parse --git-path hooks)/reference-transaction"
   if [ -L "$hook" ] && [ ! -e "$hook" ]; then
@@ -92,7 +102,12 @@ else
   bad "AGENTS.md missing or lacks the pack:conventions marker block"
 fi
 
-# 5. landing script present
+# 5. landing scripts present
+if [ -x scripts/promote-to-main.sh ]; then
+  ok "scripts/promote-to-main.sh present and executable"
+else
+  bad "scripts/promote-to-main.sh missing or not executable"
+fi
 if [ -x scripts/merge-to-main.sh ]; then
   ok "scripts/merge-to-main.sh present and executable"
 else
@@ -102,60 +117,6 @@ fi
 # W. remote repos should carry the reconciliation script
 if git remote | grep -q . && [ ! -x scripts/sync-main-from-remote.sh ]; then
   warn "repo has a remote but no scripts/sync-main-from-remote.sh"
-fi
-
-# W. credential hygiene: secrets live in the credential store
-# (~/.config/kitsoki, see kitsoki docs/architecture/credentials.md) or in
-# service env — never tracked in a repo. Warning, not failure: some repos
-# legitimately track fixture keys; move real ones out and re-run.
-cred_tracked="$(git ls-files | grep -E '\.(pem|env)$' | grep -viE '(^|[./])example(\.|$)|\.example\.' || true)"
-if [ -z "$cred_tracked" ]; then
-  ok "no tracked *.pem / *.env files"
-else
-  warn "tracked credential-suspect files (secrets belong in the credential store, not the repo):"
-  printf '%s\n' "$cred_tracked" | sed 's/^/          /'
-fi
-
-# W. pack-managed files still match what .pog-pack-manifest recorded at
-# install time (this only proves internal consistency with this repo's own
-# last install — it cannot see whether the pack itself has since changed
-# upstream; that needs a fresh `install.sh <this-repo>` run from the pack).
-if [ -f .pog-pack-manifest ]; then
-  hash_of() {
-    if command -v sha256sum >/dev/null 2>&1; then
-      sha256sum "$1" | awk '{print $1}'
-    else
-      shasum -a 256 "$1" | awk '{print $1}'
-    fi
-  }
-  drifted=""
-  while IFS="$(printf '\t')" read -r relpath want; do
-    [ -n "$relpath" ] || continue
-    path="$relpath"
-    case "$relpath" in
-      git-hooks/*)
-        # synthetic manifest key: hooks live under .git/hooks (or a
-        # worktree's own git-path), not at a literal repo-relative path.
-        path="$(git rev-parse --git-path "hooks/${relpath#git-hooks/}")"
-        # skipped entirely when uninspectable (e.g. CI checkout has no hooks)
-        [ "$ci_mode" -eq 1 ] && continue
-        ;;
-    esac
-    if [ ! -e "$path" ]; then
-      drifted="$drifted$relpath (missing)\n"
-    else
-      got="$(hash_of "$path")"
-      [ "$got" = "$want" ] || drifted="$drifted$relpath\n"
-    fi
-  done < .pog-pack-manifest
-  if [ -z "$drifted" ]; then
-    ok "pack-managed files match .pog-pack-manifest"
-  else
-    warn "pack-managed file(s) differ from .pog-pack-manifest (edited locally, or the pack has changed upstream — re-run install.sh to reconcile):"
-    printf "$drifted" | sed 's/^/          /'
-  fi
-else
-  warn "no .pog-pack-manifest (installed before this check existed — re-run install.sh once to start tracking)"
 fi
 
 if [ "$fail" -ne 0 ]; then

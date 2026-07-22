@@ -26,6 +26,9 @@ catalog:
       - id: source-rich-evidence-sidecars
         kind: document
         path: docs/requirements/rich-evidence-sidecars.md
+      - id: source-extension-mode
+        kind: document
+        path: docs/requirements/extension-mode.md
       - id: source-kitsoki-feedback-proposal
         kind: external-document
         path: "../Kitsoki/docs/proposals/generic-feedback-sdk-slidey-reports.md"
@@ -528,7 +531,7 @@ nodes:
   - schema: sassfully/requirement/v0
     id: req-http-sink
     title: Reviewed bundles can submit to an HTTP intake
-    status: in-progress
+    status: implemented
     visibility: public
     summary: A reusable HTTP sink POSTs reviewed bundles with idempotency preserved and surfaces transport failures for safe retry.
     sources: [source-slidey-brief]
@@ -615,7 +618,14 @@ nodes:
     sources: [source-concept]
     edges:
       part_of: [product-sassfully]
-      acceptance: [req-ai-actionable-bundle, req-multi-sink-routing, req-sink-lifecycle-ops, req-idempotent-submission, req-ai-triage-narrative]
+      acceptance:
+        - req-ai-actionable-bundle
+        - req-multi-sink-routing
+        - req-sink-lifecycle-ops
+        - req-idempotent-submission
+        - req-ai-triage-narrative
+        - req-env-sink-routing
+        - req-fix-loop-outcome
     journey:
       - A PM reviewing a catalog/portal surface (a node, a changeset diff, a deliverable) spots something worth flagging.
       - Annotates in place via the same widget (host = the POG portal itself, dogfooding its own feedback channel — feature-pm-portal).
@@ -790,7 +800,7 @@ nodes:
     title: capture-dom
     status: planned
     visibility: public
-    summary: Optional DOM/screenshot/rrweb capture providers.
+    summary: Optional DOM/screenshot capture providers for integrated hosts; the rrweb provider lands via comp-recording-ring, shared with extension mode.
     sources: [source-slidey-brief]
     edges:
       part_of: [product-sassfully]
@@ -864,8 +874,21 @@ nodes:
     sources: [source-slidey-brief]
     edges:
       part_of: [product-sassfully]
-      requirements: [req-generic-kinds, req-capture-review-submit, req-privacy-fail-closed, req-idempotent-submission, req-submission-context, req-http-sink]
-      use_cases: [uc-deck-feedback, uc-product-site-feedback]
+      requirements:
+        - req-generic-kinds
+        - req-capture-review-submit
+        - req-privacy-fail-closed
+        - req-idempotent-submission
+        - req-submission-context
+        - req-http-sink
+        - req-producer-owned-anchors
+        - req-raw-drafts-stay-local
+        - req-multi-sink-routing
+      use_cases:
+        - uc-deck-feedback
+        - uc-product-site-feedback
+        - uc-bug-report-with-replay
+        - uc-pm-portal-feedback
   - schema: sassfully/component/v0
     id: comp-kitsoki-adapter
     title: kitsoki compatibility adapter
@@ -1080,6 +1103,116 @@ nodes:
           status: complete
       status: complete
       story: stories/materialize-doc
+  # --- extension mode (zero-integration capture; see source-extension-mode) ---
+  - schema: sassfully/requirement/v0
+    id: req-zero-integration-capture
+    title: Extension captures only on explicitly user-enabled origins
+    status: draft
+    visibility: public
+    summary: The browser extension observes a page only after the user enables that origin. Enablement is per-origin, stored locally, never synced or transmitted by default. Non-enabled origins get no injection and no recording; disabling stops capture immediately and clears the ring.
+    sources: [source-extension-mode]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-ext-bug-report]
+  - schema: sassfully/requirement/v0
+    id: req-recording-visibility
+    title: Recording state is always visibly truthful
+    status: draft
+    visibility: public
+    summary: "The browser-action badge reflects the focused tab's capture state at all times: distinct states for rolling buffer, on-demand recording, bridged-to-host-SDK, and off. The popup states the same fact in words. No configuration allows capture without the badge saying so."
+    sources: [source-extension-mode]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-ext-bug-report]
+  - schema: sassfully/requirement/v0
+    id: req-ext-bridge-enrich
+    title: Extension enriches a detected host SDK instead of competing with it
+    status: draft
+    visibility: public
+    summary: A versioned same-origin postMessage handshake (sassfully-ext/bridge/v1) lets the extension offer its evidence providers to a page's integrated SDK. On acceptance the host's anchors, manifest, review, and sinks own the flow, and the extension's standalone UI never activates on that page. Hosts opt in via a small feedback-core helper; hosts that do nothing see no change.
+    sources: [source-extension-mode]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-ext-bug-report]
+  - schema: sassfully/requirement/v0
+    id: req-local-first-sink
+    title: Extension feedback is local-first with opt-in remote intake
+    status: draft
+    visibility: public
+    summary: Reviewed bundles and approved sidecars persist to extension-local storage and export to files. Remote submission requires the user to configure an intake URL and explicitly push stored bundles through the existing httpSink/intake contract. Nothing leaves the device otherwise.
+    sources: [source-extension-mode]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-ext-bug-report]
+  - schema: sassfully/requirement/v0
+    id: req-sidecar-chunking
+    title: Oversized sidecars chunk into individually approved items
+    status: draft
+    visibility: public
+    summary: A replay clip larger than the sidecar transport cap splits into ordered replay-chunk i/N items sharing a clipId, each with its own digest, each individually reviewable and approvable, each under the cap. Chunking is transport-only; per-item review semantics are unchanged.
+    sources: [source-extension-mode, source-rich-evidence-sidecars]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-ext-bug-report, uc-bug-report-with-replay]
+  - schema: sassfully/use-case/v0
+    id: uc-ext-bug-report
+    title: Zero-integration bug report via the browser extension
+    status: draft
+    visibility: public
+    summary: A user on an arbitrary site enables the sassfully extension, reproduces a bug with the rolling buffer on, and files a bug carrying a trailing replay clip and telemetry through capture -> review -> submit, with nothing integrated by the site.
+    sources: [source-extension-mode]
+    edges:
+      part_of: [product-sassfully]
+      acceptance: [req-zero-integration-capture, req-recording-visibility, req-ext-bridge-enrich, req-local-first-sink, req-sidecar-chunking, req-capture-review-submit, req-privacy-fail-closed, req-producer-owned-anchors, req-host-policy-gates-evidence]
+    journey:
+      - User enables sassfully-ext for the site's origin; the badge shows the rolling buffer is on.
+      - A bug happens; the user opens the capture overlay (or the extension popup), picks the bug kind, optionally picks the element (bbox), and writes what went wrong.
+      - The ring freezes a trailing-window replay snapshot plus network/console/error telemetry as draft evidence.
+      - A dedicated review page shows the lean reviewed payload and per-item upload approvals; the extension's own privacy manifest gates submission fail-closed.
+      - The reviewed bundle lands in the local store; the user exports it, or pushes it to a configured intake, chunked replay sidecars following the bundle receipt.
+    outcome: A reviewed, privacy-gated bug report with replay evidence from a site that never integrated sassfully.
+    for_persona: Anyone reporting a bug on a site they use but do not control — QA engineers, support staff, dogfooding teams.
+  - schema: sassfully/component/v0
+    id: comp-extension
+    title: feedback-extension (MV3 shell)
+    status: in-progress
+    visibility: public
+    summary: Chrome MV3 extension shell — background service worker with per-origin enablement and badge state machine, content scripts (isolated + MAIN world), capture overlay, dedicated review page, popup/options, local store, copy-script build with vendored rrweb.
+    sources: [source-extension-mode]
+    edges:
+      part_of: [product-sassfully]
+      satisfies: [req-zero-integration-capture, req-recording-visibility, req-local-first-sink]
+  - schema: sassfully/component/v0
+    id: comp-recording-ring
+    title: recording-ring
+    status: in-progress
+    visibility: public
+    summary: Bounded rrweb/telemetry ring — event and byte budgets, full-snapshot checkout eviction invariant, freeze-on-attach trailing-window snapshots, and sidecar chunking. Pure browser-free .mjs.
+    sources: [source-extension-mode, source-rich-evidence-sidecars]
+    edges:
+      part_of: [product-sassfully]
+      satisfies: [req-host-policy-gates-evidence, req-sidecar-chunking]
+  - schema: sassfully/component/v0
+    id: comp-ext-bridge
+    title: ext-bridge
+    status: in-progress
+    visibility: public
+    summary: The sassfully-ext/bridge/v1 protocol — extension endpoint and the feedback-core host helper hosts opt in with.
+    sources: [source-extension-mode]
+    edges:
+      part_of: [product-sassfully]
+      satisfies: [req-ext-bridge-enrich, req-standalone-and-embedded]
+  - schema: sassfully/feature/v0
+    id: feature-extension-mode
+    title: Extension mode
+    status: in-progress
+    visibility: public
+    summary: Zero-integration browser-extension capture — rrweb replay and browser telemetry on user-enabled sites, filed through the same reviewed pipeline, enriching the integrated SDK when one is present.
+    sources: [source-extension-mode]
+    edges:
+      part_of: [product-sassfully]
+      requirements: [req-zero-integration-capture, req-recording-visibility, req-ext-bridge-enrich, req-local-first-sink, req-sidecar-chunking]
+      use_cases: [uc-ext-bug-report, uc-bug-report-with-replay]
   - id: cs-1
     operations:
       - changes:
@@ -3016,9 +3149,11 @@ nodes:
         kind: modified
         node: uc-pm-portal-feedback
     schema: graph/changeset/v1
-    status: proposed
+    status: notified
     title: 'Portal feedback loop (POG 2.4b): env-aware sink routing + fix-loop outcome requirements'
     visibility: internal
+    authorized_at: "2026-07-14T11:28:28Z"
+    applied_at: "2026-07-14T11:28:29Z"
   - authored_by: pog-gitflow-brief
     created_at: "2026-07-13T06:50:48Z"
     id: cs-48
@@ -3031,10 +3166,12 @@ nodes:
         kind: modified
         node: req-http-sink
     schema: graph/changeset/v1
-    status: proposed
+    status: notified
     summary: 'httpSink is upstream in packages/feedback-core/src/sinks.mjs (landed in commit 5bd60af, byte-identical to slidey''s vendored copy, so a vendor re-sync is a no-op); receipt contract — reviewed bundle POSTed as JSON, {ref} receipt passthrough, non-2xx surfaced for idempotent retry, string-ref validation, constructor guards — pinned green in packages/feedback-core/test/unit.test.mjs. Evidence: commits 5bd60af (implementation + base tests) and 2310ac6 (receipt-validation/constructor-guard pins). F0 of POG''s portal-feedback plan.'
     title: 'req-http-sink: implemented — httpSink upstreamed in feedback-core with contract tests (F0)'
     visibility: internal
+    authorized_at: "2026-07-14T11:28:36Z"
+    applied_at: "2026-07-14T11:28:37Z"
   - authored_by: pog-gitflow-brief
     created_at: "2026-07-13T06:50:48Z"
     id: cs-49
@@ -3074,11 +3211,12 @@ nodes:
         kind: modified
         node: feature-feedback-core
     schema: graph/changeset/v1
-    status: proposed
+    status: notified
     summary: 'cs-4 authored feature-feedback-core with use_cases [uc-bug-report-with-replay, uc-pm-portal-feedback] and requirements including req-producer-owned-anchors, req-raw-drafts-stay-local, req-multi-sink-routing; commit 5bd60af independently re-authored the node from scratch on a branch that lacked the cs-4-materialized copy, and the f49a9c2 reconcile kept 5bd60af''s node body verbatim without unioning edge sets. This changeset restores the union; proposed only — not applied to the node.'
     title: 'Restore cs-4 edges on feature-feedback-core clobbered by independent re-authoring in 5bd60af (never unioned at f49a9c2 reconcile)'
     visibility: internal
-
+    authorized_at: "2026-07-14T11:28:32Z"
+    applied_at: "2026-07-14T11:28:33Z"
   - authored_by: brad-task-authorization
     authorized_at: "2026-07-14T00:00:00Z"
     applied_at: "2026-07-14T00:00:00Z"
@@ -3135,4 +3273,230 @@ nodes:
     schema: graph/changeset/v1
     status: applied
     title: "SASS-CAT: reconcile opt-in capture and approved sidecars with pinned history"
+    visibility: internal
+  - authored_by: extension-mode-plan
+    created_at: "2026-07-20T00:00:00Z"
+    authorized_at: "2026-07-20T00:00:00Z"
+    applied_at: "2026-07-20T00:00:00Z"
+    id: cs-52
+    operations:
+      - kind: added
+        after: [req-zero-integration-capture, req-recording-visibility, req-ext-bridge-enrich, req-local-first-sink, req-sidecar-chunking, uc-ext-bug-report, comp-extension, comp-recording-ring, comp-ext-bridge, feature-extension-mode]
+      - kind: modified
+        node: comp-capture-dom
+        changes:
+          - path: [summary]
+            before: Optional DOM/screenshot/rrweb capture providers.
+            after: Optional DOM/screenshot capture providers for integrated hosts; the rrweb provider lands via comp-recording-ring, shared with extension mode.
+    schema: graph/changeset/v1
+    status: applied
+    summary: "Extension mode (docs/requirements/extension-mode.md): zero-integration Chrome MV3 capture — per-origin opt-in rolling buffer + on-demand rrweb recording with truthful badge state, browser telemetry, standalone producer anchors under the extension's own fail-closed manifest, local-first sink with opt-in intake push, sidecar chunking under the transport cap, and a detect+enrich bridge that feeds providers into an integrated host SDK instead of competing with it. Implementation lands as packages/feedback-extension plus a feedback-core host-bridge helper."
+    title: "Extension mode: zero-integration capture, recording visibility, local-first sink, chunked sidecars, host-SDK enrichment bridge"
+    visibility: internal
+  - edges:
+      motivated_by:
+        - uc-pm-portal-feedback
+        - uc-product-site-feedback
+      part_of:
+        - product-sassfully
+    id: req-env-sink-routing
+    schema: sassfully/requirement/v0
+    sources:
+      - source-concept
+    status: draft
+    summary: 'The widget selects its sink set from the serving environment — hostname heuristic with an injected host-config override — so the same embed posts to a local intake in dev and an httpSink endpoint when hosted, without per-host forks. First consumer: the POG portal (POG .context/portal-sassfully-feedback-plan.md, D-F1); feedback report 01KXD22YE5T1FW7TFX1DY4Q81X covers the httpSink upstreaming this depends on (req-http-sink).'
+    title: Environment-aware sink selection (hostname heuristic + injected config override)
+    visibility: public
+  - edges:
+      motivated_by:
+        - uc-pm-portal-feedback
+      part_of:
+        - product-sassfully
+    id: req-fix-loop-outcome
+    schema: sassfully/requirement/v0
+    sources:
+      - source-concept
+    status: draft
+    summary: 'A filed bundle can carry/receive a fix-loop outcome: the host dispatches the bundle to a fix flow (e.g. an embedded agent chat), and the resulting outcome — fixed with receipt, declined, deferred — is recordable against the bundle ref so the loop is auditable end to end. First consumer: the POG portal fix-it-now loop (portal-feedback-fixer story); generalizes uc-pm-portal-feedback''s ai_instruction outcome beyond authoring flows.'
+    title: Filed bundles support a recordable fix-loop outcome
+    visibility: public
+  - authored_by: pog-gitflow-brief
+    created_at: "2026-07-16T07:28:38Z"
+    id: cs-55b8cd082415e64fb39ff5c1627f30f2
+    operations:
+      - after:
+          edges:
+            motivated_by:
+              - uc-modal-rich-evidence-attachment
+            part_of:
+              - product-sassfully
+          fields:
+            summary: When a host enables a capture capability, the feedback modal exposes a deliberate attach action for it and a reviewable evidence row showing kind, label, digest, content type, byte size, and upload decision. It must support screenshot, HAR/network summary, rrweb replay, console, and error evidence through provider interfaces without making any one format required. Disabled capabilities are absent or precisely explained; raw payload is not rendered into the reviewed bundle; every sidecar upload remains unchecked until the reviewer approves that item.
+          id: req-modal-rich-evidence-controls
+          schema: sassfully/requirement/v0
+          sources:
+            - source-rich-evidence-sidecars
+          status: draft
+          title: The feedback modal makes enabled evidence capture reviewable
+          visibility: public
+        kind: added
+      - after:
+          edges:
+            acceptance:
+              - req-modal-rich-evidence-controls
+              - req-host-policy-gates-evidence
+              - req-reviewed-sidecar-lifecycle
+              - req-capture-time-sidecar-privacy
+              - req-sidecar-intake-safety
+            part_of:
+              - product-sassfully
+          fields:
+            journey:
+              - A host opts into bounded local capture providers and the user opens the generic feedback modal.
+              - The modal offers only enabled capture types; the user attaches a snapshot and can remove it before review.
+              - Review lists metadata and an unchecked upload decision per attachment; raw payload stays local unless that item is approved.
+              - The reviewed bundle submits first, then approved sidecars upload; failed or unsupported uploads show a non-blocking retryable result.
+            outcome: The recipient gets a lean reviewed feedback bundle plus only the evidence the user approved, without requiring a Kitsoki-specific bug-report UI.
+            stakes: 'This is the generalization boundary for Kitsoki browser evidence capture: provider capabilities and modal review controls belong in Sassfully, while product-specific ticketing and server behavior remain adapters.'
+            summary: A host-app user reports a problem and intentionally selects locally captured screenshot, HAR/network summary, replay, console, or error evidence that should accompany reviewed feedback.
+          id: uc-modal-rich-evidence-attachment
+          schema: sassfully/use-case/v0
+          sources:
+            - source-rich-evidence-sidecars
+          status: draft
+          title: Attach rich evidence from a host feedback modal
+          visibility: public
+        kind: added
+      - changes:
+          - after:
+              - req-capture-review-submit
+              - req-privacy-fail-closed
+              - req-submission-context
+              - req-modal-rich-evidence-controls
+            before:
+              - req-capture-review-submit
+              - req-privacy-fail-closed
+              - req-submission-context
+            path:
+              - edges
+              - satisfies
+          - after: Vue 3 feedback modal and composable binding the host-neutral core machine, including host-enabled evidence attachment and per-sidecar review controls.
+            before: Vue 3 feedback modal and composable binding the host-neutral core machine.
+            path:
+              - fields
+              - summary
+        kind: modified
+        node: comp-feedback-vue
+      - changes:
+          - after:
+              - req-host-policy-gates-evidence
+              - req-modal-rich-evidence-controls
+            before:
+              - req-host-policy-gates-evidence
+            path:
+              - edges
+              - satisfies
+          - after: Optional, host-policy-gated DOM capture providers for screenshots, HAR/network summaries, rrweb replay, console, and error snapshots.
+            before: Optional DOM/screenshot/rrweb capture providers.
+            path:
+              - fields
+              - summary
+        kind: modified
+        node: comp-capture-dom
+      - changes:
+          - after:
+              - req-generic-kinds
+              - req-capture-review-submit
+              - req-privacy-fail-closed
+              - req-idempotent-submission
+              - req-submission-context
+              - req-http-sink
+              - req-producer-owned-anchors
+              - req-raw-drafts-stay-local
+              - req-multi-sink-routing
+              - req-modal-rich-evidence-controls
+            before:
+              - req-generic-kinds
+              - req-capture-review-submit
+              - req-privacy-fail-closed
+              - req-idempotent-submission
+              - req-submission-context
+              - req-http-sink
+              - req-producer-owned-anchors
+              - req-raw-drafts-stay-local
+              - req-multi-sink-routing
+            path:
+              - edges
+              - requirements
+          - after:
+              - uc-deck-feedback
+              - uc-product-site-feedback
+              - uc-bug-report-with-replay
+              - uc-pm-portal-feedback
+              - uc-modal-rich-evidence-attachment
+            before:
+              - uc-deck-feedback
+              - uc-product-site-feedback
+              - uc-bug-report-with-replay
+              - uc-pm-portal-feedback
+            path:
+              - edges
+              - use_cases
+        kind: modified
+        node: feature-feedback-core
+    schema: graph/changeset/v1
+    status: proposed
+    title: 'SASS-CAT: track generic rich-evidence controls in the feedback modal'
+    visibility: internal
+  - authored_by: pog-cross-repo-feedback-propose
+    created_at: "2026-07-19T00:16:55Z"
+    id: cs-0a5d280645592f6ea129bd7cfb50b7a1
+    operations:
+      - after:
+          edges:
+            part_of:
+              - product-sassfully
+          fields:
+            summary: |-
+              Goal: Embed the sassfully feedback widget in the POG portal (materialization 2.4b) with a hosted sink posting to https://kitsoki-test.slothattax.me/api/feedback, consuming feedback-core as an upstream package.
+              Why blocked: httpSink (with the {ref} receipt contract) was written in slidey's vendored copy (slidey web/feedback/vendor/feedback-core/src/sinks.mjs:68-85) and never upstreamed to studio-sassfully packages/feedback-core. Any new consumer must copy from a vendor directory of a sibling product, guaranteeing drift.
+              Expected: packages/feedback-core in studio-sassfully ships httpSink with tests pinning the {ref} receipt contract, so slidey's sync-feedback-core.sh produces a clean diff and new consumers vendor from upstream.
+              Filed cross-repo from POG's autonomous feedback pipeline (report 01KXD22YE5T1FW7TFX1DY4Q81X, kind data_gap). Steward rationale: httpSink needs to be upstreamed into studio-sassfully packages/feedback-core with receipt-contract tests; the fix lives in the sassfully repo and routes to its fleet.
+          id: req-cross-pog-01kxd22ye5t1fw7tfx1dy4q81x
+          schema: sassfully/requirement/v0
+          sources:
+            - source-pog-feedback-01KXD22YE5T1FW7TFX1DY4Q81X
+          status: proposed
+          title: httpSink exists only in slidey's vendored feedback-core copy, not upstream sassfully
+          visibility: public
+        kind: added
+    schema: graph/changeset/v1
+    status: proposed
+    title: 'Add requirement: httpSink exists only in slidey''s vendored feedback-core copy, not upstream sassfully (from POG feedback 01KXD22YE5T1FW7TFX1DY4Q81X)'
+    visibility: internal
+  - authored_by: pog-cross-repo-feedback-propose
+    created_at: "2026-07-19T00:16:56Z"
+    id: cs-82963aac9b2dd54b09f3386169cf9b3d
+    operations:
+      - after:
+          edges:
+            part_of:
+              - product-sassfully
+          fields:
+            summary: |-
+              Goal: Let an automated QA driver (or any testid-based test) deterministically click through the feedback widget's two-step flow (kind picker -> textarea -> review -> submit) instead of relying on text-matching or class selectors.
+              Why blocked: portal/src/feedback/vendor/feedback-vue/src/FeedbackModal.vue (vendored from studio-sassfully, PROVENANCE.md forbids hand-editing under src/) renders the kind-picker buttons, textarea, evidence-capture buttons, and Review/Submit buttons with only generic classes (fb-kind, fb-textarea, fb-btn-primary) and no data-testid at all. A live QA driver run on 2026-07-19 opened the widget, saw only the first-step kind picker (which has no textarea by design), and wrongly reported the whole widget as read-only without clicking through — because there was no deterministic affordance pointing it at the next step. Worked around this on the POG side by registering the existing CSS classes as affordances in tools/product-journey/drivers/pog-portal.json (feedback-kind-picker, feedback-textarea, feedback-primary-action) and adding explicit prose warning the driver that step 1 has no text field by design, but a real data-testid on each kind button (testid keyed by kind.id: bug/issue_request/content_comment/question) would be the correct fix and is more robust than class selectors, which can collide with future styling-only class changes.
+              Expected: FeedbackModal.vue's kind buttons, textarea, and primary action buttons carry stable data-testid attributes (e.g. data-testid="fb-kind-{{ kind.id ?? kind.kind ?? kind }}"), fixed upstream in studio-sassfully and pulled in via scripts/sync-feedback-core.sh — not hand-patched in the vendored copy per its own PROVENANCE.md.
+              Filed cross-repo from POG's autonomous feedback pipeline (report 01KXVT8NVXZYQY69GN2AG1YY7E, kind bug). Steward rationale: The file's own PROVENANCE.md forbids hand-editing the vendored copy; the report itself states the correct fix is upstream in studio-sassfully pulled in via scripts/sync-feedback-core.sh, so ownership belongs to sassfully, not POG.
+          id: req-cross-pog-01kxvt8nvxzyqy69gn2ag1yy7e
+          schema: sassfully/requirement/v0
+          sources:
+            - source-pog-feedback-01KXVT8NVXZYQY69GN2AG1YY7E
+          status: proposed
+          title: Vendored FeedbackModal.vue has no data-testid on kind-picker buttons, textarea, or submit
+          visibility: public
+        kind: added
+    schema: graph/changeset/v1
+    status: proposed
+    title: 'Add requirement: Vendored FeedbackModal.vue has no data-testid on kind-picker buttons, textarea, or submit (from POG feedback 01KXVT8NVXZYQY69GN2AG1YY7E)'
     visibility: internal

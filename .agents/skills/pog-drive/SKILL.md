@@ -48,10 +48,19 @@ Every invocation runs this cycle at least once:
      requirement into change-node briefs. The session trace is the
      evidence — don't hand-wave a design decision into the catalog without
      one.
-   - Implementation → a `.worktrees/<branch>` worktree, landed via
-     `scripts/merge-to-main.sh` (fast-forward only; use
-     `scripts/land-branch.sh` if main has advanced). Never commit to a
-     protected main directly.
+   - Implementation → a managed Capsule or `.worktrees/<branch>` worktree.
+     From a Capsule, finish with the single source-aware command
+     `scripts/promote-to-main.sh`; it submits an immutable receipt-bound
+     candidate and exits, so do not wait on a promotion lock or merge its
+     clone-local `main`. The primary checkout's
+     `scripts/process-promotion-queue.sh` worker owns later integration and
+     protected landing. Never commit to
+     a protected main directly. Before the first substantive change, create
+     `.context/agent-reports/<branch-or-node>.md` and update it after
+     investigation, implementation, and verification milestones. The report
+     records scope, decisions, changed paths, commands and outcomes, and
+     blockers while they are fresh; it is an untracked handoff artifact, not a
+     commit candidate.
    - No live LLM in any CI/test path — cassettes, flows, and mocks only
      (this repo's own conventions block in `AGENTS.md` states the specifics).
 5. **Verify the gate.** `scripts/checks.sh` must exit 0. That, or another
@@ -66,11 +75,12 @@ Every invocation runs this cycle at least once:
 7. **File friction immediately.** Any gap in the toolchain (dev-story
    driver, work-decomposition, the catalog schema itself) goes upstream the
    moment you hit it — file an issue, don't silently work around it.
-8. **Report.** End with: what shipped (with evidence), what the catalog now
-   says, the new ready set, and a short **human-only** list — pending
-   decisions the work touched, review debt, and any one-time manual steps.
-   Never present a human-only step as blocking work that has an unblocked
-   part.
+8. **Report.** Update the durable report before handoff, then return its path
+   with compact facts: shipped/blocked status, gate result, catalog status,
+   new ready set, and any short **human-only** list. Do not require or depend
+   on a long final prose/structured report after a long run; the file is the
+   source of detail. Never present a human-only step as blocking work that has
+   an unblocked part.
 
 Repeat the loop while ready nodes remain in the user's stated scope; stop
 when the scope is done or the only remaining nodes are human-only.
