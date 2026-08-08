@@ -17,6 +17,9 @@ import { KIND_CONFIG, KINDS } from "./kinds.mjs";
  *   kinds?: string[],
  *   renderTrigger?: (open: () => void) => Element,   // host-replaceable seams
  *   renderPanel?: (api: object) => Element,
+ *   demoMode?: boolean,                  // opt-in narrated-demo surface (never default)
+ *   demoOrigins?: string[],              // postMessage caller allowlist (default []: disabled)
+ *   onDemoStepEvent?: (evt: object) => void,
  * }} opts
  */
 export function mountReporter(opts) {
@@ -56,7 +59,20 @@ export function mountReporter(opts) {
   const trigger = (opts.renderTrigger ?? defaultTrigger)(open, doc);
   host.appendChild(trigger);
   doc.body.appendChild(host);
-  return { host, open, close };
+  const api = { host, open, close };
+  if (opts.demoMode === true) {
+    // Explicit opt-in only (a dev/demo switch, never a production default).
+    // Loaded dynamically so hosts that never enable demo mode never fetch the
+    // demo-player module graph. `api.demo` resolves to the installed embed
+    // ({api, controller, uninstall}) once window.__sassfullyDemo is live.
+    api.demo = import("./demo-mode.mjs").then((mod) => mod.enableDemoMode({
+      window: opts.window ?? doc.defaultView ?? (typeof window !== "undefined" ? window : undefined),
+      document: doc,
+      allowedOrigins: opts.demoOrigins ?? [],
+      onStepEvent: opts.onDemoStepEvent,
+    }));
+  }
+  return api;
 }
 
 function defaultTrigger(open, doc) {

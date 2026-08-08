@@ -73,6 +73,19 @@
   });
   const router = createRouter({ sinks: [sink] });
 
+  // Narrated-demo mode is an explicit dev-only opt-in via ?demo=1 — the page
+  // behaves exactly as before without it. When on, mountReporter exposes
+  // window.__sassfullyDemo = {run, stop, status} (postMessage stays disabled:
+  // the origin allowlist below is empty) and a visible badge marks the mode.
+  const demoMode = new URLSearchParams(location.search).get("demo") === "1";
+  if (demoMode) {
+    const badge = document.createElement("div");
+    badge.setAttribute("data-testid", "demo-mode-badge");
+    badge.textContent = "demo mode";
+    badge.style.cssText = "position:fixed;top:10px;right:10px;z-index:2147483000;background:#bc8cff;color:#14202b;font:700 12px/1 system-ui;padding:6px 10px;border-radius:12px;box-shadow:0 2px 8px #0004";
+    document.body.appendChild(badge);
+  }
+
   mountReporter({
     anchorFor: () => ({
       producer: "acme-docs",
@@ -85,6 +98,8 @@
     }),
     manifest,
     router,
+    demoMode,
+    demoOrigins: [],
   });
 </script>
 </body>
