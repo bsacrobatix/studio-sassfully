@@ -1232,6 +1232,26 @@ nodes:
     edges:
       part_of: [product-sassfully]
       satisfies: [req-ext-narrated-demo-poc, req-standalone-and-embedded]
+  - schema: sassfully/component/v0
+    id: comp-demo-tts
+    title: demo-tts (edge-tts narration service)
+    status: in-progress
+    visibility: public
+    summary: "`@sassfully/demo-tts` — narration audio for narrated demos via the edge-tts CLI: sha256 content-addressed synthesis cache with atomic writes, a loopback-only HTTP server (127.0.0.1 hardcoded; POST /narration returns audio/mpeg with measured X-Narration-Duration-Ms/Estimated/Cache headers), and a prebake CLI emitting per-step MP3s plus a [{stepId, file, durationMs, estimated}] manifest. Narration text capped at 2000 chars, matching the demo-script bound; durations are ffprobe-measured with a flagged word-count fallback."
+    sources: [source-extension-mode]
+    edges:
+      part_of: [product-sassfully]
+      satisfies: [req-ext-narrated-demo-poc]
+  - schema: sassfully/component/v0
+    id: comp-demo-stage
+    title: demo-stage (vendored slidey stage overlay layer)
+    status: in-progress
+    visibility: public
+    summary: "`@sassfully/demo-stage` — slidey's stage runtime (engine/render/player/validate/refs vendored verbatim at a pinned commit, plus one marked transparent-backdrop patch) behind a mountStageLayer adapter: a fixed full-viewport pointer-events:none character/scene layer sitting just under the demo overlay's spotlight band, playable full-viewport, docked to corners/edges, or anchored to a caller-resolved bbox via the pure computeStageBox(). Page content stays interactive underneath; provenance and re-vendor recipe in vendor/VENDORED.md."
+    sources: [source-extension-mode]
+    edges:
+      part_of: [product-sassfully]
+      satisfies: [req-ext-narrated-demo-poc]
   - schema: sassfully/feature/v0
     id: feature-extension-mode
     title: Extension mode
