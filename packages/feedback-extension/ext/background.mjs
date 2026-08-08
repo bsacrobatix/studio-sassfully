@@ -4,7 +4,7 @@
 // (req-recording-visibility), and the draft stash handed from a page's
 // content script to the dedicated review tab.
 import { idbBackend } from "./lib/idb-backend.mjs";
-import { AUTONOMOUS_JOBS_SESSION, isStoryPairableUrl, LINKEDIN_ORIGIN, validateStoryCommand } from "./story-bridge-policy.mjs";
+import { AUTONOMOUS_JOBS_SESSION, DEFAULT_BRIDGE_PORT, isStoryPairableUrl, LINKEDIN_ORIGIN, parsePairingToken, validateStoryCommand } from "./story-bridge-policy.mjs";
 import { ensureStoryReceiver } from "./story-receiver.mjs";
 import { appendStoryAudit, makeStoryAuditEntry } from "./story-audit.mjs";
 import { runScriptSteps } from "./story-script.mjs";
@@ -23,6 +23,11 @@ const getStoryBridge = async () => (await chrome.storage.local.get("storyBridge"
 
 let storySocket = null;
 let reconnectTimer = null;
+// Live socket truth for the popup: stored config says "pairing exists",
+// THIS says whether the bridge is actually reachable right now. Worker
+// restarts reset it to "closed", which is honest until reconnect runs.
+let bridgeLive = { status: "closed", lastError: null, lastConnectedTs: null };
+const RECONNECT_ALARM = "story-bridge-reconnect";
 
 function closeStorySocket() {
   if (reconnectTimer) clearTimeout(reconnectTimer);
@@ -77,17 +82,45 @@ async function runStoryCommand(message) {
 async function connectStoryBridge() {
   closeStorySocket();
   const bridge = await getStoryBridge();
-  if (!bridge?.enabled || !bridge.code) return;
-  const socket = new WebSocket(`ws://127.0.0.1:${bridge.port ?? 8765}/bridge?code=${encodeURIComponent(bridge.code)}`);
+  if (!bridge?.enabled || !bridge.code) { bridgeLive = { status: "closed", lastError: null, lastConnectedTs: bridgeLive.lastConnectedTs }; return; }
+  const port = bridge.port ?? DEFAULT_BRIDGE_PORT;
+  bridgeLive = { ...bridgeLive, status: "connecting" };
+  const socket = new WebSocket(`ws://127.0.0.1:${port}/bridge?code=${encodeURIComponent(bridge.code)}`);
   storySocket = socket;
-  socket.addEventListener("open", () => sendStory({ type: "ready", tabId: bridge.tabId, origin: LINKEDIN_ORIGIN }));
+  socket.addEventListener("open", () => {
+    if (storySocket !== socket) return;
+    bridgeLive = { status: "open", lastError: null, lastConnectedTs: Date.now() };
+    sendStory({ type: "ready", tabId: bridge.tabId, origin: LINKEDIN_ORIGIN });
+  });
+  socket.addEventListener("error", () => {
+    if (storySocket !== socket) return;
+    bridgeLive = { ...bridgeLive, lastError: `no bridge answering on ws://127.0.0.1:${port} (wrong token, bridge not running, or slot busy)` };
+  });
   socket.addEventListener("message", (event) => {
     try { const message = JSON.parse(event.data); if (message.type === "command" && typeof message.id === "string") runStoryCommand(message); } catch { /* malformed local input is ignored */ }
   });
   socket.addEventListener("close", () => {
     if (storySocket !== socket) return;
+    bridgeLive = { ...bridgeLive, status: "closed" };
+    // Fast retry while the worker lives; the chrome.alarms backstop below
+    // covers the case where MV3 kills this timer with the worker.
     reconnectTimer = setTimeout(connectStoryBridge, 3000);
   });
+}
+
+// MV3 backstop: setTimeout dies with the service worker, alarms do not.
+// Every ~30s, if a pairing is stored but the socket is not open/connecting,
+// dial again. The alarm clears itself when the pairing is gone.
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name !== RECONNECT_ALARM) return;
+  const bridge = await getStoryBridge();
+  if (!bridge?.enabled) { await chrome.alarms.clear(RECONNECT_ALARM); return; }
+  if (storySocket && (storySocket.readyState === WebSocket.OPEN || storySocket.readyState === WebSocket.CONNECTING)) return;
+  await connectStoryBridge();
+});
+
+function ensureReconnectAlarm() {
+  chrome.alarms.create(RECONNECT_ALARM, { periodInMinutes: 0.5 });
 }
 
 async function syncRegisteredScripts(origins) {
@@ -103,8 +136,12 @@ async function syncRegisteredScripts(origins) {
   ]);
 }
 
-chrome.runtime.onInstalled.addListener(async () => { await syncRegisteredScripts(await getOrigins()); await connectStoryBridge(); });
-chrome.runtime.onStartup.addListener(() => { connectStoryBridge(); });
+async function resumeStoryBridge() {
+  if ((await getStoryBridge())?.enabled) ensureReconnectAlarm();
+  await connectStoryBridge();
+}
+chrome.runtime.onInstalled.addListener(async () => { await syncRegisteredScripts(await getOrigins()); await resumeStoryBridge(); });
+chrome.runtime.onStartup.addListener(() => { resumeStoryBridge(); });
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   (async () => {
@@ -125,17 +162,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg?.type === "pair-story-bridge") {
       const tab = await chrome.tabs.get(msg.tabId);
       if (!isStoryPairableUrl(tab.url)) { sendResponse({ ok: false, error: "Open a www.linkedin.com tab or the 127.0.0.1 demo host page first." }); return; }
-      if (typeof msg.code !== "string" || !/^[A-Za-z0-9_-]{24,128}$/.test(msg.code)) { sendResponse({ ok: false, error: "Enter the pairing code printed by the local bridge." }); return; }
-      const port = Number(msg.port ?? 8765);
-      if (!Number.isInteger(port) || port < 1024 || port > 65535) { sendResponse({ ok: false, error: "Loopback port must be 1024–65535." }); return; }
+      const parsed = parsePairingToken(msg.token);
+      if (!parsed.ok) { sendResponse({ ok: false, error: parsed.error }); return; }
       try { await ensureStoryReceiver({ tabs: chrome.tabs, scripting: chrome.scripting, tabId: msg.tabId }); } catch (error) { sendResponse({ ok: false, error: error.message }); return; }
-      await chrome.storage.local.set({ storyBridge: { enabled: true, mode: AUTONOMOUS_JOBS_SESSION, tabId: msg.tabId, code: msg.code, port } });
+      await chrome.storage.local.set({ storyBridge: { enabled: true, mode: AUTONOMOUS_JOBS_SESSION, tabId: msg.tabId, code: parsed.code, port: parsed.port } });
+      ensureReconnectAlarm();
       await connectStoryBridge();
       sendResponse({ ok: true });
       return;
     }
-    if (msg?.type === "unpair-story-bridge") { await chrome.storage.local.remove("storyBridge"); closeStorySocket(); sendResponse({ ok: true }); return; }
-    if (msg?.type === "story-bridge-state") { sendResponse({ bridge: await getStoryBridge() }); return; }
+    if (msg?.type === "unpair-story-bridge") { await chrome.storage.local.remove("storyBridge"); closeStorySocket(); bridgeLive = { status: "closed", lastError: null, lastConnectedTs: null }; await chrome.alarms.clear(RECONNECT_ALARM); sendResponse({ ok: true }); return; }
+    if (msg?.type === "story-bridge-state") { sendResponse({ bridge: await getStoryBridge(), live: { ...bridgeLive } }); return; }
     if (msg?.type === "badge") {
       const tabId = sender?.tab?.id ?? msg.tabId;
       const badge = BADGES[msg.state] ?? BADGES.off;
