@@ -32,6 +32,23 @@ test("demo script validation bounds steps and string fields", () => {
   assert.equal(validateDemoScript(script([step({ dwellMs: "800" })])).ok, false);
 });
 
+test("structured anchor targets are accepted with bounded fields, strings stay valid", () => {
+  const anchor = { role: "button", name: "Generate greeting" };
+  assert.equal(validateDemoScript(script([step({ spotlight: anchor })])).ok, true);
+  assert.equal(validateDemoScript(script([step({ spotlight: { testid: "greet", css: "#greet" } })])).ok, true);
+  assert.equal(validateDemoScript(script([step({ spotlight: { text: "Hello" } })])).ok, true);
+  assert.equal(validateDemoScript(script([step({ action: { kind: "click", selector: anchor } })])).ok, true);
+  assert.equal(validateDemoScript(script([step({ action: { kind: "fill", selector: { css: "#name" }, value: "Ada" } })])).ok, true);
+  assert.equal(validateDemoScript(script([step({ spotlight: {} })])).ok, false, "empty anchor object is rejected");
+  assert.equal(validateDemoScript(script([step({ spotlight: { name: "only a name" } })])).ok, false, "name alone cannot locate");
+  assert.equal(validateDemoScript(script([step({ spotlight: { role: "button", bogus: "x" } })])).ok, false, "unknown anchor keys are rejected");
+  assert.equal(validateDemoScript(script([step({ spotlight: { role: "x".repeat(101) } })])).ok, false, "role is bounded");
+  assert.equal(validateDemoScript(script([step({ spotlight: { css: "x".repeat(501) } })])).ok, false, "css is bounded");
+  assert.equal(validateDemoScript(script([step({ spotlight: { text: 7 } })])).ok, false, "anchor fields must be strings");
+  assert.equal(validateDemoScript(script([step({ spotlight: ["#a"] })])).ok, false, "arrays are not anchors");
+  assert.equal(validateDemoScript(script([step({ action: { kind: "click", selector: { name: "nope" } } })])).ok, false);
+});
+
 test("demo step actions are limited to bounded click/fill/press", () => {
   assert.equal(validateDemoScript(script([step({ action: { kind: "click", selector: "button" } })])).ok, true);
   assert.equal(validateDemoScript(script([step({ action: { kind: "fill", selector: "input", value: "Ada" } })])).ok, true);

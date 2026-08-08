@@ -1,6 +1,9 @@
 import { validateStoryCommand } from "../story-bridge-policy.mjs";
+import { waitForAnchor } from "./anchor-resolve.mjs";
 import { cancelSpeech, clearDemoOverlay, clickPulse, showCaption, showSpotlight, speak } from "./demo-overlay.mjs";
 import { createDemoRunState, demoActionToStoryCommand, runDemoScript } from "./demo-player.mjs";
+
+const RRWEB_CHANNEL = "sassfully-ext/rrweb/v1";
 
 export const FIELD_SELECTORS = {
   keywords: 'input[aria-label*="Search by title"], input[placeholder*="Search by title"], input[aria-label*="skill, or company"]',
@@ -77,14 +80,33 @@ async function runNarratedDemo({ document, location, script, requestId }) {
   const state = createDemoRunState();
   activeDemo = state;
   const deps = {
-    waitForTarget: (selector) => waitForVisibleSemanticElement({ document, selectors: [selector] }),
+    // Targets are CSS strings or structured anchors; waitForAnchor handles
+    // both (ranked role -> testid -> text -> css, ambiguity hard-fails).
+    waitForTarget: (target) => waitForAnchor(document, target),
     spotlight: (element) => showSpotlight(document, element),
     caption: (text) => showCaption(document, text),
     pulse: (element) => clickPulse(document, element),
     narrate: (text, { fallbackMs }) => speak(text, { fallbackMs }),
-    act: (action) => runAutonomousStoryCommand({ document, location, command: demoActionToStoryCommand(action), requestId }),
+    act: async (action, element) => {
+      // Structured-anchor click/fill acts directly on the resolved element
+      // (there is no CSS selector to route through the story-command path);
+      // string-selector actions keep the exact original machinery.
+      if (action.kind !== "press" && action.selector != null && typeof action.selector === "object") {
+        if (!element) throw new Error("action target was not found in the paired tab");
+        if (action.kind === "click") { element.click(); return { requestId, clicked: true }; }
+        element.focus(); element.value = action.value;
+        element.dispatchEvent(new Event("input", { bubbles: true })); element.dispatchEvent(new Event("change", { bubbles: true }));
+        return { requestId, filled: true };
+      }
+      return runAutonomousStoryCommand({ document, location, command: demoActionToStoryCommand(action), requestId });
+    },
     delay: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     clear: () => { cancelSpeech(); clearDemoOverlay(); },
+    // rrweb QA breadcrumb: the MAIN world stamps a custom event per step
+    // start/end so demo runs are auditable in replays.
+    stepStamp: (stamp) => {
+      try { document.defaultView?.postMessage({ $channel: RRWEB_CHANNEL, type: "demo-step-stamp", stamp: { ...stamp, requestId } }, "*"); } catch { /* stamps are best-effort */ }
+    },
   };
   try { return { requestId, demo: await runDemoScript({ script, deps, state }) }; }
   finally { if (activeDemo === state) activeDemo = null; }
