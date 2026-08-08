@@ -1,0 +1,88 @@
+#!/usr/bin/env node
+/**
+ * demo-tts — CLI for @sassfully/demo-tts.
+ *
+ *   demo-tts serve [--port N] [--cache DIR] [--voice V] [--rate R] [--pitch P]
+ *   demo-tts prebake <script.json> --out DIR [--voice V] [--rate R] [--pitch P]
+ */
+
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { startServer } from '../src/server.mjs';
+import { prebake } from '../src/prebake.mjs';
+import { edgeTtsAvailable, ffprobeAvailable } from '../src/synthesize.mjs';
+
+const USAGE = `usage:
+  demo-tts serve [--port N] [--cache DIR] [--voice V] [--rate R] [--pitch P]
+  demo-tts prebake <script.json> --out DIR [--voice V] [--rate R] [--pitch P]`;
+
+function parseArgs(argv) {
+  const flags = {};
+  const positional = [];
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a.startsWith('--')) {
+      const eq = a.indexOf('=');
+      if (eq !== -1) {
+        flags[a.slice(2, eq)] = a.slice(eq + 1);
+      } else {
+        flags[a.slice(2)] = argv[i + 1];
+        i++;
+      }
+    } else {
+      positional.push(a);
+    }
+  }
+  return { flags, positional };
+}
+
+function voiceOpts(flags) {
+  const o = {};
+  if (flags.voice) o.voice = flags.voice;
+  if (flags.rate) o.rate = flags.rate;
+  if (flags.pitch) o.pitch = flags.pitch;
+  return o;
+}
+
+const [command, ...rest] = process.argv.slice(2);
+const { flags, positional } = parseArgs(rest);
+
+try {
+  if (command === 'serve') {
+    const edge = edgeTtsAvailable();
+    if (!edge.ok) console.warn(`warning: ${edge.detail} — /narration will fail until installed`);
+    const probe = ffprobeAvailable();
+    if (!probe.ok) console.warn(`warning: ${probe.detail} — durations will be word-count estimates`);
+    const port = flags.port ? Number(flags.port) : 4547;
+    if (!Number.isInteger(port) || port < 0 || port > 65535) {
+      throw new Error(`invalid --port: ${flags.port}`);
+    }
+    const { url } = await startServer({
+      port,
+      cacheDir: flags.cache ? resolve(flags.cache) : undefined,
+      ...voiceOpts(flags),
+    });
+    console.log(`demo-tts listening on ${url} (loopback only)`);
+    console.log(`  POST ${url}/narration   {"text": "...", "voice"?, "rate"?, "pitch"?}`);
+    console.log(`  GET  ${url}/health`);
+  } else if (command === 'prebake') {
+    const scriptPath = positional[0];
+    if (!scriptPath) throw new Error(`prebake needs a script path\n${USAGE}`);
+    if (!flags.out) throw new Error(`prebake needs --out DIR\n${USAGE}`);
+    const edge = edgeTtsAvailable();
+    if (!edge.ok) throw new Error(edge.detail);
+    const script = JSON.parse(await readFile(resolve(scriptPath), 'utf8'));
+    const { manifest, manifestPath } = await prebake(script, {
+      outDir: resolve(flags.out),
+      log: (line) => console.log(line),
+      ...voiceOpts(flags),
+    });
+    console.log(`wrote ${manifest.length} clip(s) + ${manifestPath}`);
+  } else {
+    console.error(USAGE);
+    process.exit(command ? 1 : 0);
+  }
+} catch (err) {
+  console.error(`demo-tts: ${err.message}`);
+  process.exit(1);
+}

@@ -1,0 +1,14 @@
+{
+  "name": "@sassfully/demo-tts",
+  "version": "0.1.0",
+  "description": "edge-tts narration service for narrated demos: pre-synthesized MP3s with measured durations so step timing locks to the voice. Loopback-only HTTP server for live playback plus a prebake CLI for recorded/CI demos. No runtime deps; needs the edge-tts Python CLI and (optionally) ffprobe on PATH.",
+  "type": "module",
+  "main": "src/index.mjs",
+  "license": "Apache-2.0",
+  "bin": {
+    "demo-tts": "bin/demo-tts"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  }
+}
