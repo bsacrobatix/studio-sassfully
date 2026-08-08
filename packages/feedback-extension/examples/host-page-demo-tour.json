@@ -1,0 +1,68 @@
+{
+  "version": "sassfully/demo-script/v1",
+  "steps": [
+    {
+      "id": "t1-welcome",
+      "spotlight": "[data-testid=\"host-header\"] h1",
+      "caption": "Welcome to Acme Docs",
+      "narration": "Welcome. This is Acme Docs, a real host application that embeds the sassfully feedback widget. Over the next minute we will tour the page and try its interactive form.",
+      "dwellMs": 1200
+    },
+    {
+      "id": "t2-surface",
+      "spotlight": "[data-testid=\"host-content\"]",
+      "caption": "A real product surface",
+      "narration": "This card is an ordinary product surface. Every surface on the page can carry contextual feedback anchors, so a bug report always knows where it came from.",
+      "dwellMs": 900
+    },
+    {
+      "id": "t3-form-overview",
+      "spotlight": "[data-testid=\"demo-form\"]",
+      "caption": "The interactive demo form",
+      "narration": "Here is a small interactive form. We will fill in a name and generate a greeting, so you can watch a demo drive real controls.",
+      "dwellMs": 900
+    },
+    {
+      "id": "t4-explain-name",
+      "spotlight": "[data-testid=\"demo-name\"]",
+      "caption": "First, the name field",
+      "narration": "This input takes the visitor's name. Watch it fill in as if someone were typing.",
+      "dwellMs": 600
+    },
+    {
+      "id": "t5-fill-name",
+      "spotlight": "[data-testid=\"demo-name\"]",
+      "caption": "Typing a name",
+      "action": { "kind": "fill", "selector": "[data-testid=\"demo-name\"]", "value": "Ada Lovelace" },
+      "dwellMs": 700
+    },
+    {
+      "id": "t6-explain-go",
+      "spotlight": "[data-testid=\"demo-go\"]",
+      "caption": "Next, the button",
+      "narration": "The generate button builds a greeting from whatever is in the field. Let's press it.",
+      "dwellMs": 600
+    },
+    {
+      "id": "t7-click-go",
+      "spotlight": "[data-testid=\"demo-go\"]",
+      "caption": "Generating the greeting",
+      "action": { "kind": "click", "selector": "[data-testid=\"demo-go\"]" },
+      "dwellMs": 700
+    },
+    {
+      "id": "t8-result",
+      "spotlight": "[data-testid=\"demo-output\"]",
+      "caption": "The page responds",
+      "narration": "The greeting appears immediately, with a timestamp, proving the click landed on the live page rather than a mockup.",
+      "dwellMs": 1500
+    },
+    {
+      "id": "t9-sink",
+      "spotlight": "[data-testid=\"sink-log\"]",
+      "caption": "Where feedback would land",
+      "narration": "Finally, this panel is the local sink where reviewed feedback bundles would arrive. That concludes the tour, thanks for watching.",
+      "dwellMs": 2000
+    }
+  ]
+}

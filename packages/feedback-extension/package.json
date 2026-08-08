@@ -9,6 +9,9 @@
     "build": "node scripts/build.mjs",
     "test": "node --test test/*.test.mjs",
     "story-bridge": "node story-bridge/stdio-server.mjs",
+    "demo:sync-desktop": "npm run build && rsync -a --delete dist/ ~/Desktop/sassfully-demo-extension/",
+    "demo:serve": "node ../../examples/host-page/serve.mjs",
+    "demo:send": "node scripts/demo-send.mjs",
     "test:replay-fixture": "node --test test/replay-fixture.test.mjs"
   }
 }
