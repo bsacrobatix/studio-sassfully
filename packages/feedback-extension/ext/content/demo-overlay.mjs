@@ -1,9 +1,16 @@
-// Narrated-demo drawing surface (POC). Visual language ported from slidey's
+// Narrated-demo drawing surface. Visual language ported from slidey's
 // tour overlays (slidey/src/tour/overlays.js): GitHub-dark palette, spotlight
 // cutout + dimming via a huge box-shadow, bottom-center caption banner, and a
 // brief click-pulse ring. Everything is pointer-events:none so the overlay can
 // never swallow a click meant for the page, and it all lives in a closed
 // shadow root (same isolation pattern as overlay.mjs).
+//
+// The spotlight TRACKS its target: rAF-throttled scroll/resize listeners plus
+// a ResizeObserver on the element and a lightweight batched MutationObserver
+// fallback keep the box glued to the element's live geometry. Step-to-step
+// moves animate (eased CSS transition); tracking repositions are instant so
+// the box never lags a scroll. If the target leaves the DOM mid-step the
+// spotlight fades out instead of hovering over stale coordinates.
 //
 // Import-safe under node: no window/document access at module top level.
 
@@ -17,7 +24,12 @@ export const DEMO_THEME = {
   font: "'JetBrains Mono','Courier New',ui-monospace,monospace",
 };
 
-let layer = null; // { host, spot, caption }
+const CLEAR_FADE_MS = 420;
+const CAPTION_SWAP_MS = 180;
+const SPOT_PAD = 8;
+
+let layer = null; // { host, shadow, spot, caption, captionTimer }
+let tracking = null; // { doc, element, view, onScroll, onResize, ro, mo, rafId, retransitionTimer }
 
 function ensureLayer(doc) {
   if (layer && layer.host.isConnected) return layer;
@@ -28,15 +40,19 @@ function ensureLayer(doc) {
     .demo-spot { position: fixed; z-index: 2147483645; pointer-events: none; border-radius: 10px;
       border: 3px solid ${DEMO_THEME.accent};
       box-shadow: 0 0 0 100vmax ${DEMO_THEME.dim}, 0 0 22px 4px rgba(88,166,255,.55);
-      opacity: 0; transition: opacity .3s, top .25s, left .25s, width .25s, height .25s; }
+      opacity: 0;
+      transition: opacity .35s ease,
+        top .45s cubic-bezier(.22,1,.36,1), left .45s cubic-bezier(.22,1,.36,1),
+        width .45s cubic-bezier(.22,1,.36,1), height .45s cubic-bezier(.22,1,.36,1); }
+    .demo-spot.instant { transition: opacity .35s ease; }
     .demo-spot.show { opacity: 1; }
-    .demo-caption { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+    .demo-caption { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(6px);
       z-index: 2147483646; pointer-events: none; background: ${DEMO_THEME.bg}; color: ${DEMO_THEME.text};
       border: 1px solid ${DEMO_THEME.border}; border-left: 4px solid ${DEMO_THEME.accent};
       border-radius: 10px; padding: 14px 22px; max-width: 70%;
       font: 600 20px/1.35 ${DEMO_THEME.font}; box-shadow: 0 12px 38px rgba(0,0,0,.6);
-      opacity: 0; transition: opacity .4s; }
-    .demo-caption.show { opacity: 1; }
+      opacity: 0; transition: opacity .25s ease, transform .25s ease; }
+    .demo-caption.show { opacity: 1; transform: translateX(-50%) translateY(0); }
     .demo-pulse { position: fixed; z-index: 2147483646; pointer-events: none; border-radius: 50%;
       border: 3px solid ${DEMO_THEME.accent2}; width: 12px; height: 12px; opacity: .9;
       transform: translate(-50%, -50%); }
@@ -48,27 +64,106 @@ function ensureLayer(doc) {
   caption.className = "demo-caption";
   shadow.append(spot, caption);
   doc.documentElement.appendChild(host);
-  layer = { host, shadow, spot, caption };
+  layer = { host, shadow, spot, caption, captionTimer: null };
   return layer;
+}
+
+function positionSpot(spot, element) {
+  const rect = element.getBoundingClientRect();
+  Object.assign(spot.style, {
+    top: `${rect.top - SPOT_PAD}px`,
+    left: `${rect.left - SPOT_PAD}px`,
+    width: `${rect.width + SPOT_PAD * 2}px`,
+    height: `${rect.height + SPOT_PAD * 2}px`,
+  });
+}
+
+function stopTracking() {
+  if (!tracking) return;
+  const { view, onScroll, onResize, ro, mo, rafId, retransitionTimer } = tracking;
+  try { view?.removeEventListener("scroll", onScroll, true); } catch { /* view gone */ }
+  try { view?.removeEventListener("resize", onResize); } catch { /* view gone */ }
+  ro?.disconnect();
+  mo?.disconnect();
+  if (rafId != null) try { view?.cancelAnimationFrame?.(rafId); } catch { /* view gone */ }
+  if (retransitionTimer != null) clearTimeout(retransitionTimer);
+  tracking = null;
+}
+
+// Keep the spotlight glued to `element`. Repositions are batched through one
+// rAF per burst; tracking moves suppress the position transition (class
+// `instant`) and restore it shortly after the burst settles so the next
+// step-to-step move still animates.
+function startTracking(doc, element) {
+  stopTracking();
+  const view = doc.defaultView;
+  const raf = view?.requestAnimationFrame?.bind(view) ?? ((fn) => setTimeout(fn, 16));
+  const state = { doc, element, view, ro: null, mo: null, rafId: null, retransitionTimer: null, onScroll: null, onResize: null };
+
+  const reposition = () => {
+    state.rafId = null;
+    if (tracking !== state || !layer) return;
+    const { spot } = layer;
+    if (!element.isConnected || !element.getClientRects?.().length) {
+      // Target vanished mid-step: fade out rather than hover over nothing.
+      spot.classList.remove("show");
+      stopTracking();
+      return;
+    }
+    spot.classList.add("instant");
+    positionSpot(spot, element);
+    if (state.retransitionTimer != null) clearTimeout(state.retransitionTimer);
+    state.retransitionTimer = setTimeout(() => {
+      state.retransitionTimer = null;
+      if (tracking === state && layer) layer.spot.classList.remove("instant");
+    }, 150);
+  };
+  const schedule = () => { if (tracking === state && state.rafId == null) state.rafId = raf(reposition); };
+
+  state.onScroll = schedule;
+  state.onResize = schedule;
+  view?.addEventListener("scroll", schedule, { capture: true, passive: true });
+  view?.addEventListener("resize", schedule, { passive: true });
+  const RO = view?.ResizeObserver ?? globalThis.ResizeObserver;
+  if (typeof RO === "function") {
+    try { state.ro = new RO(schedule); state.ro.observe(element); } catch { /* geometry still tracked via scroll/resize/mutations */ }
+  }
+  const MO = view?.MutationObserver ?? globalThis.MutationObserver;
+  if (typeof MO === "function") {
+    try {
+      // Batched fallback re-measure: any DOM churn simply schedules one rAF
+      // re-read of the target's bbox (and catches the target being removed).
+      state.mo = new MO(schedule);
+      state.mo.observe(doc.documentElement, { childList: true, subtree: true, attributes: true });
+    } catch { /* geometry still tracked via scroll/resize */ }
+  }
+  tracking = state;
 }
 
 export function showSpotlight(doc, element) {
   const { spot } = ensureLayer(doc);
   element.scrollIntoView?.({ block: "center", inline: "nearest" });
-  const rect = element.getBoundingClientRect();
-  const pad = 8;
-  Object.assign(spot.style, {
-    top: `${rect.top - pad}px`,
-    left: `${rect.left - pad}px`,
-    width: `${rect.width + pad * 2}px`,
-    height: `${rect.height + pad * 2}px`,
-  });
+  // A fresh step move should animate even if a tracking burst just ended.
+  spot.classList.remove("instant");
+  positionSpot(spot, element);
   spot.classList.add("show");
+  startTracking(doc, element);
 }
 
 export function showCaption(doc, text) {
   const { caption } = ensureLayer(doc);
+  if (layer.captionTimer != null) { clearTimeout(layer.captionTimer); layer.captionTimer = null; }
   if (!text) { caption.classList.remove("show"); return; }
+  if (caption.classList.contains("show") && caption.textContent !== text) {
+    // Cross-fade between texts: out, swap, back in.
+    caption.classList.remove("show");
+    layer.captionTimer = setTimeout(() => {
+      layer.captionTimer = null;
+      caption.textContent = text;
+      caption.classList.add("show");
+    }, CAPTION_SWAP_MS);
+    return;
+  }
   caption.textContent = text;
   caption.classList.add("show");
 }
@@ -90,9 +185,20 @@ export function clickPulse(doc, element) {
   setTimeout(() => ring.remove(), 600);
 }
 
+// Eases the dim/spotlight/caption out (the dim rides the spotlight's
+// box-shadow, so fading the spotlight fades the dim) and removes the layer
+// after the fade. Observers and listeners are torn down immediately; the
+// detached fading host owns its own removal so a new demo can start a fresh
+// layer during the fade.
 export function clearDemoOverlay() {
-  layer?.host?.remove();
+  stopTracking();
+  if (!layer) return;
+  const { host, spot, caption, captionTimer } = layer;
+  if (captionTimer != null) clearTimeout(captionTimer);
   layer = null;
+  spot.classList.remove("show");
+  caption.classList.remove("show");
+  setTimeout(() => host.remove(), CLEAR_FADE_MS);
 }
 
 // Spoken narration. Resolves on utterance end, or after max(fallbackMs, 1.5s)

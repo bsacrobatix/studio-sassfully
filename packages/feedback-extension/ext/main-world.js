@@ -26,6 +26,12 @@
     if (!msg || msg.$channel !== CHANNEL || event.source !== window) return;
     if (msg.type === "rrweb-start") start();
     else if (msg.type === "rrweb-stop" && stopRecording) { stopRecording(); stopRecording = null; }
+    else if (msg.type === "demo-step-stamp" && msg.stamp) {
+      // Narrated-demo QA breadcrumb: stamp each demo step start/end (step id,
+      // index, anchor used, healed flag) into the rrweb timeline so demo runs
+      // are auditable in replays. No-op when recording is off.
+      try { if (stopRecording && typeof rrwebRecord.addCustomEvent === "function") rrwebRecord.addCustomEvent("sassfully-demo-step", msg.stamp); } catch { /* best-effort */ }
+    }
     else if (msg.type === "telemetry-boot" && msg.moduleUrl) {
       import(msg.moduleUrl)
         .then((mod) => mod.startMainTelemetry({ window }))
