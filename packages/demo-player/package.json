@@ -1,0 +1,11 @@
+{
+  "name": "@sassfully/demo-player",
+  "version": "0.1.0",
+  "description": "Environment-neutral narrated demo player: plays sassfully/demo-script/v1 scripts (spotlight + caption + narration + real click/fill/press actions) against any DOM document. Extracted from the feedback-extension demo overlay POC; no chrome.* APIs, importable from node and the browser alike.",
+  "type": "module",
+  "main": "src/index.mjs",
+  "license": "Apache-2.0",
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  }
+}
