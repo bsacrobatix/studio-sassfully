@@ -1,0 +1,419 @@
+{
+  "type": "stage",
+  "title": "demo-stage sample: Pip says hello",
+  "narrator": {
+    "edge": "en-US-AriaNeural",
+    "rate": "+0%",
+    "pitch": "+0Hz"
+  },
+  "stage": {
+    "units": {
+      "w": 100,
+      "h": 50
+    },
+    "ground": 44,
+    "backdrop": "transparent"
+  },
+  "roster": [
+    "pip"
+  ],
+  "cast": {
+    "id": "demo-stage-sample",
+    "name": "demo-stage sample cast",
+    "plans": {
+      "human": {
+        "size": {
+          "w": 11,
+          "h": 17
+        },
+        "order": [
+          "armFar",
+          "legFar",
+          "legNear",
+          "body",
+          "head",
+          "armNear"
+        ],
+        "parts": {
+          "legFar": {
+            "pivot": [
+              1.35,
+              -6.4
+            ],
+            "svg": "<rect x=\"0.2\" y=\"-6.4\" width=\"2.3\" height=\"6.5\" rx=\"0.7\" fill=\"{{pantsDark}}\" stroke=\"{{ink}}\" stroke-width=\"0.3\"/><rect x=\"0.0\" y=\"-0.7\" width=\"3.2\" height=\"0.9\" rx=\"0.45\" fill=\"{{ink}}\"/>"
+          },
+          "legNear": {
+            "pivot": [
+              -1.35,
+              -6.4
+            ],
+            "svg": "<rect x=\"-2.5\" y=\"-6.4\" width=\"2.3\" height=\"6.5\" rx=\"0.7\" fill=\"{{pants}}\" stroke=\"{{ink}}\" stroke-width=\"0.3\"/><rect x=\"-2.7\" y=\"-0.7\" width=\"3.2\" height=\"0.9\" rx=\"0.45\" fill=\"{{ink}}\"/>"
+          },
+          "body": {
+            "pivot": [
+              0,
+              -6.2
+            ],
+            "svg": "<rect x=\"-3.3\" y=\"-13.2\" width=\"6.6\" height=\"7.2\" rx=\"1.6\" fill=\"{{shirt}}\" stroke=\"{{ink}}\" stroke-width=\"0.32\"/><path d=\"M-1.5,-13.1 L0,-11.3 L1.5,-13.1\" fill=\"none\" stroke=\"{{ink}}\" stroke-width=\"0.28\"/>"
+          },
+          "armFar": {
+            "pivot": [
+              2.5,
+              -12.3
+            ],
+            "svg": "<rect x=\"1.55\" y=\"-12.7\" width=\"1.95\" height=\"6.6\" rx=\"0.95\" fill=\"{{shirtDark}}\" stroke=\"{{ink}}\" stroke-width=\"0.3\"/><circle cx=\"2.52\" cy=\"-6.0\" r=\"0.95\" fill=\"{{skin}}\" stroke=\"{{ink}}\" stroke-width=\"0.28\"/>"
+          },
+          "armNear": {
+            "pivot": [
+              -2.5,
+              -12.3
+            ],
+            "svg": "<rect x=\"-3.5\" y=\"-12.7\" width=\"1.95\" height=\"6.6\" rx=\"0.95\" fill=\"{{shirt}}\" stroke=\"{{ink}}\" stroke-width=\"0.3\"/><circle cx=\"-2.52\" cy=\"-6.0\" r=\"0.95\" fill=\"{{skin}}\" stroke=\"{{ink}}\" stroke-width=\"0.28\"/>"
+          },
+          "head": {
+            "pivot": [
+              0,
+              -13.1
+            ],
+            "svg": "<rect x=\"-1.15\" y=\"-14.2\" width=\"2.3\" height=\"1.6\" fill=\"{{skin}}\" stroke=\"{{ink}}\" stroke-width=\"0.28\"/><circle cx=\"0\" cy=\"-16.6\" r=\"3.15\" fill=\"{{skin}}\" stroke=\"{{ink}}\" stroke-width=\"0.32\"/><circle cx=\"0.55\" cy=\"-17.3\" r=\"0.42\" fill=\"{{ink}}\"/><circle cx=\"2.0\" cy=\"-17.3\" r=\"0.42\" fill=\"{{ink}}\"/><circle cx=\"2.95\" cy=\"-16.1\" r=\"0.55\" fill=\"{{skinDark}}\"/>{{hair}}"
+          },
+          "mouth": {
+            "parent": "head",
+            "pivot": [
+              1.35,
+              -14.9
+            ],
+            "svg": "<ellipse cx=\"1.35\" cy=\"-14.9\" rx=\"0.95\" ry=\"0.62\" fill=\"#54202c\" stroke=\"{{ink}}\" stroke-width=\"0.22\"/>"
+          }
+        },
+        "states": {
+          "idle": {
+            "loop": 2.6,
+            "poses": [
+              {
+                "body": {
+                  "y": 0
+                },
+                "armNear": {
+                  "rot": 3
+                },
+                "armFar": {
+                  "rot": -3
+                },
+                "head": {
+                  "rot": 0
+                },
+                "mouth": {
+                  "sy": 0.22
+                }
+              },
+              {
+                "body": {
+                  "y": -0.35
+                },
+                "armNear": {
+                  "rot": -3
+                },
+                "armFar": {
+                  "rot": 3
+                },
+                "head": {
+                  "rot": 1.2
+                },
+                "mouth": {
+                  "sy": 0.22
+                }
+              }
+            ]
+          },
+          "deadpan": {
+            "loop": 3.6,
+            "poses": [
+              {
+                "armNear": {
+                  "rot": 1
+                },
+                "armFar": {
+                  "rot": -1
+                },
+                "head": {
+                  "rot": 0
+                },
+                "mouth": {
+                  "sy": 0.18
+                }
+              },
+              {
+                "armNear": {
+                  "rot": -1
+                },
+                "armFar": {
+                  "rot": 1
+                },
+                "head": {
+                  "rot": -0.6
+                },
+                "mouth": {
+                  "sy": 0.18
+                }
+              }
+            ]
+          },
+          "walk": {
+            "loop": 0.58,
+            "poses": [
+              {
+                "legNear": {
+                  "rot": 26
+                },
+                "legFar": {
+                  "rot": -26
+                },
+                "armNear": {
+                  "rot": -24
+                },
+                "armFar": {
+                  "rot": 24
+                },
+                "body": {
+                  "y": 0
+                }
+              },
+              {
+                "legNear": {
+                  "rot": 0
+                },
+                "legFar": {
+                  "rot": 0
+                },
+                "armNear": {
+                  "rot": 0
+                },
+                "armFar": {
+                  "rot": 0
+                },
+                "body": {
+                  "y": -0.55
+                }
+              },
+              {
+                "legNear": {
+                  "rot": -26
+                },
+                "legFar": {
+                  "rot": 26
+                },
+                "armNear": {
+                  "rot": 24
+                },
+                "armFar": {
+                  "rot": -24
+                },
+                "body": {
+                  "y": 0
+                }
+              },
+              {
+                "legNear": {
+                  "rot": 0
+                },
+                "legFar": {
+                  "rot": 0
+                },
+                "armNear": {
+                  "rot": 0
+                },
+                "armFar": {
+                  "rot": 0
+                },
+                "body": {
+                  "y": -0.55
+                }
+              }
+            ]
+          },
+          "gesture": {
+            "loop": 1.3,
+            "poses": [
+              {
+                "armNear": {
+                  "rot": -60
+                },
+                "armFar": {
+                  "rot": -72
+                },
+                "head": {
+                  "rot": -2
+                },
+                "body": {
+                  "y": -0.2
+                }
+              },
+              {
+                "armNear": {
+                  "rot": -95
+                },
+                "armFar": {
+                  "rot": -52
+                },
+                "head": {
+                  "rot": 1
+                },
+                "body": {
+                  "y": 0.1
+                }
+              }
+            ]
+          },
+          "point": {
+            "loop": 1,
+            "poses": [
+              {
+                "armNear": {
+                  "rot": -80
+                },
+                "armFar": {
+                  "rot": 6
+                },
+                "head": {
+                  "rot": -1
+                }
+              },
+              {
+                "armNear": {
+                  "rot": -71
+                },
+                "armFar": {
+                  "rot": 2
+                },
+                "head": {
+                  "rot": 1
+                }
+              }
+            ]
+          },
+          "shrug": {
+            "loop": 1.8,
+            "poses": [
+              {
+                "armNear": {
+                  "rot": -26
+                },
+                "armFar": {
+                  "rot": 26
+                },
+                "head": {
+                  "rot": 2.5
+                }
+              },
+              {
+                "armNear": {
+                  "rot": -34
+                },
+                "armFar": {
+                  "rot": 34
+                },
+                "head": {
+                  "rot": 1
+                },
+                "body": {
+                  "y": -0.3
+                }
+              }
+            ]
+          },
+          "arms": {
+            "loop": 2.2,
+            "poses": [
+              {
+                "armNear": {
+                  "rot": -14
+                },
+                "armFar": {
+                  "rot": 14
+                },
+                "head": {
+                  "rot": 0
+                }
+              },
+              {
+                "armNear": {
+                  "rot": -18
+                },
+                "armFar": {
+                  "rot": 18
+                },
+                "head": {
+                  "rot": -1
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "characters": [
+      {
+        "id": "pip",
+        "name": "Pip",
+        "role": "the demo guide",
+        "plan": "human",
+        "scale": 1,
+        "voice": {
+          "edge": "en-US-AnaNeural",
+          "rate": "+2%",
+          "pitch": "+10Hz"
+        },
+        "palette": {
+          "skin": "#e8b48c",
+          "skinDark": "#cf9a72",
+          "shirt": "#22a06b",
+          "shirtDark": "#1b8257",
+          "pants": "#2e3440",
+          "pantsDark": "#262b35",
+          "ink": "#14161d",
+          "hairColor": "#6b3fa0"
+        },
+        "hair": "<path d=\"M-3.05,-19.5 A3.15,3.15 0 0 1 3.05,-19.5 Q0,-18.8 -3.05,-19.5 Z\" fill=\"{{hairColor}}\" stroke=\"{{ink}}\" stroke-width=\"0.26\"/>"
+      }
+    ]
+  },
+  "beats": [
+    {
+      "narration": "Pip walks on to show you around.",
+      "act": [
+        {
+          "who": "pip",
+          "enter": "left",
+          "to": 30,
+          "state": "walk",
+          "face": "right"
+        }
+      ]
+    },
+    {
+      "speaker": "pip",
+      "line": "See that panel over there? That is where the magic happens.",
+      "act": [
+        {
+          "who": "pip",
+          "state": "point",
+          "face": "right"
+        }
+      ]
+    },
+    {
+      "speaker": "pip",
+      "line": "That is the tour. Bye!",
+      "dur": 2.6,
+      "act": [
+        {
+          "who": "pip",
+          "state": "walk",
+          "face": "right",
+          "exit": "right"
+        }
+      ]
+    }
+  ]
+}

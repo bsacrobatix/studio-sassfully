@@ -1,0 +1,11 @@
+{
+  "name": "@sassfully/demo-stage",
+  "version": "0.1.0",
+  "description": "Animated cartoon cast for narrated browser demos: slidey's stage runtime (vendored) mounted as a transparent, pointer-events:none SVG overlay above live page content. Characters walk on, speak in bubbles, gesture, and point at things.",
+  "type": "module",
+  "main": "src/index.mjs",
+  "license": "Apache-2.0",
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  }
+}
