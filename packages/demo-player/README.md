@@ -67,7 +67,20 @@ page  → caller: { type: "sassfully:demo:result", requestId,
 `sassfully/demo-script/v1` — see `src/demo-script.mjs` for the full bounded
 contract (≤50 steps; capped string lengths; actions limited to
 `click`/`fill`/`press`). Each step: `{id?, spotlight?, caption?, narration?,
-dwellMs?, action?}`. This sample runs against `examples/host-page/?demo=1`:
+dwellMs?, action?}`.
+
+`spotlight` and click/fill `action.selector` accept either a CSS selector
+string or a **structured anchor** object — `{role?, name?, testid?, text?,
+css?}` — resolved by ranked strategy `role → testid → text → css`
+(`src/anchor-resolve.mjs`, same contract as the extension and tour-player).
+Ambiguity at a rank is a hard failure; a lower-ranked match still plays but is
+reported as `healed` in the step result and in `onStepEvent` end stamps, so
+hosts learn the higher-ranked anchor drifted. Per-step lifecycle events flow
+through the `onStepEvent` injected dep as
+`{type: "step", index, id, phase: "start" | "end", ok?, anchor?, healed?,
+error?}` — the embedded analogue of the extension's rrweb step stamps.
+
+This sample runs against `examples/host-page/?demo=1`:
 
 ```json
 {

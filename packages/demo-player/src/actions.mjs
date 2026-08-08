@@ -21,21 +21,31 @@ export async function waitForVisibleElement({ document, selectors, attempts = 10
 
 // Execute one demo action ({kind, selector?, value?}, already validated by
 // validateDemoScript) against the document. Throws when the target is absent.
-export async function executeDemoAction({ document, action }) {
+// Structured-anchor actions (selector is an anchor object) act directly on
+// the pre-resolved `element` — there is no CSS selector to re-query — exactly
+// like the extension's paired-tab executor; string selectors keep the
+// original querySelector path.
+export async function executeDemoAction({ document, action, element = null }) {
   const win = document.defaultView ?? globalThis;
+  const resolveTarget = (verb) => {
+    if (action.selector != null && typeof action.selector === "object") {
+      if (!element) throw new Error(`${verb} target was not found on the page`);
+      return element;
+    }
+    const found = document.querySelector(action.selector);
+    if (!found) throw new Error(`${verb} target was not found on the page`);
+    return found;
+  };
   if (action.kind === "click") {
-    const element = document.querySelector(action.selector);
-    if (!element) throw new Error("click target was not found on the page");
-    element.click();
+    resolveTarget("click").click();
     return { clicked: true };
   }
   if (action.kind === "fill") {
-    const element = document.querySelector(action.selector);
-    if (!element) throw new Error("fill target was not found on the page");
-    element.focus?.();
-    element.value = action.value;
-    element.dispatchEvent(new win.Event("input", { bubbles: true }));
-    element.dispatchEvent(new win.Event("change", { bubbles: true }));
+    const target = resolveTarget("fill");
+    target.focus?.();
+    target.value = action.value;
+    target.dispatchEvent(new win.Event("input", { bubbles: true }));
+    target.dispatchEvent(new win.Event("change", { bubbles: true }));
     return { filled: true };
   }
   if (action.kind === "press") {

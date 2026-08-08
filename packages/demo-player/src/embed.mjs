@@ -9,7 +9,8 @@
 // is OFF unless the host passes a non-empty caller-origin allowlist.
 import { cancelSpeech, clearDemoOverlay, clickPulse, showCaption, showSpotlight, speak as defaultSpeak } from "./demo-overlay.mjs";
 import { createDemoRunState, runDemoScript } from "./demo-player.mjs";
-import { executeDemoAction, waitForVisibleElement } from "./actions.mjs";
+import { executeDemoAction } from "./actions.mjs";
+import { waitForAnchor } from "./anchor-resolve.mjs";
 import { validateDemoScript } from "./demo-script.mjs";
 
 export const DEMO_MESSAGE_RUN = "sassfully:demo:run";
@@ -23,7 +24,7 @@ export const DEMO_MESSAGE_RESULT = "sassfully:demo:result";
 export function createDemoController({ document, executeAction, speak, onStepEvent } = {}) {
   if (!document) throw new Error("demo controller: a DOM document is required");
   const doSpeak = speak ?? defaultSpeak;
-  const doAct = executeAction ?? ((action) => executeDemoAction({ document, action }));
+  const doAct = executeAction ?? ((action, element) => executeDemoAction({ document, action, element }));
   const emit = (event) => { try { onStepEvent?.(event); } catch { /* observer errors never break the run */ } };
   let active = null;
   let lastResult = null;
@@ -42,14 +43,21 @@ export function createDemoController({ document, executeAction, speak, onStepEve
     const state = createDemoRunState();
     active = state;
     const deps = {
-      waitForTarget: (selector) => waitForVisibleElement({ document, selectors: [selector] }),
+      // Targets are CSS strings or structured anchors; waitForAnchor handles
+      // both (ranked role -> testid -> text -> css, ambiguity hard-fails).
+      waitForTarget: (target) => waitForAnchor(document, target),
       spotlight: (element) => { emit({ type: "spotlight" }); showSpotlight(document, element); },
       caption: (text) => { emit({ type: "caption", text }); showCaption(document, text); },
       pulse: (element) => clickPulse(document, element),
       narrate: (text, { fallbackMs }) => { emit({ type: "narrate", text }); return doSpeak(text, { fallbackMs }); },
-      act: (action) => { emit({ type: "act", action }); return doAct(action); },
+      act: (action, element) => { emit({ type: "act", action }); return doAct(action, element); },
       delay: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
       clear: () => { cancelSpeech(); clearDemoOverlay(); },
+      // Step lifecycle breadcrumbs (the embedded-host analogue of the
+      // extension's rrweb stamps): start/end per step with the step id/index
+      // and, on end, the matched anchor strategy + healed notes, so hosts
+      // can record/QA runs identically to extension replays.
+      stepStamp: (stamp) => emit({ type: "step", ...stamp }),
     };
     try {
       const demo = await runDemoScript({ script, deps, state });
