@@ -7,16 +7,19 @@
 //   node scripts/demo-send.mjs --stop --exec                 # send demo_stop instead
 //
 // Exec-mode options:
-//   --port <n>            bridge WebSocket port (default 8765; see RUNBOOK troubleshooting
-//                         for port collisions — 8765 is popular with local services)
-//   --pairing-code <c>    supply the pairing code instead of letting the server mint one
+//   --port <n>            bridge WebSocket port (default 8931; see RUNBOOK troubleshooting
+//                         for port collisions)
+//   --pairing-code <c>    supply the pairing code (the part of the token after the
+//                         first dot) instead of letting the server mint one
 //   --wait <seconds>      keep retrying while no tab is paired (default 180)
 //
-// IMPORTANT: pairing codes are per server INSTANCE. In --exec mode this script
-// spawns a fresh bridge, so the extension popup must be (re-)paired against the
-// code this instance prints on stderr before the demo can play. The script
-// retries while it sees "No user-paired Chrome tab", so the flow is: run it,
-// read the code off stderr, pair the popup, and the queued demo starts.
+// IMPORTANT: pairing tokens (`<port>.<code>`) are per server INSTANCE. In
+// --exec mode this script spawns a fresh bridge, so the extension popup must be
+// (re-)paired against the token this instance prints on stderr before the demo
+// can play — unless you pass --pairing-code (and --port) to reuse an existing
+// pairing, in which case the already-paired extension reconnects on its own.
+// The script retries while it sees "No user-paired Chrome tab", so the flow is:
+// run it, read the token off stderr, pair the popup, and the queued demo starts.
 // Print mode (no --exec) is for piping into an ALREADY-RUNNING bridge's stdin —
 // only useful if you own that process's stdin.
 import { spawn } from "node:child_process";
@@ -85,7 +88,7 @@ readline.createInterface({ input: server.stdout, crlfDelay: Infinity }).on("line
   const text = response.result?.content?.[0]?.text ?? JSON.stringify(response.result ?? response.error ?? {});
   if (response.result?.isError) {
     if (/No user-paired Chrome tab/.test(text) && Date.now() < deadline) {
-      process.stderr.write("demo-send: no paired tab yet — pair the popup with the code above; retrying in 2s…\n");
+      process.stderr.write("demo-send: no paired tab yet — pair the popup with the token above; retrying in 2s…\n");
       setTimeout(() => { inFlight = send("tools/call", { name: "linkedin_story", arguments: command }); }, 2000);
       return;
     }

@@ -47,7 +47,7 @@
       "id": "t7-click-go",
       "spotlight": "[data-testid=\"demo-go\"]",
       "caption": "Generating the greeting",
-      "action": { "kind": "click", "selector": "[data-testid=\"demo-go\"]" },
+      "action": { "kind": "click", "selector": { "role": "button", "text": "Generate greeting", "css": "[data-testid=\"demo-go\"]" } },
       "dwellMs": 700
     },
     {

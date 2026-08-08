@@ -39,15 +39,29 @@ before anything plays):
 |---|---|---|
 | `steps` | array | 1–50 steps |
 | `id` | string | ≤ 100 chars (optional but recommended: makes failures reportable) |
-| `spotlight` | CSS selector string | ≤ 500 chars |
+| `spotlight` | target (CSS selector string or anchor object) | string ≤ 500 chars |
 | `caption` | string | ≤ 500 chars |
 | `narration` | string | ≤ 2000 chars |
 | `dwellMs` | number | 0–60000 (default 800) |
 | `action.kind` | string | exactly `click`, `fill`, or `press` |
-| `action.selector` | CSS selector string | ≤ 500 chars; required for `click` and `fill` |
+| `action.selector` | target (CSS selector string or anchor object) | string ≤ 500 chars; required for `click` and `fill` |
 | `action.value` | string | ≤ 2000 chars; required for `fill` (text) and `press` (key) |
 
 All non-empty strings: `""` is invalid wherever a string is given.
+
+A **target** is either a raw CSS selector string (the original POC shape,
+still valid) or a structured anchor object with bounded fields, resolved by
+ranked strategy `role` → `testid` → `text` → `css` (`name` refines `role` and
+cannot locate anything on its own):
+
+```json
+{ "role": "button", "text": "Generate greeting", "css": "[data-testid=\"demo-go\"]" }
+```
+
+Bounds: `role` ≤ 100, `name`/`testid` ≤ 300, `text`/`css` ≤ 500 chars; unknown
+keys are rejected. Anchors survive markup churn better than a lone CSS
+selector — see `examples/host-page-demo-tour.json` step `t7-click-go` for a
+live one.
 
 ## 2. How a step plays (the timeline you are pacing)
 

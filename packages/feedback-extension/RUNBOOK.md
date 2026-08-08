@@ -59,15 +59,20 @@ server): ≤ 50 steps; `id` ≤ 100 chars, `spotlight`/`caption`/`action.selecto
    enable capture for `http://127.0.0.1:7893` (this registers the content
    scripts; the story receiver needs them).
 
-5. **Start the story bridge** (prints a one-time pairing code):
+5. **Start the story bridge** (prints a one-line pairing token):
 
    ```sh
    node packages/feedback-extension/story-bridge/stdio-server.mjs
    ```
 
+   Look for `Sassfully Story pairing token: <port>.<code>` on stderr — e.g.
+   `8931.tR4…`. The token carries both the port (default 8931) and the
+   per-instance secret code, so there is no separate port field to get wrong.
+
 6. **Pair via the popup**: with the host-page tab focused, open the extension
-   popup, paste the pairing code (port 8765), and click Pair. The loopback
-   demo host is pairable alongside LinkedIn for this POC.
+   popup, paste the whole pairing token into the single "Pairing token" field,
+   and click Pair. The loopback demo host is pairable alongside LinkedIn for
+   this POC.
 
 7. **Send `demo_run`**. The stdio server is an MCP server on stdin/stdout;
    after `initialize`, call the `linkedin_story` tool. Raw JSON-RPC (one line,
@@ -88,8 +93,10 @@ server): ≤ 50 steps; `id` ≤ 100 chars, `spotlight`/`caption`/`action.selecto
      sleep 60; } | node story-bridge/stdio-server.mjs --pairing-code <CODE-FROM-STEP-5>
    ```
 
-   (Re-pair the popup with `<CODE...>` if you restart the server with a new
-   code. From an MCP client, simply call tool `linkedin_story` with
+   (`--pairing-code` takes only the code — the part of the token after the
+   first dot. Reusing the same port and code lets the already-paired extension
+   reconnect on its own; a new code means re-pairing the popup with the new
+   token. From an MCP client, simply call tool `linkedin_story` with
    `{"action":"demo_run","script":{...}}`.)
 
 8. **Stop early** (optional): `{"action":"demo_stop"}` clears the overlay and
@@ -107,30 +114,33 @@ write scripts):
   command plus a reload in `chrome://extensions`.
 - `npm run demo:send -- examples/host-page-demo.json --exec` — validate the
   script, spawn a fresh story bridge (pass `--port`/`--pairing-code` through),
-  send the `demo_run`, and retry while no tab is paired. The pairing code is
-  per server instance: pair the popup against the code THIS run prints on
+  send the `demo_run`, and retry while no tab is paired. The pairing token is
+  per server instance: pair the popup against the token THIS run prints on
   stderr, and the queued demo starts. Without `--exec` it prints the exact
   JSON-RPC lines to feed to a bridge's stdin. `--stop --exec` sends
   `demo_stop`.
 
 ## Troubleshooting
 
-- **Port 8765 is taken (or the bridge pairs but behaves oddly).** The default
-  port collides with common local services — Docker helpers and Agent Mail
-  both like 8765. Check who owns it with `lsof -nP -iTCP:8765 -sTCP:LISTEN`;
-  if it isn't your bridge, start the bridge on another port
-  (`--port 8877`) and enter that port when pairing in the popup. Verify the
-  bridge is the listener before pairing.
-- **Popup says "paired" but nothing happens.** The popup's paired badge can be
-  stale while the underlying socket is down (a fix making it honest is in
-  flight, but verify anyway). Check for a live connection:
-  `lsof -nP -iTCP:<port> | grep ESTABLISHED` — you should see Chrome connected
-  to the bridge's port. No ESTABLISHED line means the extension is not
-  actually connected; re-pair before blaming the demo script.
-- **Restarted the bridge? Unpair, then re-pair.** Pairing codes are one-time
-  and per server instance: a new bridge process mints a new code (unless you
-  pass `--pairing-code`), and the extension will not reconnect to it on its
-  own. In the popup: unpair, then pair again with the new code.
+- **Bridge fails to listen, or pairs but behaves oddly.** The default port is
+  8931, chosen to dodge common local squatters (Docker helpers and Agent Mail
+  both like 8765). If 8931 is taken on your machine the bridge exits with the
+  listen error; check who owns the port with
+  `lsof -nP -iTCP:8931 -sTCP:LISTEN`, or start the bridge on another port
+  (`--port 8877`) — the printed token starts with that port, so pairing picks
+  it up automatically. Verify the bridge is the listener before pairing.
+- **Popup shows "Paired · NOT connected (retrying…)".** The popup now reports
+  the live socket state, not just the stored pairing: "Paired · connected"
+  means the bridge really has the tab; "NOT connected" means the extension is
+  dialing and failing (the last error is shown inline). Make sure the bridge
+  process is running on the token's port — cross-check with
+  `lsof -nP -iTCP:<port> | grep ESTABLISHED` if in doubt.
+- **Restarted the bridge?** The extension reconnects on its own (fast retry
+  plus a 30 s alarms backstop that survives service-worker restarts) as long
+  as the port and code are unchanged — i.e. you restarted with
+  `--pairing-code` (and the same `--port`). A fresh bridge without
+  `--pairing-code` mints a new code, and the old pairing can never match it:
+  unpair in the popup, then pair again with the new token.
 - **Demo appears to do nothing.** Watch the bridge's stderr. "No user-paired
   Chrome tab is connected to the loopback bridge" means pairing, not the
   script, is the problem (see above). If the bridge accepts the command but
