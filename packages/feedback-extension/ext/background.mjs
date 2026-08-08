@@ -4,7 +4,7 @@
 // (req-recording-visibility), and the draft stash handed from a page's
 // content script to the dedicated review tab.
 import { idbBackend } from "./lib/idb-backend.mjs";
-import { AUTONOMOUS_JOBS_SESSION, isLinkedInOriginUrl, LINKEDIN_ORIGIN, validateStoryCommand } from "./story-bridge-policy.mjs";
+import { AUTONOMOUS_JOBS_SESSION, isStoryPairableUrl, LINKEDIN_ORIGIN, validateStoryCommand } from "./story-bridge-policy.mjs";
 import { ensureStoryReceiver } from "./story-receiver.mjs";
 import { appendStoryAudit, makeStoryAuditEntry } from "./story-audit.mjs";
 import { runScriptSteps } from "./story-script.mjs";
@@ -124,7 +124,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
     if (msg?.type === "pair-story-bridge") {
       const tab = await chrome.tabs.get(msg.tabId);
-      if (!isLinkedInOriginUrl(tab.url)) { sendResponse({ ok: false, error: "Open any www.linkedin.com tab first." }); return; }
+      if (!isStoryPairableUrl(tab.url)) { sendResponse({ ok: false, error: "Open a www.linkedin.com tab or the 127.0.0.1 demo host page first." }); return; }
       if (typeof msg.code !== "string" || !/^[A-Za-z0-9_-]{24,128}$/.test(msg.code)) { sendResponse({ ok: false, error: "Enter the pairing code printed by the local bridge." }); return; }
       const port = Number(msg.port ?? 8765);
       if (!Number.isInteger(port) || port < 1024 || port > 65535) { sendResponse({ ok: false, error: "Loopback port must be 1024–65535." }); return; }

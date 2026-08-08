@@ -1,0 +1,42 @@
+{
+  "version": "sassfully/demo-script/v1",
+  "steps": [
+    {
+      "id": "s1-welcome",
+      "spotlight": "[data-testid=\"host-header\"] h1",
+      "caption": "Welcome to Acme Docs",
+      "narration": "This is Acme Docs, a real host application embedding the sassfully feedback widget.",
+      "dwellMs": 1000
+    },
+    {
+      "id": "s2-surface",
+      "spotlight": "[data-testid=\"host-content\"] h2",
+      "caption": "The product surface",
+      "narration": "Every product surface on this page can carry contextual feedback anchors.",
+      "dwellMs": 800
+    },
+    {
+      "id": "s3-fill-name",
+      "spotlight": "[data-testid=\"demo-name\"]",
+      "caption": "Let's try the interactive form",
+      "narration": "First, we type a name into the demo form.",
+      "action": { "kind": "fill", "selector": "[data-testid=\"demo-name\"]", "value": "Ada Lovelace" },
+      "dwellMs": 800
+    },
+    {
+      "id": "s4-click-go",
+      "spotlight": "[data-testid=\"demo-go\"]",
+      "caption": "Generate the greeting",
+      "narration": "Then we click the button to generate a greeting.",
+      "action": { "kind": "click", "selector": "[data-testid=\"demo-go\"]" },
+      "dwellMs": 800
+    },
+    {
+      "id": "s5-result",
+      "spotlight": "[data-testid=\"demo-output\"]",
+      "caption": "And there is the result",
+      "narration": "The page responds instantly. That concludes this narrated demo.",
+      "dwellMs": 1500
+    }
+  ]
+}

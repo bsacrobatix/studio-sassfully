@@ -1,4 +1,6 @@
 import { validateStoryCommand } from "../story-bridge-policy.mjs";
+import { cancelSpeech, clearDemoOverlay, clickPulse, showCaption, showSpotlight, speak } from "./demo-overlay.mjs";
+import { createDemoRunState, demoActionToStoryCommand, runDemoScript } from "./demo-player.mjs";
 
 export const FIELD_SELECTORS = {
   keywords: 'input[aria-label*="Search by title"], input[placeholder*="Search by title"], input[aria-label*="skill, or company"]',
@@ -60,9 +62,39 @@ export function extractVisibleText(document, selector = "body") {
 // Pairing opts into this explicit autonomous, Jobs-only session. There is no
 // modal and no generic command path: the background still validates action,
 // route, session mode, request ID, and audit outcome.
+// One narrated demo at a time per tab. demo_run cancels any prior run;
+// demo_stop clears the overlay and silences narration immediately.
+let activeDemo = null;
+function stopActiveDemo() {
+  activeDemo?.cancel();
+  activeDemo = null;
+  cancelSpeech();
+  clearDemoOverlay();
+}
+
+async function runNarratedDemo({ document, location, script, requestId }) {
+  stopActiveDemo();
+  const state = createDemoRunState();
+  activeDemo = state;
+  const deps = {
+    waitForTarget: (selector) => waitForVisibleSemanticElement({ document, selectors: [selector] }),
+    spotlight: (element) => showSpotlight(document, element),
+    caption: (text) => showCaption(document, text),
+    pulse: (element) => clickPulse(document, element),
+    narrate: (text, { fallbackMs }) => speak(text, { fallbackMs }),
+    act: (action) => runAutonomousStoryCommand({ document, location, command: demoActionToStoryCommand(action), requestId }),
+    delay: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    clear: () => { cancelSpeech(); clearDemoOverlay(); },
+  };
+  try { return { requestId, demo: await runDemoScript({ script, deps, state }) }; }
+  finally { if (activeDemo === state) activeDemo = null; }
+}
+
 export async function runAutonomousStoryCommand({ document, location, command, requestId = "unknown" }) {
   const check = validateStoryCommand(command);
   if (!check.ok) throw new Error(check.error);
+  if (command.action === "demo_run") return runNarratedDemo({ document, location, script: command.script, requestId });
+  if (command.action === "demo_stop") { stopActiveDemo(); return { requestId, demoStopped: true }; }
   if (command.action === "snapshot") return { requestId, url: location.href, title: document.title, visibleText: extractVisibleText(document).join(" ") };
   if (command.action === "navigate") { location.assign(command.url); return { requestId, navigating: true }; }
   if (command.action === "click") {

@@ -23,11 +23,24 @@
     privacy manifest, and routes reviewed bundles to a local JSONL sink rendered below.
     Nothing here is a mockup.</p>
   </div>
+  <div class="card" data-testid="demo-form">
+    <h3>Try the product</h3>
+    <p>A tiny interactive surface for the narrated-demo overlay POC.</p>
+    <label>Your name <input id="demo-name" data-testid="demo-name" placeholder="Ada Lovelace"></label>
+    <button id="demo-go" data-testid="demo-go" type="button">Generate greeting</button>
+    <p id="demo-output" data-testid="demo-output"></p>
+  </div>
   <div class="card">
     <h3>Local JSONL sink (what actually left the reporter)</h3>
     <pre id="sink-log" data-testid="sink-log">(nothing submitted yet)</pre>
   </div>
 </main>
+<script>
+  document.getElementById("demo-go").addEventListener("click", () => {
+    const name = document.getElementById("demo-name").value.trim() || "friend";
+    document.getElementById("demo-output").textContent = `Hello, ${name} — greeting generated at ${new Date().toLocaleTimeString()}.`;
+  });
+</script>
 <script type="module">
   import {
     mountReporter, createPrivacyManifest, createRouter, localJsonlSink,

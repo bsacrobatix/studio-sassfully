@@ -17,7 +17,7 @@ test("build assembles a coherent unpacked extension", async () => {
   assert.equal(manifest.manifest_version, 3);
   assert.deepEqual(manifest.optional_host_permissions, ["https://www.linkedin.com/*"]);
   assert.deepEqual(manifest.host_permissions, ["http://127.0.0.1/*"]);
-  assert.deepEqual(manifest.web_accessible_resources[0].matches, ["https://www.linkedin.com/*"]);
+  assert.deepEqual(manifest.web_accessible_resources[0].matches, ["https://www.linkedin.com/*", "http://127.0.0.1/*"], "content modules stay importable on LinkedIn and the loopback demo host");
   assert.ok(manifest.web_accessible_resources[0].resources.includes("story-bridge-policy.mjs"), "the injected content module's root policy import must remain LinkedIn-accessible");
   const expected = [
     manifest.background.service_worker,

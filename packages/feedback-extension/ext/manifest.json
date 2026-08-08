@@ -11,6 +11,6 @@
   "host_permissions": ["http://127.0.0.1/*"],
   "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' ws://127.0.0.1:*" },
   "web_accessible_resources": [
-    { "resources": ["content/*", "vendor/*", "story-bridge-policy.mjs"], "matches": ["https://www.linkedin.com/*"] }
+    { "resources": ["content/*", "vendor/*", "story-bridge-policy.mjs"], "matches": ["https://www.linkedin.com/*", "http://127.0.0.1/*"] }
   ]
 }

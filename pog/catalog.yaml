@@ -1154,6 +1154,16 @@ nodes:
     edges:
       part_of: [product-sassfully]
       motivated_by: [uc-ext-bug-report, uc-bug-report-with-replay]
+  - schema: sassfully/requirement/v0
+    id: req-ext-narrated-demo-poc
+    title: Extension plays an LLM-driven narrated browser demo from a bounded demo script (POC)
+    status: draft
+    visibility: public
+    summary: "A demo_run command over the existing story bridge carries a bounded sassfully/demo-script/v1 JSON script (max 50 steps; bounded string fields) and the paired tab plays it live: spotlight/dim overlay and caption banner (slidey tour theme, all pointer-events:none, closed shadow root), click-pulse affordance before each action, spoken narration via speechSynthesis with a dwell-time fallback, actions executed through the existing autonomous story-command machinery, first-error stop, and a demo_stop command that clears the overlay and cancels speech. Proof-of-concept scope: validated against the loopback example host page, not generalized."
+    sources: [source-extension-mode]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-ext-bug-report]
   - schema: sassfully/use-case/v0
     id: uc-ext-bug-report
     title: Zero-integration bug report via the browser extension
