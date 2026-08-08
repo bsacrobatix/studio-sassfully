@@ -1222,6 +1222,16 @@ nodes:
     edges:
       part_of: [product-sassfully]
       satisfies: [req-ext-bridge-enrich, req-standalone-and-embedded]
+  - schema: sassfully/component/v0
+    id: comp-demo-player
+    title: demo-player (env-neutral narrated demo player + host-SDK demo mode)
+    status: in-progress
+    visibility: public
+    summary: "`@sassfully/demo-player` — environment-neutral narrated demo player extracted from the feedback-extension demo overlay POC. Plays sassfully/demo-script/v1 (spotlight/dim, caption, speechSynthesis narration, click-pulse, real click/fill/press actions) against any DOM document; injected side-effect seams keep sequencing node-testable. Ships the opt-in host-SDK demo surface: `mountReporter({demoMode:true, demoOrigins})` exposes `window.__sassfullyDemo` {run,stop,status} plus an origin-allowlisted postMessage channel (default disabled). Never on by default; scripts validated and bounded before any side effect."
+    sources: [source-extension-mode]
+    edges:
+      part_of: [product-sassfully]
+      satisfies: [req-ext-narrated-demo-poc, req-standalone-and-embedded]
   - schema: sassfully/feature/v0
     id: feature-extension-mode
     title: Extension mode

@@ -48,3 +48,19 @@ test("the extension's validator and this one agree (extraction stays in sync)", 
     assert.deepEqual(validateDemoScript(candidate), extensionValidate(candidate));
   }
 });
+
+// KNOWN DRIFT (integration finding, 2026-08-08): the extension's validator
+// gained structured anchor targets (`validDemoTarget()`: spotlight and
+// click/fill action.selector accept `{role, name, testid, text, css}` objects,
+// resolved role -> testid -> text -> css) in the demo-overlay-quality branch.
+// This package was extracted BEFORE that work and still only accepts CSS
+// selector strings, so e.g. examples/host-page-demo-tour.json step t7-click-go
+// validates in the extension but is rejected here. Transplanting the anchor
+// support into this package is a dedicated follow-up task; until then this
+// TODO test documents the drift without failing the gate.
+test("TODO: package validator accepts structured anchor targets like the extension's", { todo: "anchor-target transplant pending" }, async () => {
+  const { validateDemoScript: extensionValidate } = await import("../../feedback-extension/ext/story-bridge-policy.mjs");
+  const anchored = script([step({ spotlight: { role: "button", text: "Generate greeting", css: "[data-testid=\"demo-go\"]" } })]);
+  assert.equal(extensionValidate(anchored).ok, true, "extension accepts anchor targets");
+  assert.deepEqual(validateDemoScript(anchored), extensionValidate(anchored));
+});
