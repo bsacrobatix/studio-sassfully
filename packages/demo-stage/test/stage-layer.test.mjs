@@ -98,6 +98,7 @@ test('mount creates a fixed, transparent, pointer-events:none layer; destroy rem
   assert.equal(el.style.pointerEvents, 'none');
   assert.equal(el.style.background, 'transparent');
   assert.equal(el.style.zIndex, String(STAGE_LAYER_Z));
+  assert.equal(STAGE_LAYER_Z, 2147483647, 'presenter sits above the dimmer band');
 
   layer.destroy();
   assert.equal(doc.documentElement.children.length, 0);
@@ -135,6 +136,36 @@ test('playScene mounts the player in a placed box and resolves on scene end', as
   await done;                                // promise resolves
   assert.equal(p.destroyed, 1);
   assert.equal(layer.container.children.length, 0, 'stage box removed after end');
+});
+
+test('a local static presenter is mounted in the stage layer and removed on stop', async () => {
+  const doc = makeDocument();
+  const fake = makeFakePlayer();
+  const layer = mountStageLayer(doc, { mountPlayer: fake.mountPlayer });
+  const done = layer.playScene({
+    presenter: { id: 'nova', src: '/packages/demo-stage/assets/nova-cutout.png', alt: 'Nova presenter' },
+    placement: { mode: 'dock', edge: 'bottom-left', size: 0.3 },
+  });
+  assert.equal(fake.calls.length, 0, 'a cutout can be stage-owned without a vector scene');
+  const image = layer.container.children[0].children[0];
+  assert.equal(image.tag, 'img');
+  assert.equal(image.attrs['data-demo-stage-presenter'], 'nova');
+  assert.equal(image.attrs.src, '/packages/demo-stage/assets/nova-cutout.png');
+  assert.equal(image.style.objectFit, 'contain');
+  layer.stop();
+  await done;
+  assert.equal(layer.container.children.length, 0);
+});
+
+test('a cutout can sit above an animated slidey scene in the same stage box', async () => {
+  const doc = makeDocument();
+  const fake = makeFakePlayer();
+  const layer = mountStageLayer(doc, { mountPlayer: fake.mountPlayer });
+  const done = layer.playScene({ scene, presenter: { id: 'nova', src: '/packages/demo-stage/assets/nova-cutout.png' } });
+  const host = fake.calls[0].host;
+  assert.equal(host.children.at(-1).attrs['data-demo-stage-presenter'], 'nova');
+  fake.calls[0].end();
+  await done;
 });
 
 test('stop() ends the running scene early and resolves its promise', async () => {

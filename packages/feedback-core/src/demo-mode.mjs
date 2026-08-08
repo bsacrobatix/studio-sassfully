@@ -9,7 +9,7 @@
 // example host page loads this SDK as native browser ES modules straight from
 // the repo tree (no bundler, no import map), and the same relative specifier
 // resolves identically under node and under examples/host-page/serve.mjs.
-export async function enableDemoMode({ window, document, allowedOrigins = [], executeAction, speak, onStepEvent } = {}) {
+export async function enableDemoMode({ window, document, allowedOrigins = [], executeAction, speak, narrationUrl, mountStageLayer, embeddedBridge, onStepEvent } = {}) {
   const { installDemoEmbed } = await import("../../demo-player/src/embed.mjs");
-  return installDemoEmbed({ window, document, allowedOrigins, executeAction, speak, onStepEvent });
+  return installDemoEmbed({ window, document, allowedOrigins, executeAction, speak, narrationUrl, mountStageLayer, embeddedBridge, onStepEvent });
 }

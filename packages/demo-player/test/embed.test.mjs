@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DEMO_MESSAGE_RESULT, DEMO_MESSAGE_RUN, DEMO_MESSAGE_STOP, createDemoController, installDemoEmbed } from "../src/embed.mjs";
+import { DEMO_MESSAGE_RESULT, DEMO_MESSAGE_RUN, DEMO_MESSAGE_STOP, bindEmbeddedDemoSession, createDemoController, createEdgeNarrator, installDemoEmbed, unlockDemoAudio } from "../src/embed.mjs";
 
 const SCRIPT = { steps: [
   { id: "s1", narration: "hello", dwellMs: 0 },
@@ -66,14 +66,14 @@ test("the controller runs a script against injected deps and reports status", as
     speak: async () => {},
     onStepEvent: (evt) => events.push(evt),
   });
-  assert.deepEqual(controller.status(), { running: false, lastResult: null });
+  assert.deepEqual(controller.status(), { running: false, lastResult: null, media: { narration: [], stage: [], audioUnlock: null } });
   const demo = await controller.run(SCRIPT);
   assert.equal(demo.completed, true);
   assert.deepEqual(demo.completedSteps, [
     { index: 0, id: "s1", ok: true, anchor: null, healed: null },
     { index: 1, id: "s2", ok: true, anchor: null, healed: null },
   ]);
-  assert.deepEqual(controller.status(), { running: false, lastResult: demo });
+  assert.deepEqual(controller.status(), { running: false, lastResult: demo, media: { narration: [], stage: [], audioUnlock: null } });
   assert.deepEqual(events.map((evt) => evt.type), ["step", "narrate", "step", "step", "act", "step", "done"]);
   // Per-step lifecycle info flows through onStepEvent exactly like the
   // extension's rrweb stamps: start/end with id, index, anchor, healed.
@@ -84,6 +84,141 @@ test("the controller runs a script against injected deps and reports status", as
     { type: "step", index: 1, id: "s2", phase: "end", ok: true, anchor: null, healed: null },
   ]);
   await assert.rejects(() => controller.run({ steps: [] }), /non-empty steps array/);
+});
+
+test("embedded controller lazily mounts and plays a stage scene next to its target", async () => {
+  const played = [];
+  const layer = { stop() {}, destroy() {}, playScene: async (args) => played.push(args) };
+  const controller = createDemoController({
+    document: makeDocument(), speak: async () => {}, mountStageLayer: async () => layer,
+  });
+  await controller.run({ steps: [{ spotlight: "#panel", stage: { scene: { type: "stage" }, anchor: "target" }, dwellMs: 0 }] });
+  assert.equal(played.length, 1);
+  assert.equal(played[0].placement.mode, "anchor");
+  controller.destroy();
+});
+
+test("persistent presenter remains mounted while the next step completes", async () => {
+  const played = [];
+  const layer = { stop() {}, destroy() {}, playScene: async (args) => played.push(args) };
+  const controller = createDemoController({ document: makeDocument(), speak: async () => {}, mountStageLayer: async () => layer });
+  const demo = await controller.run({ steps: [
+    { stage: { scene: { type: "stage" }, persistent: true }, dwellMs: 0 },
+    { caption: "still here", dwellMs: 0 },
+  ] });
+  assert.equal(demo.completed, true);
+  assert.equal(played.length, 1);
+});
+
+test("run acknowledgment exposes persistent-stage mount telemetry", async () => {
+  const layer = { stop() {}, destroy() {}, playScene: async () => {} };
+  const controller = createDemoController({ document: makeDocument(), speak: async () => {}, mountStageLayer: async () => layer });
+  const demo = await controller.run({ steps: [{ stage: { scene: { type: "stage" }, persistent: true, anchor: { mode: "dock", edge: "bottom-left", size: 0.3 } }, dwellMs: 0 }] });
+  assert.equal(demo.media.stage[0].status, "mounted");
+  assert.equal(controller.status().media.stage[0].status, "mounted");
+});
+
+test("a static local presenter flows through the resident stage adapter and receipt", async () => {
+  const played = [];
+  const layer = { stop() {}, destroy() {}, playScene: async (args) => played.push(args) };
+  const controller = createDemoController({ document: makeDocument(), speak: async () => {}, mountStageLayer: async () => layer });
+  const presenter = { id: "nova", src: "/packages/demo-stage/assets/nova-cutout.png", alt: "Nova" };
+  const demo = await controller.run({ steps: [{ stage: { presenter, persistent: true, anchor: { mode: "dock", edge: "bottom-left", size: 0.3 } }, dwellMs: 0 }] });
+  assert.deepEqual(played[0].presenter, presenter);
+  assert.equal(played[0].scene, undefined);
+  assert.equal(demo.media.stage[0].presenter, "nova");
+});
+
+test("audio unlock performs only user-gesture media priming", async () => {
+  let played = 0;
+  class Context { constructor() { this.state = "suspended"; } async resume() { this.state = "running"; } }
+  class Audio { async play() { played += 1; } pause() {} }
+  const result = await unlockDemoAudio({ AudioContext: Context, Audio });
+  assert.deepEqual(result, { attempted: true, audioContext: "running", silentAudio: "played", unlocked: true });
+  assert.equal(played, 1);
+});
+
+test("edge narration reports a gesture block and never silently falls back to speech synthesis", async () => {
+  const statuses = []; let fallbackCalls = 0;
+  const narrator = createEdgeNarrator({ url: "http://127.0.0.1:4547/narration", window: { fetch: async () => { const error = new Error("play() requires a user gesture"); error.name = "NotAllowedError"; throw error; } }, fallback: async () => { fallbackCalls += 1; }, onStatus: (status) => statuses.push(status) });
+  const result = await narrator("Pip speaks", { fallbackMs: 0 });
+  assert.equal(result.status, "blocked_user_gesture");
+  assert.equal(result.needs_audio_unlock, true);
+  assert.equal(fallbackCalls, 0);
+  assert.equal(statuses[0].status, "blocked_user_gesture");
+});
+
+test("embedded evidence composes redacted browser providers with demo stamps only after permission", async () => {
+  const win = { location: { href: "http://host.test/" }, fetch: async () => ({ status: 200, headers: new Headers() }), addEventListener() {}, removeEventListener() {}, console: { warn() {}, error() {} } };
+  const doc = makeDocument(); doc.defaultView = win;
+  const controller = createDemoController({ document: doc, speak: async () => {} });
+  assert.throws(() => controller.evidence.start(), /explicit permission/);
+  assert.equal(controller.evidence.start({ permission: true }).active, true);
+  await controller.run({ steps: [{ caption: "stamp", dwellMs: 0 }] });
+  controller.evidence.stop();
+  const artifact = controller.evidence.export();
+  assert.equal(artifact.format, "sassfully/feedback-evidence-export/v1");
+  assert.match(artifact.capability, /extension\/CDP-only/);
+  assert.ok(artifact.items.some((item) => item.kind === "demo-execution"));
+});
+
+
+test("one installed API runs two distinct scripts without recreation or navigation", async () => {
+  const { win, embed, acted } = makeEmbed();
+  const first = await win.__sassfullyDemo.run({ steps: [{ caption: "first runtime script", dwellMs: 0 }] });
+  const api = win.__sassfullyDemo;
+  const second = await win.__sassfullyDemo.run({ steps: [{ action: { kind: "click", selector: "#go" }, dwellMs: 0 }] });
+  assert.equal(first.completed, true);
+  assert.equal(second.completed, true);
+  assert.equal(win.__sassfullyDemo, api, "same public API remains installed");
+  assert.equal(embed.controller.status().lastResult, second, "second script replaces status only, not the controller");
+  assert.equal(acted.length, 1);
+});
+
+test("a bound local embedded session validates and runs an RPC-pushed script on the resident API", async () => {
+  class Socket {
+    static OPEN = 1;
+    constructor(url) { this.url = url; this.readyState = 1; this.sent = []; this.listeners = new Map(); Socket.instance = this; }
+    addEventListener(type, fn) { this.listeners.set(type, [...(this.listeners.get(type) ?? []), fn]); }
+    send(value) { this.sent.push(JSON.parse(value)); }
+    close() { this.closed = true; }
+    async emit(type, payload) { for (const fn of this.listeners.get(type) ?? []) await fn(payload); }
+  }
+  const calls = [];
+  const win = { WebSocket: Socket, crypto: { randomUUID: () => "embedded-session-1" }, location: { href: "http://127.0.0.1:7894/?demo=1" } };
+  const api = { run: async (script) => { calls.push(script); return { completed: true, completedSteps: [{ healed: null }] }; }, stop() {} };
+  const session = bindEmbeddedDemoSession({ window: win, api, bridge: { url: "ws://127.0.0.1:8931/embedded-demo" } });
+  await Socket.instance.emit("open");
+  assert.deepEqual(Socket.instance.sent[0], { type: "embedded-demo:hello", sessionId: "embedded-session-1", url: win.location.href });
+  await Socket.instance.emit("message", { data: JSON.stringify({ type: "embedded-demo:run", id: "rpc-1", script: { steps: [{ caption: "pushed", dim: false }] } }) });
+  assert.equal(calls.length, 1);
+  assert.deepEqual(Socket.instance.sent.at(-1), { type: "result", id: "rpc-1", ok: true, result: { sessionId: "embedded-session-1", url: win.location.href, demo: { completed: true, completedSteps: [{ healed: null }] }, drift: [] } });
+  session.close();
+  assert.equal(Socket.instance.closed, true);
+});
+
+test("embedded session reconnects with the same id after a bridge restart and accepts a later push", async () => {
+  class Socket {
+    static OPEN = 1; static instances = [];
+    constructor() { this.readyState = 1; this.sent = []; this.listeners = new Map(); Socket.instances.push(this); }
+    addEventListener(type, fn) { this.listeners.set(type, [...(this.listeners.get(type) ?? []), fn]); }
+    send(value) { this.sent.push(JSON.parse(value)); }
+    close() { this.closed = true; }
+    async emit(type, payload = {}) { for (const fn of this.listeners.get(type) ?? []) await fn(payload); }
+  }
+  const events = []; const calls = [];
+  const win = { WebSocket: Socket, crypto: { randomUUID: () => "stable-page-session" }, location: { href: "http://127.0.0.1:7894/?demo=1" }, setTimeout: (fn) => { fn(); return 1; }, clearTimeout() {} };
+  const api = { run: async (script) => { calls.push(script); return { completed: true, completedSteps: [] }; }, stop() {} };
+  const session = bindEmbeddedDemoSession({ window: win, api, bridge: { url: "ws://127.0.0.1:8931/embedded-demo", retryMs: 0 }, onEvent: (event) => events.push(event) });
+  await Socket.instances[0].emit("open");
+  await Socket.instances[0].emit("close"); // server restart: no page navigation
+  assert.equal(Socket.instances.length, 2);
+  await Socket.instances[1].emit("open");
+  assert.deepEqual(Socket.instances[1].sent[0], { type: "embedded-demo:hello", sessionId: "stable-page-session", url: win.location.href });
+  await Socket.instances[1].emit("message", { data: JSON.stringify({ type: "embedded-demo:run", id: "after-restart", script: { steps: [{ caption: "still resident", dim: false }] } }) });
+  assert.equal(calls.length, 1);
+  assert.ok(events.some((event) => event.status === "reconnecting"));
+  assert.deepEqual(session.status(), { sessionId: "stable-page-session", status: "bound", retries: 0 });
 });
 
 test("structured anchors resolve, record the strategy, and surface healed notes to the host", async () => {
@@ -124,7 +259,7 @@ test("a structured-anchor action acts on the resolved element (no CSS re-query)"
 
 test("installDemoEmbed exposes window.__sassfullyDemo and uninstall removes it", async () => {
   const { win, embed } = makeEmbed();
-  assert.deepEqual(Object.keys(win.__sassfullyDemo).sort(), ["run", "status", "stop"]);
+  assert.deepEqual(Object.keys(win.__sassfullyDemo).sort(), ["evidence", "resume", "run", "status", "stop", "unlockAudio"]);
   const demo = await win.__sassfullyDemo.run(SCRIPT);
   assert.equal(demo.completed, true);
   embed.uninstall();

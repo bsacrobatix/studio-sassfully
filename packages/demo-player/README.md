@@ -42,7 +42,15 @@ When demo mode is enabled the page exposes:
   first failing step; a run cancelled mid-flight resolves
   `{stopped: true, completedSteps}`). Starting a run cancels any prior run.
 - `stop()` — cancels the active run, silences narration, clears the overlay.
-- `status()` — `{running, lastResult}`.
+- `status()` — `{running, lastResult, media}`; `media` records stage and
+  Edge-narration outcomes (including an honest user-gesture block).
+- `unlockAudio()` — must be called from a visible user gesture; primes media
+  only and never starts a tour.
+- `resume()` — reruns the last script after that explicit audio unlock.
+
+For the local MCP draft/control lifecycle, evidence reuse, reconnect behavior,
+and the Nova presenter runbook, see
+[`docs/embedded-demo-control.md`](../../docs/embedded-demo-control.md).
 
 ## postMessage protocol (off by default)
 
@@ -67,7 +75,9 @@ page  → caller: { type: "sassfully:demo:result", requestId,
 `sassfully/demo-script/v1` — see `src/demo-script.mjs` for the full bounded
 contract (≤50 steps; capped string lengths; actions limited to
 `click`/`fill`/`press`). Each step: `{id?, spotlight?, caption?, narration?,
-dwellMs?, action?}`.
+voice?, dim?, stage?, dwellMs?, action?}`. Showcase scripts default to
+`dim:false`; a persistent `stage.presenter` may use only a local tracked
+`/packages/demo-stage/assets/*.png|*.webp` cutout.
 
 `spotlight` and click/fill `action.selector` accept either a CSS selector
 string or a **structured anchor** object — `{role?, name?, testid?, text?,

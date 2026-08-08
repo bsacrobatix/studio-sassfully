@@ -1174,6 +1174,16 @@ nodes:
     edges:
       part_of: [product-sassfully]
       motivated_by: [uc-ext-bug-report]
+  - schema: sassfully/requirement/v0
+    id: req-embedded-demo-control
+    title: DemoMode hosts accept validated draft tours over a local no-reload control lifecycle
+    status: in-progress
+    visibility: public
+    summary: An explicitly demoMode-enabled host binds to the existing loopback story bridge without extension pairing. MCP callers can discover sessions; propose, CAS-update, and preflight a bounded sassfully/demo-script/v1 against the current tab; then push only the exact validated revision to the resident window.__sassfullyDemo API. The surface has stop/resume and explicitly consented reuse of existing redacted feedback evidence capture, but no navigation or arbitrary evaluation. The embedded client reconnects boundedly after a same-port local bridge restart while retaining its session identity; separate scripts run in the already-loaded document.
+    sources: [source-extension-mode]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-ext-bug-report]
   - schema: sassfully/use-case/v0
     id: uc-ext-bug-report
     title: Zero-integration bug report via the browser extension
@@ -1227,11 +1237,11 @@ nodes:
     title: demo-player (env-neutral narrated demo player + host-SDK demo mode)
     status: in-progress
     visibility: public
-    summary: "`@sassfully/demo-player` — environment-neutral narrated demo player extracted from the feedback-extension demo overlay POC. Plays sassfully/demo-script/v1 (spotlight/dim, caption, speechSynthesis narration, click-pulse, real click/fill/press actions) against any DOM document; injected side-effect seams keep sequencing node-testable. Ships the opt-in host-SDK demo surface: `mountReporter({demoMode:true, demoOrigins})` exposes `window.__sassfullyDemo` {run,stop,status} plus an origin-allowlisted postMessage channel (default disabled). Never on by default; scripts validated and bounded before any side effect."
+    summary: "`@sassfully/demo-player` — environment-neutral narrated demo player extracted from the feedback-extension demo overlay POC. Plays sassfully/demo-script/v1 (sparse spotlight/dim, caption, Edge-TTS narration, click-pulse, real click/fill/press, optional persistent stage presenter) against any DOM document; injected side-effect seams keep sequencing node-testable. Ships opt-in host-SDK demo mode: `mountReporter({demoMode:true})` exposes resident `{run,stop,status,unlockAudio,resume,evidence}` behavior, loopback embedded-session binding, bounded reconnect, and an origin-allowlisted postMessage channel (default disabled). Never on by default; scripts are bounded and validated before any side effect."
     sources: [source-extension-mode]
     edges:
       part_of: [product-sassfully]
-      satisfies: [req-ext-narrated-demo-poc, req-standalone-and-embedded]
+      satisfies: [req-ext-narrated-demo-poc, req-standalone-and-embedded, req-embedded-demo-control]
   - schema: sassfully/component/v0
     id: comp-demo-tts
     title: demo-tts (edge-tts narration service)
@@ -1247,11 +1257,21 @@ nodes:
     title: demo-stage (vendored slidey stage overlay layer)
     status: in-progress
     visibility: public
-    summary: "`@sassfully/demo-stage` — slidey's stage runtime (engine/render/player/validate/refs vendored verbatim at a pinned commit, plus one marked transparent-backdrop patch) behind a mountStageLayer adapter: a fixed full-viewport pointer-events:none character/scene layer sitting just under the demo overlay's spotlight band, playable full-viewport, docked to corners/edges, or anchored to a caller-resolved bbox via the pure computeStageBox(). Page content stays interactive underneath; provenance and re-vendor recipe in vendor/VENDORED.md."
+    summary: "`@sassfully/demo-stage` — slidey's stage runtime (engine/render/player/validate/refs vendored verbatim at a pinned commit, plus one marked transparent-backdrop patch) behind a mountStageLayer adapter: a fixed full-viewport pointer-events:none character/scene layer above dimmer and below captions, playable full-viewport, docked to corners/edges, or anchored to a caller-resolved bbox via the pure computeStageBox(). It also mounts safe host-validated static cutouts such as Nova in the same layer. Page content stays interactive underneath; provenance and re-vendor recipe in vendor/VENDORED.md."
     sources: [source-extension-mode]
     edges:
       part_of: [product-sassfully]
       satisfies: [req-ext-narrated-demo-poc]
+  - schema: sassfully/component/v0
+    id: comp-embedded-demo-control
+    title: embedded demo control (story-bridge MCP drafts)
+    status: in-progress
+    visibility: public
+    summary: The existing local story-bridge stdio server's demoMode-only `embedded_demo` MCP tool: stable bound sessions, in-memory CAS drafts, semantic-anchor validation/drift, validated push to the resident page API, stop/resume, evidence control, and compact execution/media acknowledgements. It remains loopback-only, explicitly host-enabled, and contains no generic eval or browser navigation capability.
+    sources: [source-extension-mode]
+    edges:
+      part_of: [product-sassfully]
+      satisfies: [req-embedded-demo-control]
   - schema: sassfully/feature/v0
     id: feature-extension-mode
     title: Extension mode

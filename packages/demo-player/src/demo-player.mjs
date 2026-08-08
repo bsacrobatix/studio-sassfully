@@ -51,11 +51,19 @@ export async function runDemoScript({ script, deps, state = createDemoRunState()
           spotlightResolution = await deps.waitForTarget(step.spotlight);
           if (!spotlightResolution) throw new Error(`spotlight target not found: ${anchorLabel(step.spotlight)}`);
           noteHealed("spotlight", spotlightResolution);
-          deps.spotlight(spotlightResolution.element);
+          deps.spotlight(spotlightResolution.element, { dim: step.dim !== false });
         }
         if (step.caption) deps.caption(step.caption);
         const dwellMs = step.dwellMs ?? DEFAULT_DWELL_MS;
-        const narration = step.narration ? deps.narrate(step.narration, { fallbackMs: dwellMs }) : null;
+        // Stage playback is deliberately another injected side effect. The
+        // shared player stays browser/extension-neutral; embedded hosts pass
+        // a stage adapter, while the extension simply has no `stage` dep.
+        const stage = step.stage && deps.stage
+          ? deps.stage(step.stage, spotlightResolution?.element ?? null)
+          : null;
+        const narration = step.narration
+          ? deps.narrate(step.narration, { fallbackMs: dwellMs, voice: step.voice ?? script.voice ?? null })
+          : null;
         if (step.action) {
           const actionAnchor = step.action.selector ?? step.spotlight ?? "body";
           const actionResolution = await deps.waitForTarget(actionAnchor);
@@ -66,6 +74,9 @@ export async function runDemoScript({ script, deps, state = createDemoRunState()
           await deps.act(step.action, actionResolution?.element ?? null);
         }
         if (narration) await narration;
+        // A persistent presenter starts once and remains visible across the
+        // following steps. Controller cleanup stops it at the end of the run.
+        if (stage && !step.stage.persistent) await stage;
         if (state.cancelled) return { stopped: true, completedSteps: results };
         await deps.delay(dwellMs);
         const result = {

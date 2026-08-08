@@ -47,15 +47,16 @@ function ensureLayer(doc) {
         top .45s cubic-bezier(.22,1,.36,1), left .45s cubic-bezier(.22,1,.36,1),
         width .45s cubic-bezier(.22,1,.36,1), height .45s cubic-bezier(.22,1,.36,1); }
     .demo-spot.instant { transition: opacity .35s ease; }
+    .demo-spot.no-dim { box-shadow: 0 0 22px 4px rgba(88,166,255,.55); }
     .demo-spot.show { opacity: 1; }
     .demo-caption { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(6px);
-      z-index: 2147483646; pointer-events: none; background: ${DEMO_THEME.bg}; color: ${DEMO_THEME.text};
+      z-index: 2147483648; pointer-events: none; background: ${DEMO_THEME.bg}; color: ${DEMO_THEME.text};
       border: 1px solid ${DEMO_THEME.border}; border-left: 4px solid ${DEMO_THEME.accent};
       border-radius: 10px; padding: 14px 22px; max-width: 70%;
       font: 600 20px/1.35 ${DEMO_THEME.font}; box-shadow: 0 12px 38px rgba(0,0,0,.6);
       opacity: 0; transition: opacity .25s ease, transform .25s ease; }
     .demo-caption.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-    .demo-pulse { position: fixed; z-index: 2147483646; pointer-events: none; border-radius: 50%;
+    .demo-pulse { position: fixed; z-index: 2147483648; pointer-events: none; border-radius: 50%;
       border: 3px solid ${DEMO_THEME.accent2}; width: 12px; height: 12px; opacity: .9;
       transform: translate(-50%, -50%); }
   `;
@@ -142,11 +143,14 @@ function startTracking(doc, element) {
   tracking = state;
 }
 
-export function showSpotlight(doc, element) {
+export function showSpotlight(doc, element, { dim = true } = {}) {
   const { spot } = ensureLayer(doc);
   element.scrollIntoView?.({ block: "center", inline: "nearest" });
   // A fresh step move should animate even if a tracking burst just ended.
   spot.classList.remove("instant");
+  if (typeof spot.classList.toggle === "function") spot.classList.toggle("no-dim", !dim);
+  else if (!dim) spot.classList.add("no-dim");
+  else spot.classList.remove("no-dim");
   positionSpot(spot, element);
   spot.classList.add("show");
   startTracking(doc, element);

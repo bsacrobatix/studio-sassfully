@@ -25,6 +25,18 @@ at the first error. Example:
 {"action":"run_script","steps":[{"action":"fill","selector":"input[aria-label='Search by title']","text":"product designer"},{"action":"press","key":"ENTER"},{"action":"extract","selector":".job-card-container"}]}
 ```
 
+## Embedded demoMode control
+
+With `--allow-embedded-demo`, this same loopback server also exposes the
+`embedded_demo` MCP tool to an app that has explicitly bound its own
+`demoMode:true` page. It is zero-pairing only for that opt-in embedded page;
+the extension path above remains user-paired. Its lifecycle is
+`sessions → propose → validate → update? → push`, with CAS revisions and
+current-tab semantic-anchor preflight. It also has `run`, `stop`, `resume`, and
+explicitly-consented `evidence_start|stop|export`; it cannot navigate a page
+or evaluate arbitrary code. Full instructions and capability boundaries are in
+[`docs/embedded-demo-control.md`](../../../docs/embedded-demo-control.md).
+
 The extension accepts the bridge only after the user has enabled the exact
 `https://www.linkedin.com` origin and entered the code
 in the extension popup. Commands apply only to that paired tab until it is

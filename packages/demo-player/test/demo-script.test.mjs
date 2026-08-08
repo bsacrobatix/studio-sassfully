@@ -21,6 +21,7 @@ test("demo script validation bounds steps and string fields", () => {
   assert.equal(validateDemoScript(script([step({ dwellMs: -1 })])).ok, false);
   assert.equal(validateDemoScript(script([step({ dwellMs: 60001 })])).ok, false);
   assert.equal(validateDemoScript(script([step({ dwellMs: "800" })])).ok, false);
+  assert.equal(validateDemoScript(script([step({ dim: "no" })])).ok, false);
 });
 
 test("structured anchor targets are accepted with bounded fields, strings stay valid", () => {
@@ -48,6 +49,21 @@ test("demo step actions are limited to bounded click/fill/press", () => {
   assert.equal(validateDemoScript(script([step({ action: { kind: "click" } })])).ok, false, "click needs a selector");
   assert.equal(validateDemoScript(script([step({ action: { kind: "fill", selector: "input" } })])).ok, false, "fill needs a value");
   assert.equal(validateDemoScript(script([step({ action: { kind: "press" } })])).ok, false, "press needs a value (the key)");
+});
+
+test("voice and bounded stage scenes are accepted, malformed stage payloads are rejected", () => {
+  const scene = { type: "stage", stage: { units: { w: 100, h: 50 } }, beats: [] };
+  assert.equal(validateDemoScript({ voice: "en-US-AnaNeural", steps: [step({ voice: "en-US-JennyNeural", stage: { scene, anchor: "target", persistent: true } })] }).ok, true);
+  assert.equal(validateDemoScript(script([step({ stage: { scene, anchor: { mode: "dock", edge: "bottom-right", size: 0.4 } } })])).ok, true);
+  assert.equal(validateDemoScript(script([step({ stage: { scene, unexpected: true } })])).ok, false);
+  assert.equal(validateDemoScript(script([step({ stage: { scene, anchor: { mode: "outside" } } })])).ok, false);
+  assert.equal(validateDemoScript(script([step({ stage: { scene, persistent: "yes" } })])).ok, false);
+  const nova = { id: "nova", src: "/packages/demo-stage/assets/nova-cutout.png", alt: "Nova presenter" };
+  assert.equal(validateDemoScript(script([step({ stage: { presenter: nova, persistent: true } })])).ok, true, "a local static presenter may be a stage by itself");
+  assert.equal(validateDemoScript(script([step({ stage: { scene, presenter: nova } })])).ok, true, "a cutout may accompany an animated scene");
+  assert.equal(validateDemoScript(script([step({ stage: { presenter: { ...nova, src: "https://example.test/nova.png" } } })])).ok, false, "remote cutouts are not a script fetch surface");
+  assert.equal(validateDemoScript(script([step({ stage: { presenter: { ...nova, src: "data:image/png;base64,AA" } } })])).ok, false);
+  assert.equal(validateDemoScript(script([step({ stage: {} })])).ok, false);
 });
 
 test("the extension's validator and this one agree (extraction stays in sync)", async () => {

@@ -29,6 +29,10 @@
     <label>Your name <input id="demo-name" data-testid="demo-name" placeholder="Ada Lovelace"></label>
     <button id="demo-go" data-testid="demo-go" type="button">Generate greeting</button>
     <p id="demo-output" data-testid="demo-output"></p>
+    <p><button id="enable-pip-audio" data-testid="enable-pip-audio" type="button" disabled>Enable Pip audio</button> <span id="pip-audio-status">Audio needs a one-click browser unlock before an MCP-led narration.</span></p>
+    <p><label>Ask Pip a follow-up question <input id="demo-question" data-testid="demo-question" value="How does the greeting work?"></label></p>
+    <button id="play-demo" data-testid="play-demo" type="button" disabled>Run two live Pip tours — no reload</button>
+    <p id="demo-status" data-testid="demo-status">Preparing demo mode…</p>
   </div>
   <div class="card">
     <h3>Local JSONL sink (what actually left the reporter)</h3>
@@ -86,7 +90,7 @@
     document.body.appendChild(badge);
   }
 
-  mountReporter({
+  const reporter = mountReporter({
     anchorFor: () => ({
       producer: "acme-docs",
       artifactId: "docs-page-1",
@@ -100,7 +104,74 @@
     router,
     demoMode,
     demoOrigins: [],
+    // `demo-tts serve --port 4547` is loopback-only. Override with
+    // ?tts=http://127.0.0.1:PORT/narration when running another port.
+    demoNarrationUrl: new URLSearchParams(location.search).get("tts") || "http://127.0.0.1:4547/narration",
+    // Explicit local, zero-pairing embedded bridge. Start story-bridge with
+    // --allow-embedded-demo, then add ?bridgePort=8931 to bind this demoMode
+    // page for MCP script pushes. No bridge exists outside demoMode.
+    demoBridge: demoMode && new URLSearchParams(location.search).get("bridgePort")
+      ? { url: `ws://127.0.0.1:${new URLSearchParams(location.search).get("bridgePort")}/embedded-demo` }
+      : undefined,
   });
+
+  if (demoMode) {
+    const play = document.getElementById("play-demo");
+    const enableAudio = document.getElementById("enable-pip-audio");
+    const audioStatus = document.getElementById("pip-audio-status");
+    const question = document.getElementById("demo-question");
+    const status = document.getElementById("demo-status");
+    const scene = await fetch("/packages/demo-stage/examples/sample-scene.json").then((response) => {
+      if (!response.ok) throw new Error("could not load Pip's stage scene");
+      return response.json();
+    });
+    const { api } = await reporter.demo;
+    enableAudio.disabled = false;
+    enableAudio.addEventListener("click", async () => {
+      // This is intentionally only a browser-media user gesture. It neither
+      // authors nor starts a tour; an MCP caller may push afterwards.
+      const unlocked = await api.unlockAudio();
+      audioStatus.textContent = unlocked.unlocked ? "Pip audio enabled for this tab. Re-run or resume a Pip tour to retry Edge narration; playback started does not prove speakers are audible." : `Pip audio was not enabled: ${unlocked.error ?? "browser refused playback"}`;
+    });
+    const presenterStage = () => ({ scene: { ...scene, beats: [{ speaker: "pip", line: "I will stay here while we tour this live app.", dur: 45, act: [{ who: "pip", enter: "left", to: 30, state: "point", face: "right" }] }] }, anchor: { mode: "dock", edge: "bottom-left", size: 0.30 }, persistent: true });
+    const firstTour = () => ({
+      version: "sassfully/demo-script/v1", voice: "en-US-AnaNeural", steps: [
+        { id: "welcome", spotlight: { testid: "host-header" }, dim: false, caption: "Tour one: Pip is here in a real embedded Sassfully demo.", narration: "Welcome. I am Pip, and this is a real application, not a recording.", stage: presenterStage(), dwellMs: 350 },
+        { id: "name", spotlight: { testid: "demo-name" }, dim: false, caption: "Tour one fills the live form.", narration: "Watch me enter a name in the real form.", action: { kind: "fill", selector: { testid: "demo-name" }, value: "Ada" }, dwellMs: 350 },
+        { id: "greet", spotlight: { role: "button", name: "Generate greeting", testid: "demo-go" }, dim: false, caption: "Tour one clicks the real button.", narration: "Now I click Generate greeting.", action: { kind: "click", selector: { testid: "demo-go" } }, dwellMs: 500 },
+      ],
+    });
+    /** @typedef {{version:string, voice?:string, steps:Array<object>}} DemoScript */
+    /** @typedef {(prompt:string) => Promise<DemoScript>} DemoScriptAuthor */
+    /** Local typed seam; production hosts replace this callback with their API endpoint. */
+    /** @type {DemoScriptAuthor} */
+    const authorDemoScript = async (prompt) => {
+      await Promise.resolve();
+      const clean = prompt.trim().slice(0, 180) || "How does the greeting work?";
+      return { version: "sassfully/demo-script/v1", voice: "en-US-AnaNeural", steps: [
+        { id: "follow-up", spotlight: { testid: "demo-output" }, dim: false, caption: `Tour two, authored at runtime: ${clean}`, narration: `Here is your follow-up: ${clean}`, stage: presenterStage(), dwellMs: 400 },
+        { id: "runtime-action", spotlight: { testid: "demo-go" }, dim: false, caption: "This distinct runtime script reuses the same live page and API.", narration: "No navigation, reload, or embed recreation happened.", action: { kind: "click", selector: { testid: "demo-go" } }, dwellMs: 500 },
+      ] };
+    };
+    status.textContent = "Ready — submit a question to author and run two Edge-voiced tours in this same document.";
+    play.disabled = false;
+    play.addEventListener("click", async () => {
+      play.disabled = true;
+      status.textContent = "Tour one is running in the current document…";
+      try {
+        const residentApi = window.__sassfullyDemo;
+        const first = await residentApi.run(firstTour());
+        status.textContent = "Tour two is being authored asynchronously and pushed into the same page…";
+        const second = await residentApi.run(await authorDemoScript(question.value));
+        status.textContent = first.completed && second.completed && residentApi === window.__sassfullyDemo
+          ? "Two distinct runtime scripts completed through the same resident API — no reload." : "Tour stopped.";
+      } catch (error) {
+        status.textContent = `Tour failed: ${error.message}`;
+      } finally {
+        play.disabled = false;
+      }
+    });
+  }
 </script>
 </body>
 </html>

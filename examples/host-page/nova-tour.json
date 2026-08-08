@@ -1,0 +1,41 @@
+{
+  "version": "sassfully/demo-script/v1",
+  "voice": "en-US-AnaNeural",
+  "steps": [
+    {
+      "id": "nova-welcome",
+      "spotlight": { "testid": "host-header" },
+      "dim": false,
+      "caption": "Nova is your persistent, no-dim presenter.",
+      "narration": "Hello, I am Nova. I will guide this live app without obscuring it.",
+      "stage": {
+        "presenter": {
+          "id": "nova",
+          "src": "/packages/demo-stage/assets/nova-cutout.png",
+          "alt": "Nova, the turquoise fox presenter"
+        },
+        "anchor": { "mode": "dock", "edge": "bottom-left", "size": 0.3 },
+        "persistent": true
+      },
+      "dwellMs": 350
+    },
+    {
+      "id": "nova-fill",
+      "spotlight": { "testid": "demo-name" },
+      "dim": false,
+      "caption": "Nova fills the real form control.",
+      "narration": "First I fill the live name field.",
+      "action": { "kind": "fill", "selector": { "testid": "demo-name" }, "value": "Nova" },
+      "dwellMs": 350
+    },
+    {
+      "id": "nova-click",
+      "spotlight": { "role": "button", "name": "Generate greeting", "testid": "demo-go" },
+      "dim": false,
+      "caption": "Nova triggers the real button with the page still fully visible.",
+      "narration": "Now I click Generate greeting.",
+      "action": { "kind": "click", "selector": { "testid": "demo-go" } },
+      "dwellMs": 500
+    }
+  ]
+}

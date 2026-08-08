@@ -19,6 +19,8 @@ import { KIND_CONFIG, KINDS } from "./kinds.mjs";
  *   renderPanel?: (api: object) => Element,
  *   demoMode?: boolean,                  // opt-in narrated-demo surface (never default)
  *   demoOrigins?: string[],              // postMessage caller allowlist (default []: disabled)
+ *   demoNarrationUrl?: string,           // optional loopback @sassfully/demo-tts endpoint
+ *   demoBridge?: {url: string},           // explicit local embedded-demo bridge
  *   onDemoStepEvent?: (evt: object) => void,
  * }} opts
  */
@@ -69,6 +71,8 @@ export function mountReporter(opts) {
       window: opts.window ?? doc.defaultView ?? (typeof window !== "undefined" ? window : undefined),
       document: doc,
       allowedOrigins: opts.demoOrigins ?? [],
+      narrationUrl: opts.demoNarrationUrl,
+      embeddedBridge: opts.demoBridge,
       onStepEvent: opts.onDemoStepEvent,
     }));
   }

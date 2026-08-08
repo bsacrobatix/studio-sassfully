@@ -52,6 +52,10 @@ function sendJSON(res, status, body) {
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
     'Content-Length': bytes.length,
+    // The narration service is loopback-only, but an embedded app is normally
+    // served from a different localhost port. Allow that browser fetch while
+    // keeping the network boundary at 127.0.0.1.
+    'Access-Control-Allow-Origin': '*',
   });
   res.end(bytes);
 }
@@ -70,6 +74,15 @@ export function createServer(opts = {}) {
 
   const server = http.createServer(async (req, res) => {
     const { pathname } = new URL(req.url, `http://${LOOPBACK_HOST}`);
+
+    if (req.method === 'OPTIONS' && pathname === '/narration') {
+      res.writeHead(204, {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'content-type',
+      });
+      return res.end();
+    }
 
     if (req.method === 'GET' && pathname === '/health') {
       return sendJSON(res, 200, { ok: true, cacheDir });
@@ -103,6 +116,7 @@ export function createServer(opts = {}) {
           'X-Narration-Duration-Ms': String(result.durationMs),
           'X-Narration-Estimated': String(!!result.estimated),
           'X-Narration-Cache': result.cacheHit ? 'hit' : 'miss',
+          'Access-Control-Allow-Origin': '*',
         });
         return res.end(result.mp3);
       } catch (err) {

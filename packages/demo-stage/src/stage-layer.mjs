@@ -4,9 +4,9 @@
  * Mounts slidey's stage runtime (vendored, see ../vendor/VENDORED.md) as a
  * transparent layer above live page content, the same way the demo overlay
  * does its spotlight/caption chrome: a full-viewport, position:fixed,
- * pointer-events:none container whose z-index sits just *below* the demo
- * spotlight band (2147483645/2147483646), so a spotlight can still outline
- * things over a character's head.
+ * pointer-events:none container whose z-index sits *above* the demo dimmer.
+ * The caption and click-pulse band is one level higher, so the presenter is
+ * never dimmed while the spoken guidance remains legible.
  *
  * The layer owns a container and at most one live scene at a time. The stage
  * box itself (where the SVG stage is drawn inside the viewport) is a pure
@@ -20,7 +20,7 @@
  * hand the rect over); this module never queries the page.
  *
  *   const layer = mountStageLayer(document, { zIndex });
- *   await layer.playScene({ scene, chars, roster, audio, placement });
+ *   await layer.playScene({ scene, chars, roster, audio, placement, presenter });
  *   layer.stop();      // end the current scene early (its promise resolves)
  *   layer.destroy();   // stop + remove the container
  */
@@ -28,8 +28,8 @@
 import { mountStagePlayer } from '../vendor/slidey-stage/player.mjs';
 import { resolveCast, rosterOf, buildTimeline } from '../vendor/slidey-stage/engine.mjs';
 
-/** Just below the demo overlay's spotlight (2147483645) and caption (2147483646). */
-export const STAGE_LAYER_Z = 2147483644;
+/** Above spotlight+dimmer (2147483645), below caption+click-pulse (2147483648). */
+export const STAGE_LAYER_Z = 2147483647;
 
 const DOCK_EDGES = new Set([
   'top-left', 'top', 'top-right', 'left', 'right', 'bottom-left', 'bottom', 'bottom-right',
@@ -123,17 +123,17 @@ export function mountStageLayer(doc, opts = {}) {
    * `scene.cast`. `audio` is the slidey clip table; omitted, beats time out on
    * the engine's word-count estimate, so a scene is playable with no audio.
    */
-  function playScene({ scene, chars, roster, audio, placement } = {}) {
+  function playScene({ scene, chars, roster, audio, placement, presenter } = {}) {
     if (destroyed) return Promise.reject(new Error('stage layer destroyed'));
-    if (!scene) return Promise.reject(new Error('playScene needs a scene'));
+    if (!scene && !presenter) return Promise.reject(new Error('playScene needs a scene or presenter'));
     stop();   // one scene at a time; the previous one resolves as "ended"
 
-    const cast = chars ?? resolveCast(scene.cast);
-    const onStage = roster ?? rosterOf(scene, scene.cast);
-    const clips = audio ?? scene.audio ?? null;
-    const timeline = buildTimeline(scene, cast, clips);
+    const cast = scene ? (chars ?? resolveCast(scene.cast)) : null;
+    const onStage = scene ? (roster ?? rosterOf(scene, scene.cast)) : null;
+    const clips = scene ? (audio ?? scene.audio ?? null) : null;
+    const timeline = scene ? buildTimeline(scene, cast, clips) : null;
 
-    const units = scene.stage.units;
+    const units = scene?.stage?.units ?? { w: 1, h: 1 };
     const box = computeStageBox(placement, viewportNow(), units.w / units.h);
     const host = doc.createElement('div');
     host.setAttribute('data-demo-stage-box', '');
@@ -150,16 +150,28 @@ export function mountStageLayer(doc, opts = {}) {
     return new Promise((resolve) => {
       current = { host, player: null, settle: resolve };
       const mine = current;
-      const player = mountPlayer(host, {
+      const player = scene ? mountPlayer(host, {
         scene, chars: cast, roster: onStage, timeline, audio: clips,
         autoplay: true,
         onEnd: () => { if (current === mine) stop(); },
-      });
+      }) : null;
+      if (presenter) {
+        const image = doc.createElement('img');
+        image.setAttribute('data-demo-stage-presenter', presenter.id ?? 'static');
+        image.setAttribute('src', presenter.src);
+        image.setAttribute('alt', presenter.alt ?? '');
+        image.setAttribute('aria-hidden', 'true');
+        Object.assign(image.style, {
+          width: '100%', height: '100%', display: 'block', objectFit: 'contain',
+          objectPosition: 'center bottom', pointerEvents: 'none', userSelect: 'none',
+        });
+        host.appendChild(image);
+      }
       // Feet toward the bottom of the box, whatever its aspect.
-      player.svg?.setAttribute?.('preserveAspectRatio', 'xMidYMax meet');
-      if (player.svg?.style) Object.assign(player.svg.style, { width: '100%', height: '100%', display: 'block' });
+      player?.svg?.setAttribute?.('preserveAspectRatio', 'xMidYMax meet');
+      if (player?.svg?.style) Object.assign(player.svg.style, { width: '100%', height: '100%', display: 'block' });
       if (current === mine) current.player = player;
-      else player.destroy?.();          // onEnd fired synchronously (empty scene)
+      else player?.destroy?.();          // onEnd fired synchronously (empty scene)
     });
   }
 

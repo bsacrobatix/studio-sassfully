@@ -63,6 +63,35 @@ test("structured anchors flow through waitForTarget and record the matched strat
   assert.deepEqual(outcome.completedSteps, [{ index: 0, id: "s1", ok: true, anchor: "role", healed: null }]);
 });
 
+test("a stage scene plays beside its spotlight and completes before the dwell", async () => {
+  const { deps, calls } = makeDeps();
+  deps.stage = async (stage, target) => calls.push(["stage", stage.scene.type, target?.selector]);
+  const outcome = await runDemoScript({ script: { steps: [{ spotlight: "#panel", stage: { scene: { type: "stage" }, anchor: "target" }, dwellMs: 0 }] }, deps });
+  assert.equal(outcome.completed, true);
+  assert.deepEqual(calls, [["wait", "#panel"], ["spotlight", "#panel"], ["stage", "stage", "#panel"], ["delay", 0], ["clear"]]);
+});
+
+test("a persistent presenter starts without blocking later narrated actions", async () => {
+  const { deps, calls } = makeDeps();
+  let settle;
+  deps.stage = () => new Promise((resolve) => { settle = resolve; calls.push(["stage"]); });
+  const outcome = await runDemoScript({ script: { steps: [
+    { stage: { scene: { type: "stage" }, persistent: true }, dwellMs: 0 },
+    { caption: "Pip stays", dwellMs: 0 },
+  ] }, deps });
+  assert.equal(outcome.completed, true);
+  assert.deepEqual(calls, [["stage"], ["delay", 0], ["caption", "Pip stays"], ["delay", 0], ["clear"]]);
+  settle();
+});
+
+test("a showcase step can request a transparent spotlight with no dimmer", async () => {
+  const { deps } = makeDeps();
+  let options;
+  deps.spotlight = (_element, next) => { options = next; };
+  await runDemoScript({ script: { steps: [{ spotlight: "#visible", dim: false, dwellMs: 0 }] }, deps });
+  assert.deepEqual(options, { dim: false });
+});
+
 test("a healed anchor resolution surfaces a healed note in the step result", async () => {
   const healedResolution = { element: { selector: "#fallback" }, strategy: "css", healed: { requested: "testid", matched: "css" } };
   const { deps } = makeDeps({ targets: { [JSON.stringify({ testid: "gone", css: "#fallback" })]: healedResolution } });

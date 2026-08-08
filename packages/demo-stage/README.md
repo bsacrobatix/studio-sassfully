@@ -18,20 +18,23 @@ the single patch (a `transparent` backdrop) are recorded in
 import { mountStageLayer } from '@sassfully/demo-stage';
 
 const layer = mountStageLayer(document, { zIndex });  // zIndex optional
-await layer.playScene({ scene, chars, roster, audio, placement });
+await layer.playScene({ scene, chars, roster, audio, placement, presenter });
 layer.stop();      // end the current scene early (its promise resolves)
 layer.destroy();   // stop + remove the layer container
 ```
 
 `mountStageLayer(document, opts)` appends a full-viewport, `position:fixed`,
 transparent, `pointer-events:none` container to the page. Its default z-index
-(`STAGE_LAYER_Z` = 2147483644) sits just below the demo overlay's spotlight
-(2147483645) and caption (2147483646) band, so a spotlight can still outline
-elements over a character.
+(`STAGE_LAYER_Z` = 2147483647) sits above the sparse spotlight/dimmer and
+below the caption/click-pulse band, so a presenter is never dimmed.
 
 `playScene` accepts:
 
-- `scene` — a slidey stage scene (see authoring, below). Required.
+- `scene` — a slidey stage scene (see authoring, below). Required unless a
+  static `presenter` is supplied.
+- `presenter` — a host-validated static raster cutout `{id?, src, alt?}`.
+  demo-player only accepts local project assets; this adapter mounts it inside
+  the same stage layer and can place it above an animated scene.
 - `chars` / `roster` — pre-resolved cast and roster; omitted, they resolve
   from `scene.cast` via the vendored engine.
 - `audio` — a slidey clip table `{ clips: { key: { a, d } } }`. Omitted, each
@@ -98,3 +101,8 @@ beats **alongside or instead of** the step's caption + narration (a stage
 beat carries its own lines and speaker voices). The layer's z-index keeps the
 existing spotlight/caption chrome above the cast. Nothing in this package
 depends on the demo player; the coupling is one call site in the player.
+
+`assets/nova-source-magenta.png` is Nova’s retained source; the alpha-checked
+`assets/nova-cutout.png` is the presenter shipped to hosts. See
+[`docs/embedded-demo-control.md`](../../docs/embedded-demo-control.md) for
+the no-dim embedded MCP example.

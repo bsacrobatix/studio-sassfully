@@ -54,6 +54,7 @@ test('POST /narration returns audio bytes with a duration header, cached on repe
   assert.equal(res.headers.get('x-narration-duration-ms'), '2500');
   assert.equal(res.headers.get('x-narration-estimated'), 'false');
   assert.equal(res.headers.get('x-narration-cache'), 'miss');
+  assert.equal(res.headers.get('access-control-allow-origin'), '*');
   const bytes = Buffer.from(await res.arrayBuffer());
   assert.deepEqual(bytes, Buffer.from('MP3:step one narration'));
   assert.equal(calls.length, 1);
