@@ -15,6 +15,10 @@ test("build assembles a coherent unpacked extension", async () => {
 
   const manifest = JSON.parse(readFileSync(dist("manifest.json"), "utf8"));
   assert.equal(manifest.manifest_version, 3);
+  assert.deepEqual(manifest.optional_host_permissions, ["https://www.linkedin.com/*"]);
+  assert.deepEqual(manifest.host_permissions, ["http://127.0.0.1/*"]);
+  assert.deepEqual(manifest.web_accessible_resources[0].matches, ["https://www.linkedin.com/*"]);
+  assert.ok(manifest.web_accessible_resources[0].resources.includes("story-bridge-policy.mjs"), "the injected content module's root policy import must remain LinkedIn-accessible");
   const expected = [
     manifest.background.service_worker,
     manifest.action.default_popup,
@@ -23,11 +27,17 @@ test("build assembles a coherent unpacked extension", async () => {
     "main-world.js",
     "vendor/rrweb-record.iife.js",
     "content/main.mjs",
+    "content/story-confirm.mjs",
+    "story-bridge-policy.mjs",
+    "story-receiver.mjs",
+    "story-navigation.mjs",
+    "story-timeout.mjs",
     "content/core/deps.mjs",
     "content/core/feedback-core/src/index.mjs",
     "content/core/feedback-vue/src/controller.mjs",
     "review/review.mjs",
     "popup/popup.mjs",
+    "popup/story-bridge-view.mjs",
     "options/options.mjs",
     "lib/idb-backend.mjs",
   ];

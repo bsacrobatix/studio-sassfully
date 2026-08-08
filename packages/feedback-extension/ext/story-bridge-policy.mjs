@@ -1,0 +1,51 @@
+// The local Story bridge deliberately exposes a much smaller surface than a
+// general browser automation protocol.  Keep this module browser-free so the
+// extension and the stdio server use the same validation contract.
+export const LINKEDIN_ORIGIN = "https://www.linkedin.com";
+export const SEARCH_RESULTS_PATH = "/jobs/search-results";
+export const DEFAULT_GEO_ID = "103644278";
+export const AUTONOMOUS_JOBS_SESSION = "autonomous_paired_tab_v1";
+
+export function isLinkedInOriginUrl(value) {
+  try { return new URL(value).origin === LINKEDIN_ORIGIN; } catch { return false; }
+}
+
+// This is the post-navigation state contract. LinkedIn owns canonical query
+// rewriting; only the exact same-origin Jobs results route matters here.
+export function isLinkedInUsResultsUrl(value) {
+  try {
+    const url = new URL(value);
+    if (url.origin !== LINKEDIN_ORIGIN) return false;
+    const path = url.pathname.replace(/\/$/, "");
+    if (path !== SEARCH_RESULTS_PATH) return false;
+    return true;
+  } catch { return false; }
+}
+
+export function isLinkedInSearchUrl(value) {
+  return isLinkedInUsResultsUrl(value);
+}
+
+export function buildJobsSearchUrl({ keywords, geoId = DEFAULT_GEO_ID }) {
+  const url = new URL(`${LINKEDIN_ORIGIN}${SEARCH_RESULTS_PATH}/`);
+  url.searchParams.set("keywords", keywords);
+  url.searchParams.set("geoId", geoId);
+  url.searchParams.set("f_WT", "2");
+  return url.href;
+}
+
+export function validateStoryCommand(command) {
+  if (!command || typeof command !== "object") return { ok: false, error: "command must be an object" };
+  if (!["navigate", "snapshot", "click", "fill", "press", "extract", "run_script"].includes(command.action)) return { ok: false, error: "action is not supported" };
+  // MCP callers commonly attach trace/capture options. Commands are decoded
+  // permissively: unknown optional fields are ignored, while each action's
+  // essential input remains required and type-checked below.
+  if (command.action === "run_script") return Array.isArray(command.steps) && command.steps.length ? { ok: true } : { ok: false, error: "run_script needs a non-empty steps array" };
+  if (command.action === "navigate" && typeof command.url !== "string") return { ok: false, error: "navigate url must be a string" };
+  if (command.action === "click" && typeof (command.selector ?? command.target) !== "string") return { ok: false, error: "click needs selector or target" };
+  if (command.action === "fill" && (typeof command.selector !== "string" || typeof command.text !== "string")) return { ok: false, error: "fill needs selector and text" };
+  if (command.action === "press" && typeof command.key !== "string") return { ok: false, error: "press key must be a string" };
+  if (command.action === "extract" && command.selector != null && typeof command.selector !== "string") return { ok: false, error: "extract selector must be a string" };
+  if (command.action === "extract" && command.captureEvidence != null && typeof command.captureEvidence !== "boolean") return { ok: false, error: "extract captureEvidence must be boolean" };
+  return { ok: true };
+}

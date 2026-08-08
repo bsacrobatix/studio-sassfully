@@ -7,6 +7,7 @@ import { createRecordingRing, replayEvidenceItems } from "./core/ring.mjs";
 import { createTelemetryClient, telemetryProviders } from "./core/telemetry-main.mjs";
 import { createExtensionBridge } from "./core/bridge.mjs";
 import { mountOverlay } from "./overlay.mjs";
+import { runAutonomousStoryCommand } from "./story-confirm.mjs";
 
 const RRWEB_CHANNEL = "sassfully-ext/rrweb/v1";
 const origin = location.origin;
@@ -59,8 +60,14 @@ if (config?.enabled) {
   if (!bridge.bridged) overlay = mountOverlay({ document, onSubmit: openReview });
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (msg?.type === "recording") { msg.on ? startRecording("rec") : stopRecording(); sendResponse({ ok: true, state: recordingState }); }
+    if (msg?.type === "story-ping") sendResponse({ ok: true });
+    else if (msg?.type === "recording") { msg.on ? startRecording("rec") : stopRecording(); sendResponse({ ok: true, state: recordingState }); }
     else if (msg?.type === "ring-stats") sendResponse({ stats: ring.stats(), state: recordingState, bridged: bridge.bridged });
+    else if (msg?.type === "story-command") {
+      runAutonomousStoryCommand({ document, location, command: msg.command, requestId: msg.requestId })
+        .then((result) => sendResponse({ ok: true, result }), (error) => sendResponse({ ok: false, error: error.message }));
+      return true;
+    }
     return false;
   });
 }

@@ -7,8 +7,10 @@
   "action": { "default_popup": "popup/popup.html", "default_title": "Sassfully feedback" },
   "options_page": "options/options.html",
   "permissions": ["storage", "scripting", "activeTab", "tabs"],
-  "optional_host_permissions": ["<all_urls>"],
+  "optional_host_permissions": ["https://www.linkedin.com/*"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' ws://127.0.0.1:*" },
   "web_accessible_resources": [
-    { "resources": ["content/*", "vendor/*"], "matches": ["<all_urls>"] }
+    { "resources": ["content/*", "vendor/*", "story-bridge-policy.mjs"], "matches": ["https://www.linkedin.com/*"] }
   ]
 }

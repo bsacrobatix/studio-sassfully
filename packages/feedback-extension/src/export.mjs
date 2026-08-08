@@ -13,4 +13,6 @@ export function exportBundles(records) {
   };
 }
 
+export { createReplayFixtureEnvelope } from "./replay-fixture.mjs";
+
 export async function exportStore(store) { return exportBundles(await store.list()); }
