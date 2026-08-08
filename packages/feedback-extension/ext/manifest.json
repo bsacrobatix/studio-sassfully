@@ -6,7 +6,7 @@
   "background": { "service_worker": "background.mjs", "type": "module" },
   "action": { "default_popup": "popup/popup.html", "default_title": "Sassfully feedback" },
   "options_page": "options/options.html",
-  "permissions": ["storage", "scripting", "activeTab", "tabs"],
+  "permissions": ["storage", "scripting", "activeTab", "tabs", "alarms"],
   "optional_host_permissions": ["https://www.linkedin.com/*"],
   "host_permissions": ["http://127.0.0.1/*"],
   "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' ws://127.0.0.1:*" },

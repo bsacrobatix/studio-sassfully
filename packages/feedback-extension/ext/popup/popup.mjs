@@ -17,7 +17,7 @@ try { origin = new URL(tab?.url ?? "").origin; } catch { /* chrome:// pages etc.
 async function render() {
   if (!origin || !origin.startsWith("http")) { app.innerHTML = `<div class="state off">Sassfully can't run on this page.</div>${exportSection()}`; wireExport(); return; }
   const { config } = await chrome.runtime.sendMessage({ type: "get-state", origin });
-  const { bridge } = await chrome.runtime.sendMessage({ type: "story-bridge-state" });
+  const { bridge, live } = await chrome.runtime.sendMessage({ type: "story-bridge-state" });
   let live = null;
   if (config.enabled && tab?.id != null) { try { live = await chrome.tabs.sendMessage(tab.id, { type: "ring-stats" }); } catch { /* page not yet reloaded since enable */ } }
   const stateLine = !config.enabled
@@ -34,7 +34,7 @@ async function render() {
       ${config.mode === "manual" ? `<button id="rec">${live?.state === "rec" ? "■ Stop recording" : "● Start recording"}</button>` : ""}
       <button id="disable">Disable on this site</button>
     ` : `<button id="enable">Enable on ${origin}</button>`}
-    ${storyBridgeSection({ origin, url: tab?.url ?? "", config, bridge, tabId: tab?.id })}
+    ${storyBridgeSection({ origin, url: tab?.url ?? "", config, bridge, live, tabId: tab?.id })}
     ${exportSection()}`;
   app.querySelector("#enable")?.addEventListener("click", async () => {
     const granted = await chrome.permissions.request({ origins: [`${origin}/*`] });
@@ -59,11 +59,10 @@ async function render() {
     render();
   });
   app.querySelector("#pair-story")?.addEventListener("click", async () => {
-    const code = app.querySelector("#story-code").value.trim();
-    const port = Number(app.querySelector("#story-port").value || 8765);
-    const out = await chrome.runtime.sendMessage({ type: "pair-story-bridge", tabId: tab.id, code, port });
+    const token = app.querySelector("#story-token").value.trim();
+    const out = await chrome.runtime.sendMessage({ type: "pair-story-bridge", tabId: tab.id, token });
     const note = app.querySelector("#story-note");
-    note.textContent = out.ok ? "Paired to the local bridge. Every action still asks on this page." : out.error;
+    note.textContent = out.ok ? "Paired to the local bridge." : out.error;
     if (out.ok) render();
   });
   app.querySelector("#unpair-story")?.addEventListener("click", async () => { await chrome.runtime.sendMessage({ type: "unpair-story-bridge" }); render(); });

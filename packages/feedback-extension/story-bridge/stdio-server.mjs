@@ -5,15 +5,14 @@
 import crypto from "node:crypto";
 import net from "node:net";
 import readline from "node:readline";
-import { validateStoryCommand } from "../ext/story-bridge-policy.mjs";
+import { DEFAULT_BRIDGE_PORT, formatPairingToken, PAIRING_CODE_PATTERN, validateStoryCommand } from "../ext/story-bridge-policy.mjs";
 
 const args = process.argv.slice(2);
 const value = (name) => { const i = args.indexOf(name); return i < 0 ? null : args[i + 1]; };
-const port = Number(value("--port") ?? 8765);
+const port = Number(value("--port") ?? DEFAULT_BRIDGE_PORT);
 const code = value("--pairing-code") ?? crypto.randomBytes(24).toString("base64url");
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("--port must be 1024-65535");
-if (!/^[A-Za-z0-9_-]{24,128}$/.test(code)) throw new Error("--pairing-code must be 24-128 base64url characters");
-if (!value("--pairing-code")) process.stderr.write(`Sassfully Story pairing code: ${code}\n`);
+if (!PAIRING_CODE_PATTERN.test(code)) throw new Error("--pairing-code must be 24-128 base64url characters");
 
 let bridge = null;
 const pending = new Map();
@@ -44,18 +43,32 @@ function onBridgeMessage(message) {
     const { resolve } = pending.get(message.id); pending.delete(message.id); resolve(message);
   }
 }
+// Every handshake outcome is logged with a reason: a burned pairing attempt
+// must never be indistinguishable from "the extension never tried".
+const log = (line) => process.stderr.write(`Sassfully Story bridge: ${line}\n`);
 const server = net.createServer((socket) => {
+  const peer = `${socket.remoteAddress}:${socket.remotePort}`;
   let head = Buffer.alloc(0); let upgraded = false;
+  socket.on("error", () => socket.destroy());
   socket.on("data", (chunk) => {
     if (upgraded) return decodeFrames(socket._sassfully, chunk);
     head = Buffer.concat([head, chunk]); const marker = head.indexOf("\r\n\r\n"); if (marker < 0) return;
     const request = head.subarray(0, marker).toString("utf8"); const remainder = head.subarray(marker + 4);
     const [requestLine, ...lines] = request.split("\r\n"); const headers = Object.fromEntries(lines.map((line) => { const i = line.indexOf(":"); return [line.slice(0, i).toLowerCase(), line.slice(i + 1).trim()]; }));
     const requestUrl = new URL(requestLine.split(" ")[1], "http://127.0.0.1");
-    if (requestUrl.pathname !== "/bridge" || requestUrl.searchParams.get("code") !== code || !headers["sec-websocket-key"] || bridge) { socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n"); return; }
+    log(`handshake attempt from ${peer} for ${requestUrl.pathname}`);
+    const reject = (reason) => { log(`rejected handshake from ${peer}: ${reason}`); socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n"); };
+    if (requestUrl.pathname !== "/bridge") return reject("unexpected path");
+    if (requestUrl.searchParams.get("code") !== code) return reject("pairing code mismatch");
+    if (!headers["sec-websocket-key"]) return reject("not a WebSocket upgrade request");
+    // A cleanly closed (or dead) previous connection frees the slot for the
+    // extension to reconnect; only a concurrent second connection is refused.
+    if (bridge && !bridge.destroyed && !bridge.closed) return reject("another bridge connection is already active");
+    if (bridge) log("replacing a defunct bridge connection");
     socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${websocketAccept(headers["sec-websocket-key"])}\r\n\r\n`);
     upgraded = true; bridge = socket; socket._sassfully = { socket, buffer: Buffer.alloc(0) };
-    socket.on("close", () => { if (bridge === socket) bridge = null; });
+    log(`accepted bridge connection from ${peer}`);
+    socket.on("close", () => { log(`bridge connection from ${peer} closed`); if (bridge === socket) bridge = null; });
     if (remainder.length) decodeFrames(socket._sassfully, remainder);
   });
 });
@@ -63,7 +76,10 @@ server.on("error", (error) => {
   process.stderr.write(`Sassfully Story bridge could not listen on 127.0.0.1:${port}: ${error.code ?? error.message}\n`);
   process.exit(1);
 });
-server.listen(port, "127.0.0.1", () => process.stderr.write(`Sassfully Story bridge listening on ws://127.0.0.1:${port}\n`));
+server.listen(port, "127.0.0.1", () => {
+  log(`listening on ws://127.0.0.1:${port}`);
+  process.stderr.write(`Sassfully Story pairing token: ${formatPairingToken({ port, code })}\n`);
+});
 
 const tools = [{ name: "linkedin_story", description: "Autonomous control of the one loopback-paired Chrome tab. Pairing is the authorization; no per-action modal is shown.", inputSchema: { type: "object", properties: { action: { enum: ["navigate", "snapshot", "click", "fill", "press", "extract", "run_script", "demo_run", "demo_stop"] }, url: { type: "string" }, selector: { type: "string" }, target: { type: "string", description: "Accessible label for click when no selector is supplied" }, text: { type: "string" }, key: { type: "string" }, captureEvidence: { type: "boolean" }, steps: { type: "array", description: "Ordered navigate/click/fill/press/extract/snapshot steps for run_script" }, script: { type: "object", description: "sassfully/demo-script/v1 object for demo_run: { version, steps: [{ id, spotlight, caption, narration, action: { kind, selector, value }, dwellMs }] } (max 50 steps)" } }, required: ["action"], additionalProperties: false } }];
 function callBridge(command) {

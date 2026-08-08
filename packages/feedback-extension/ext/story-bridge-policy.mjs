@@ -6,6 +6,28 @@ export const SEARCH_RESULTS_PATH = "/jobs/search-results";
 export const DEFAULT_GEO_ID = "103644278";
 export const AUTONOMOUS_JOBS_SESSION = "autonomous_paired_tab_v1";
 
+// Pairing token contract: one paste-able string that carries BOTH the
+// loopback port and the secret code (`<port>.<code>`), so a user can never
+// pair the code against the wrong port. The default port deliberately avoids
+// common local squatters (Docker, dev servers, Agent Mail on 8765).
+export const DEFAULT_BRIDGE_PORT = 8931;
+export const PAIRING_CODE_PATTERN = /^[A-Za-z0-9_-]{24,128}$/;
+
+export function formatPairingToken({ port, code }) {
+  if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("pairing token port must be 1024-65535");
+  if (typeof code !== "string" || !PAIRING_CODE_PATTERN.test(code)) throw new Error("pairing token code must be 24-128 base64url characters");
+  return `${port}.${code}`;
+}
+
+export function parsePairingToken(token) {
+  if (typeof token !== "string" || !token.trim()) return { ok: false, error: "Paste the pairing token printed by the local bridge." };
+  const match = /^(\d{4,5})\.([A-Za-z0-9_-]{24,128})$/.exec(token.trim());
+  if (!match) return { ok: false, error: "Pairing token must look like <port>.<code> — copy the whole line printed by the local bridge." };
+  const port = Number(match[1]);
+  if (port < 1024 || port > 65535) return { ok: false, error: "Pairing token port must be 1024-65535." };
+  return { ok: true, port, code: match[2] };
+}
+
 export function isLinkedInOriginUrl(value) {
   try { return new URL(value).origin === LINKEDIN_ORIGIN; } catch { return false; }
 }

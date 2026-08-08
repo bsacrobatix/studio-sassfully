@@ -1,6 +1,30 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildJobsSearchUrl, isLinkedInOriginUrl, isLinkedInSearchUrl, isLinkedInUsResultsUrl, validateStoryCommand } from "../ext/story-bridge-policy.mjs";
+import { buildJobsSearchUrl, DEFAULT_BRIDGE_PORT, formatPairingToken, isLinkedInOriginUrl, isLinkedInSearchUrl, isLinkedInUsResultsUrl, parsePairingToken, validateStoryCommand } from "../ext/story-bridge-policy.mjs";
+
+const code = "abcdefghijklmnopqrstuvwxyzABCDEF12";
+
+test("pairing token round-trips port and code through one paste-able string", () => {
+  const token = formatPairingToken({ port: 8931, code });
+  assert.equal(token, `8931.${code}`);
+  assert.deepEqual(parsePairingToken(token), { ok: true, port: 8931, code });
+  assert.deepEqual(parsePairingToken(`  ${token}  `), { ok: true, port: 8931, code }, "surrounding whitespace from a sloppy paste is tolerated");
+});
+
+test("the default bridge port avoids the crowded 8765 neighborhood", () => {
+  assert.equal(DEFAULT_BRIDGE_PORT, 8931);
+  assert.notEqual(DEFAULT_BRIDGE_PORT, 8765);
+});
+
+test("malformed pairing tokens are rejected with a reason, never partially accepted", () => {
+  for (const bad of [null, "", code, "8931", `80.${code}`, `70000.${code}`, `8931.${"short"}`, `8931.${code}!`, `8931 ${code}`]) {
+    const out = parsePairingToken(bad);
+    assert.equal(out.ok, false, JSON.stringify(bad));
+    assert.ok(out.error, JSON.stringify(bad));
+  }
+  assert.throws(() => formatPairingToken({ port: 80, code }));
+  assert.throws(() => formatPairingToken({ port: 8931, code: "short" }));
+});
 
 test("Story bridge only recognizes the LinkedIn Jobs search route", () => {
   assert.equal(isLinkedInOriginUrl("https://www.linkedin.com/feed/"), true);
