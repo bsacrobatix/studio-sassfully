@@ -95,6 +95,48 @@ server): ≤ 50 steps; `id` ≤ 100 chars, `spotlight`/`caption`/`action.selecto
 8. **Stop early** (optional): `{"action":"demo_stop"}` clears the overlay and
    cancels narration.
 
+## Convenience scripts
+
+From `packages/feedback-extension/` (see `docs/demo-authoring.md` for how to
+write scripts):
+
+- `npm run demo:serve` — start the host-page server (`http://127.0.0.1:7893/`).
+- `npm run demo:sync-desktop` — build, then
+  `rsync -a --delete dist/ ~/Desktop/sassfully-demo-extension/`; load the
+  unpacked extension from that Desktop folder so rebuilds only need this one
+  command plus a reload in `chrome://extensions`.
+- `npm run demo:send -- examples/host-page-demo.json --exec` — validate the
+  script, spawn a fresh story bridge (pass `--port`/`--pairing-code` through),
+  send the `demo_run`, and retry while no tab is paired. The pairing code is
+  per server instance: pair the popup against the code THIS run prints on
+  stderr, and the queued demo starts. Without `--exec` it prints the exact
+  JSON-RPC lines to feed to a bridge's stdin. `--stop --exec` sends
+  `demo_stop`.
+
+## Troubleshooting
+
+- **Port 8765 is taken (or the bridge pairs but behaves oddly).** The default
+  port collides with common local services — Docker helpers and Agent Mail
+  both like 8765. Check who owns it with `lsof -nP -iTCP:8765 -sTCP:LISTEN`;
+  if it isn't your bridge, start the bridge on another port
+  (`--port 8877`) and enter that port when pairing in the popup. Verify the
+  bridge is the listener before pairing.
+- **Popup says "paired" but nothing happens.** The popup's paired badge can be
+  stale while the underlying socket is down (a fix making it honest is in
+  flight, but verify anyway). Check for a live connection:
+  `lsof -nP -iTCP:<port> | grep ESTABLISHED` — you should see Chrome connected
+  to the bridge's port. No ESTABLISHED line means the extension is not
+  actually connected; re-pair before blaming the demo script.
+- **Restarted the bridge? Unpair, then re-pair.** Pairing codes are one-time
+  and per server instance: a new bridge process mints a new code (unless you
+  pass `--pairing-code`), and the extension will not reconnect to it on its
+  own. In the popup: unpair, then pair again with the new code.
+- **Demo appears to do nothing.** Watch the bridge's stderr. "No user-paired
+  Chrome tab is connected to the loopback bridge" means pairing, not the
+  script, is the problem (see above). If the bridge accepts the command but
+  nothing plays, confirm the host-page tab has the origin enabled (toolbar
+  icon → enable capture) — the story receiver runs in the content scripts.
+
 ## Notes
 
 - The MCP request times out after 120 s; keep demos comfortably shorter.

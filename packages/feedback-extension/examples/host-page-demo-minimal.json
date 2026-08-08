@@ -1,0 +1,20 @@
+{
+  "version": "sassfully/demo-script/v1",
+  "steps": [
+    {
+      "id": "m1-hello",
+      "spotlight": "[data-testid=\"host-header\"] h1",
+      "caption": "A two-step demo",
+      "narration": "This is the smallest useful narrated demo: one framing step, one action step.",
+      "dwellMs": 800
+    },
+    {
+      "id": "m2-click",
+      "spotlight": "[data-testid=\"demo-go\"]",
+      "caption": "Click the button",
+      "narration": "And now we click the greeting button.",
+      "action": { "kind": "click", "selector": "[data-testid=\"demo-go\"]" },
+      "dwellMs": 1200
+    }
+  ]
+}

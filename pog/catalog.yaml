@@ -1164,6 +1164,16 @@ nodes:
     edges:
       part_of: [product-sassfully]
       motivated_by: [uc-ext-bug-report]
+  - schema: sassfully/requirement/v0
+    id: req-ext-demo-authoring-dx
+    title: Narrated-demo authoring is documented, exampled, and scripted for developers and LLMs
+    status: draft
+    visibility: public
+    summary: "DX hardening wave over req-ext-narrated-demo-poc: a self-contained authoring guide (docs/demo-authoring.md) covering the step contract and bounds, pacing (narration length is the step clock; one idea per step), spotlight etiquette (never cover what is narrated), and action safety (demos click real UI; non-destructive paths only); three checked-in example scripts (minimal 2-step, 5-step POC, 9-step explain-then-act tour) validated against the shared ext/story-bridge-policy.mjs contract by test/demo-examples.test.mjs; convenience npm scripts (demo:sync-desktop rsync of dist/ to the Desktop unpacked-extension folder, demo:serve, demo:send with an --exec mode that spawns the bridge, validates before transmitting, and retries until a tab pairs, replacing the fifo hack); and a RUNBOOK troubleshooting section from live-run field experience (port 8765 collisions, stale paired badge vs lsof ESTABLISHED, one-time per-instance pairing codes, 'No user-paired Chrome tab')."
+    sources: [source-extension-mode]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-ext-bug-report]
   - schema: sassfully/use-case/v0
     id: uc-ext-bug-report
     title: Zero-integration bug report via the browser extension
