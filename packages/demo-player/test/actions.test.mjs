@@ -58,6 +58,25 @@ test("press dispatches keydown+keyup on the active element, falling back to body
   assert.deepEqual(document.body.events.map((e) => e.type), ["keydown", "keyup"]);
 });
 
+test("structured-anchor click/fill act on the pre-resolved element and never re-query", async () => {
+  const el = makeElement();
+  const document = makeDocument(); // querySelector would return null for any selector
+  assert.deepEqual(
+    await executeDemoAction({ document, action: { kind: "click", selector: { testid: "go" } }, element: el }),
+    { clicked: true },
+  );
+  assert.equal(el.clicked, true);
+  assert.deepEqual(
+    await executeDemoAction({ document, action: { kind: "fill", selector: { css: "#name" }, value: "Ada" }, element: el }),
+    { filled: true },
+  );
+  assert.equal(el.value, "Ada");
+  await assert.rejects(
+    () => executeDemoAction({ document, action: { kind: "click", selector: { testid: "gone" } }, element: null }),
+    /not found/,
+  );
+});
+
 test("waitForVisibleElement polls until a visible match appears, and gives up as null", async () => {
   const el = makeElement();
   let present = false;

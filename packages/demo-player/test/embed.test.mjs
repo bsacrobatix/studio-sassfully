@@ -22,7 +22,7 @@ function makeWindow() {
 function fakeElement() {
   return {
     style: {}, children: [], className: "", textContent: "",
-    classList: { add() {}, remove() {} },
+    classList: { add() {}, remove() {}, contains: () => false },
     setAttribute() {},
     appendChild(child) { this.children.push(child); },
     append(...nodes) { this.children.push(...nodes); },
@@ -34,7 +34,10 @@ function fakeElement() {
   };
 }
 
-const makeDocument = () => ({ createElement: fakeElement, documentElement: fakeElement(), querySelector: () => fakeElement() });
+// Targets resolve through the anchor resolver (querySelectorAll); the default
+// document answers every non-wildcard selector with one visible element.
+const makeDocument = (querySelectorAll = (selector) => (selector === "*" ? [] : [fakeElement()])) =>
+  ({ createElement: fakeElement, documentElement: fakeElement(), querySelector: () => fakeElement(), querySelectorAll });
 
 function makeEmbed({ allowedOrigins } = {}) {
   const acted = [];
@@ -61,15 +64,62 @@ test("the controller runs a script against injected deps and reports status", as
     document: makeDocument(),
     executeAction: async () => {},
     speak: async () => {},
-    onStepEvent: (evt) => events.push(evt.type),
+    onStepEvent: (evt) => events.push(evt),
   });
   assert.deepEqual(controller.status(), { running: false, lastResult: null });
   const demo = await controller.run(SCRIPT);
   assert.equal(demo.completed, true);
-  assert.deepEqual(demo.completedSteps, [{ index: 0, id: "s1", ok: true }, { index: 1, id: "s2", ok: true }]);
+  assert.deepEqual(demo.completedSteps, [
+    { index: 0, id: "s1", ok: true, anchor: null, healed: null },
+    { index: 1, id: "s2", ok: true, anchor: null, healed: null },
+  ]);
   assert.deepEqual(controller.status(), { running: false, lastResult: demo });
-  assert.deepEqual(events, ["narrate", "act", "done"]);
+  assert.deepEqual(events.map((evt) => evt.type), ["step", "narrate", "step", "step", "act", "step", "done"]);
+  // Per-step lifecycle info flows through onStepEvent exactly like the
+  // extension's rrweb stamps: start/end with id, index, anchor, healed.
+  assert.deepEqual(events.filter((evt) => evt.type === "step"), [
+    { type: "step", index: 0, id: "s1", phase: "start" },
+    { type: "step", index: 0, id: "s1", phase: "end", ok: true, anchor: null, healed: null },
+    { type: "step", index: 1, id: "s2", phase: "start" },
+    { type: "step", index: 1, id: "s2", phase: "end", ok: true, anchor: null, healed: null },
+  ]);
   await assert.rejects(() => controller.run({ steps: [] }), /non-empty steps array/);
+});
+
+test("structured anchors resolve, record the strategy, and surface healed notes to the host", async () => {
+  const target = fakeElement();
+  // No [data-testid="gone"] on the page; the css fallback matches: healed.
+  const document = makeDocument((selector) => (selector === "#fallback" ? [target] : []));
+  const events = [];
+  const controller = createDemoController({
+    document,
+    executeAction: async () => {},
+    speak: async () => {},
+    onStepEvent: (evt) => events.push(evt),
+  });
+  const demo = await controller.run({ steps: [
+    { id: "a1", spotlight: { testid: "gone", css: "#fallback" }, dwellMs: 0 },
+  ] });
+  assert.deepEqual(demo.completedSteps, [
+    { index: 0, id: "a1", ok: true, anchor: "css", healed: [{ target: "spotlight", requested: "testid", matched: "css" }] },
+  ]);
+  assert.deepEqual(events.at(-2), {
+    type: "step", index: 0, id: "a1", phase: "end", ok: true,
+    anchor: "css", healed: [{ target: "spotlight", requested: "testid", matched: "css" }],
+  });
+});
+
+test("a structured-anchor action acts on the resolved element (no CSS re-query)", async () => {
+  const button = fakeElement();
+  let clicked = 0;
+  button.click = () => { clicked += 1; };
+  const document = makeDocument((selector) => (selector === '[data-testid="go"]' ? [button] : []));
+  const controller = createDemoController({ document, speak: async () => {} });
+  const demo = await controller.run({ steps: [
+    { id: "c1", action: { kind: "click", selector: { testid: "go" } }, dwellMs: 0 },
+  ] });
+  assert.equal(demo.completed, true);
+  assert.equal(clicked, 1, "the default executor clicked the resolved element itself");
 });
 
 test("installDemoEmbed exposes window.__sassfullyDemo and uninstall removes it", async () => {
