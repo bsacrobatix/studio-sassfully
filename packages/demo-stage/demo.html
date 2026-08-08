@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>demo-stage — overlay viewer</title>
+<!--
+  Standalone manual-verification page. No build step: it loads the same ES
+  modules a real host would. Serve this package directory over HTTP (module
+  imports + fetch don't work from file://):
+
+      cd packages/demo-stage
+      python3 -m http.server 8123        # or: npx serve .
+      open http://localhost:8123/demo.html
+
+  The page below is placeholder "live app" content; the stage plays as a
+  transparent, pointer-events:none layer above it. The page stays fully
+  clickable while Pip performs.
+-->
+<style>
+  :root { color-scheme: light; }
+  body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background: #f4f6f9; color: #24292f; }
+  header { background: #fff; border-bottom: 1px solid #d8dee4; padding: 14px 28px; display: flex; gap: 18px; align-items: center; }
+  header b { font-size: 17px; }
+  header nav a { color: #57606a; text-decoration: none; margin-right: 14px; }
+  main { max-width: 960px; margin: 26px auto; padding: 0 20px; display: grid; grid-template-columns: 2fr 1fr; gap: 18px; }
+  .card { background: #fff; border: 1px solid #d8dee4; border-radius: 10px; padding: 18px 20px; }
+  .card h2 { margin: 0 0 8px; font-size: 16px; }
+  .card p { color: #57606a; margin: 6px 0; }
+  #magic-panel { border-color: #22a06b; }
+  button.app { background: #1f6feb; color: #fff; border: 0; border-radius: 8px; padding: 8px 14px; cursor: pointer; }
+  .controls { position: fixed; bottom: 18px; right: 18px; z-index: 2147483647; display: flex; gap: 8px; flex-wrap: wrap;
+    background: #10141c; padding: 10px 12px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+  .controls button { background: #22d3a0; color: #08111c; border: 0; border-radius: 8px; padding: 7px 12px; font: 600 13px system-ui; cursor: pointer; }
+  .controls button.alt { background: #2a3346; color: #e7ecf5; }
+  #status { color: #8e9bb3; font: 12px system-ui; align-self: center; }
+</style>
+</head>
+<body>
+<header>
+  <b>Placeholder App</b>
+  <nav><a href="#">Dashboard</a><a href="#">Reports</a><a href="#">Settings</a></nav>
+</header>
+<main>
+  <section class="card">
+    <h2>Live page content</h2>
+    <p>This is ordinary page content underneath the stage layer. Everything here
+       stays interactive while the scene plays — the overlay is pointer-events:none.</p>
+    <p><button class="app" onclick="this.textContent = 'Clicked at ' + new Date().toLocaleTimeString()">Click me during the scene</button></p>
+    <p>Text to prove transparency: lorem ipsum dolor sit amet, consectetur
+       adipiscing elit. Sed do eiusmod tempor incididunt ut labore.</p>
+  </section>
+  <aside class="card" id="magic-panel">
+    <h2>The panel</h2>
+    <p>Pip's anchored scene stands next to this element's bounding box —
+       "where the magic happens".</p>
+  </aside>
+</main>
+
+<div class="controls">
+  <button id="play-full">Play full-viewport</button>
+  <button id="play-dock" class="alt">Play docked (bottom-left)</button>
+  <button id="play-anchor" class="alt">Play anchored to panel</button>
+  <button id="stop" class="alt">Stop</button>
+  <span id="status"></span>
+</div>
+
+<script type="module">
+import { mountStageLayer } from './src/stage-layer.mjs';
+
+const status = (m) => { document.getElementById('status').textContent = m; };
+const scene = await (await fetch('./examples/sample-scene.json')).json();
+const layer = mountStageLayer(document);
+
+async function run(placement, label) {
+  status(`playing: ${label}…`);
+  await layer.playScene({ scene, placement });
+  status(`${label} ended`);
+}
+
+document.getElementById('play-full').onclick = () => run({ mode: 'full' }, 'full-viewport');
+document.getElementById('play-dock').onclick = () => run({ mode: 'dock', edge: 'bottom-left' }, 'docked');
+document.getElementById('play-anchor').onclick = () => {
+  const r = document.getElementById('magic-panel').getBoundingClientRect();
+  run({ mode: 'anchor', anchor: { x: r.left, y: r.top, w: r.width, h: r.height } }, 'anchored');
+};
+document.getElementById('stop').onclick = () => { layer.stop(); status('stopped'); };
+status('ready — no audio built, so beats time out on word-count estimates');
+</script>
+</body>
+</html>
