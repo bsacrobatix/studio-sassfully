@@ -2,12 +2,16 @@
 EXT_DIR := packages/feedback-extension
 EXT_DIST := $(abspath $(EXT_DIR)/dist)
 
-.PHONY: help check ext-build ext-install
+.PHONY: help setup check ext-build ext-install
 
 help:
+	@echo "make setup        - install the mergiraf merge driver + configure git (rerere, zdiff3)"
 	@echo "make check        - run the full repo gate (scripts/checks.sh)"
 	@echo "make ext-build    - build the unpacked Chrome extension into $(EXT_DIR)/dist"
 	@echo "make ext-install  - build, then open chrome://extensions to load/reload it"
+
+setup:
+	bash scripts/setup.sh
 
 check:
 	bash scripts/checks.sh

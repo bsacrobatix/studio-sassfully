@@ -4,12 +4,16 @@
 #   1. pog-doctor  — conventions lint (CI-safe: skips the hook check in CI)
 #   2. tests       — every package with a package.json test script
 #   3. graph lint  — pog/catalog.yaml validated by the kitsoki engine.
-#      Resolution order: $KITSOKI_BIN (prebuilt binary), else build from
-#      $POG_KITSOKI_SRC (a kitsoki checkout with the object-graph engine;
-#      binary cached in .artifacts/bin by source HEAD sha). In CI, where no
-#      kitsoki source is available yet, the lint is SKIPPED loudly — pinning
-#      a build for CI is its own tracked step (POG plan 1.4); locally the
-#      lint is mandatory.
+#   4. story flows — every stories/*/flows fixture replayed (no LLM, no network).
+#
+# Steps 3 and 4 both need a kitsoki binary. Resolution order (resolve_kitsoki):
+#   a. $KITSOKI_BIN            — an explicitly pinned prebuilt binary
+#   b. $POG_KITSOKI_SRC        — a kitsoki checkout to build from, cached in
+#                                .artifacts/bin by that checkout's HEAD sha
+#   c. `kitsoki` on PATH       — the ordinary installed binary
+# In CI, where none of the three exist, both steps are SKIPPED LOUDLY — pinning
+# a build for CI is its own tracked step (POG plan 1.4). Locally they are
+# mandatory: a gate you cannot run is not a gate.
 #
 # No network, no live LLM — safe for CI.
 set -euo pipefail
@@ -35,36 +39,88 @@ while IFS= read -r package; do
   fi
 done < <(find packages -mindepth 2 -maxdepth 2 -name package.json -type f | sort)
 
-lint_catalog() {
+# Sets $KITSOKI_RESOLVED to an absolute path to a usable kitsoki binary (empty
+# if there is none) and $KITSOKI_RESOLVED_HOW to which tier answered. It assigns
+# rather than prints on purpose: a $(...) call would run it in a subshell and
+# throw the memo and the provenance away.
+KITSOKI_RESOLVED=""
+KITSOKI_RESOLVED_HOW=""
+KITSOKI_RESOLVE_DONE=""
+resolve_kitsoki() {
+  [ -n "$KITSOKI_RESOLVE_DONE" ] && return 0
+  KITSOKI_RESOLVE_DONE=1
   if [ -n "${KITSOKI_BIN:-}" ] && [ -x "${KITSOKI_BIN}" ]; then
-    "$KITSOKI_BIN" graph lint pog/catalog.yaml
-    echo "catalog: lint green (KITSOKI_BIN)"
-    return 0
-  fi
-  local src="${POG_KITSOKI_SRC:-$HOME/code/Kitsoki/.worktrees/project-object-graph}"
-  if [ -d "$src" ]; then
-    local sha bin
-    sha="$(git -C "$src" rev-parse --short HEAD)"
-    bin="$PWD/.artifacts/bin/kitsoki-$sha"
-    if [ ! -x "$bin" ]; then
-      mkdir -p .artifacts/bin
-      echo "building kitsoki@$sha from $src ..."
-      (cd "$src" && go build -o "$bin" ./cmd/kitsoki)
+    KITSOKI_RESOLVED="$KITSOKI_BIN"
+    KITSOKI_RESOLVED_HOW="KITSOKI_BIN"
+  else
+    local src="${POG_KITSOKI_SRC:-$HOME/code/Kitsoki/.worktrees/project-object-graph}"
+    if [ -d "$src" ]; then
+      local sha bin
+      sha="$(git -C "$src" rev-parse --short HEAD)"
+      bin="$PWD/.artifacts/bin/kitsoki-$sha"
+      if [ ! -x "$bin" ]; then
+        mkdir -p .artifacts/bin
+        echo "building kitsoki@$sha from $src ..." >&2
+        (cd "$src" && go build -o "$bin" ./cmd/kitsoki)
+      fi
+      KITSOKI_RESOLVED="$bin"
+      KITSOKI_RESOLVED_HOW="kitsoki@$sha"
+    elif command -v kitsoki >/dev/null 2>&1; then
+      KITSOKI_RESOLVED="$(command -v kitsoki)"
+      KITSOKI_RESOLVED_HOW="kitsoki on PATH"
     fi
-    "$bin" graph lint pog/catalog.yaml
-    echo "catalog: lint green (kitsoki@$sha)"
+  fi
+  return 0
+}
+
+in_ci() { [ "${CI:-}" = "true" ] || [ "${GITHUB_ACTIONS:-}" = "true" ]; }
+
+lint_catalog() {
+  resolve_kitsoki
+  if [ -n "$KITSOKI_RESOLVED" ]; then
+    "$KITSOKI_RESOLVED" graph lint pog/catalog.yaml
+    echo "catalog: lint green ($KITSOKI_RESOLVED_HOW)"
     return 0
   fi
-  if [ "${CI:-}" = "true" ] || [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+  if in_ci; then
     echo "catalog: LINT SKIPPED in CI — no kitsoki build available; CI pinning is POG plan 1.4"
     return 0
   fi
-  echo "error: no kitsoki available to lint pog/catalog.yaml (set KITSOKI_BIN or POG_KITSOKI_SRC)" >&2
+  echo "error: no kitsoki available to lint pog/catalog.yaml (set KITSOKI_BIN or POG_KITSOKI_SRC, or install kitsoki)" >&2
   return 1
+}
+
+# Replay every story's flow fixtures. These are deterministic: host calls are
+# cassetted in the fixture and no model is called, so they are as much a unit
+# test as anything under packages/. stories/land in particular is only worth
+# having if its landing arcs are proven on every gate run.
+check_story_flows() {
+  local ran=0
+  resolve_kitsoki
+  if [ -z "$KITSOKI_RESOLVED" ]; then
+    if in_ci; then
+      echo "flows: SKIPPED in CI — no kitsoki build available; CI pinning is POG plan 1.4"
+      return 0
+    fi
+    echo "error: no kitsoki available to replay story flows" >&2
+    return 1
+  fi
+  while IFS= read -r flows_dir; do
+    local app="${flows_dir%/flows}/app.yaml"
+    [ -f "$app" ] || continue
+    echo "flows: $app"
+    "$KITSOKI_RESOLVED" test flows "$app"
+    ran=$((ran + 1))
+  done < <(find stories -name flows -type d | sort)
+  echo "flows: $ran story app(s) replayed green ($KITSOKI_RESOLVED_HOW)"
 }
 
 if [ -f pog/catalog.yaml ]; then
   lint_catalog
+fi
+
+if [ -d stories ]; then
+  check_story_flows
 fi
 
 echo "checks: green"

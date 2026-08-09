@@ -1,0 +1,61 @@
+# gate_red_needs_human — a red `scripts/checks.sh` on the REBASED sha stops the
+# landing. Nothing is pushed, landed_sha stays empty, and the gate's OWN output
+# is what a human gets — never a generic "gate failed".
+#
+# DELIBERATELY VERSION-AGNOSTIC. `@kitsoki/land` resolves to whichever copy this
+# machine answers with (a saved ~/.kitsoki/repo checkout, an on-disk kitsoki
+# root, or the binary's embedded story library — see README.md). Newer copies
+# insert one bounded, write-fenced repair attempt between the red gate and the
+# stop; older ones stop immediately. This fixture therefore:
+#
+#   * supplies a host.agent.task cassette in which the repairer declines
+#     (resolved: false), so a repair-capable land escalates rather than hanging
+#     on a missing handler, and
+#   * asserts only what is TRUE IN BOTH: the exit, the status, that nothing was
+#     pushed, and that the gate's verbatim output is captured.
+#
+# The exact `last_error` prose differs between the two (the newer one appends
+# the repairer's reason), so it is not asserted here. `ln__gate_output` is the
+# assertion that actually matters: the real failure survives to the caller.
+
+test_kind: flow
+app: ../app.yaml
+initial_state: ready
+initial_world:
+  worktree_path:    ".worktrees/tour-foundation-recovery"
+  workspace_branch: "feat/tour-foundation-recovery"
+
+host_handlers:
+  host.git:
+    by_call:
+      land_fetch:  { data: { ok: true, fetched_sha: "1cd1fd2" } }
+      land_rebase: { data: { outcome: rebased, head_sha: "aa1302a", conflicted_files: [], error: "" } }
+  host.run:
+    by_call:
+      land_gate:
+        data:
+          ok: false
+          exit_code: 1
+          stdout: "tests: packages/tour-player\nnot ok 2 - replays a recorded tour"
+  # Only consulted by a land that carries the repair arc. The repairer declines,
+  # which is the safe outcome and keeps this fixture's verdict identical on both.
+  host.agent.task:
+    data:
+      submitted:
+        resolved:   false
+        confidence: 0.1
+        reason:     "the failing assertion encodes a product decision about tour replay ordering"
+
+turns:
+  - intent: { name: land, slots: {} }
+    expect_state: __exit__needs-human
+    expect_world:
+      status: needs-human
+      # Nothing was pushed, and nothing was escalated to a PR.
+      landed_sha:  ""
+      pr_url:      ""
+      ln__gate_ok: false
+      # The gate's verbatim output, carried out of the loop.
+      ln__gate_output: "tests: packages/tour-player\nnot ok 2 - replays a recorded tour"
+
+expect_terminal: true

@@ -1,0 +1,43 @@
+# push_race_exhausted — the retry loop is BOUNDED. Losing the race
+# max_attempts times stops with the real git rejection, and reports
+# needs-human — never a landing that did not happen.
+#
+# max_attempts is set to 2 here so the fixture stays short; the story's default
+# is 5.
+
+test_kind: flow
+app: ../app.yaml
+initial_state: ready
+initial_world:
+  worktree_path:    ".worktrees/demo-stage"
+  workspace_branch: "demo-stage"
+  max_attempts:     2
+
+host_handlers:
+  host.git:
+    by_call:
+      land_fetch:  { data: { ok: true, fetched_sha: "1cd1fd2" } }
+      land_rebase: { data: { outcome: rebased, head_sha: "d4388b5", conflicted_files: [], error: "" } }
+      land_push:
+        data:
+          outcome: rejected_non_ff
+          ok: false
+          url: "https://github.com/bsacrobatix/studio-sassfully.git"
+          error: "git.push origin HEAD:refs/heads/staging/local: ! [rejected] HEAD -> staging/local (non-fast-forward)"
+  host.run:
+    by_call:
+      land_gate: { data: { ok: true, exit_code: 0, stdout: "checks: green" } }
+
+turns:
+  - intent: { name: land, slots: {} }
+    expect_state: __exit__needs-human
+    expect_world:
+      status: needs-human
+      # The gate was green every time and the branch is rebased — but nothing
+      # landed, and the story says so.
+      landed_sha:  ""
+      pr_url:      ""
+      ln__attempt: 2
+      last_error: "lost the push race to origin/staging/local on all 2 attempts (last rejection: git.push origin HEAD:refs/heads/staging/local: ! [rejected] HEAD -> staging/local (non-fast-forward)). The branch is rebased and gated — re-run land, or raise max_attempts if the target is this contended."
+
+expect_terminal: true

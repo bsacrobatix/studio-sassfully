@@ -1,0 +1,185 @@
+# .gitattributes — syntax-aware merge for this repo's hotspot file types.
+#
+# WHY: ~20 branch worktrees land onto the same `staging/local`, so the same
+# yaml/json/mjs/md files are edited in parallel constantly. mergiraf parses both
+# sides with tree-sitter and merges at the syntax-tree level, so two branches
+# that add different keys to the same object, or different tests to the same
+# file, merge cleanly instead of producing a textual conflict a human (or an
+# LLM resolver) has to settle.
+#
+# Per-path merge drivers apply to LOCAL merges/rebases only — GitHub's web merge
+# ignores .gitattributes. That is exactly our case: `scripts/land-branch.sh`,
+# `scripts/integrate-branch.sh`, and `stories/land` all rebase locally.
+#
+# --- mergiraf: syntax-aware merge driver -----------------------------------
+#
+# Everything in the block below is generated verbatim by
+#
+#     mergiraf languages --gitattributes
+#
+# (mergiraf 0.18.0), so regenerating it after an upgrade is a mechanical diff.
+# Do not hand-edit individual lines; re-run the command instead.
+#
+# The driver itself is NOT defined by this file. A `merge=mergiraf` attribute is
+# inert unless `merge.mergiraf.driver` exists in the clone's git config;
+# `scripts/setup.sh` (`make setup`) installs the binary and writes that config.
+# Without it git silently falls back to its normal line merge, so committing
+# these rules is safe everywhere — including CI, which never merges.
+#
+# ORDERING IS LOAD-BEARING: the last matching line wins. Keep the mergiraf block
+# FIRST so repo-specific overrides below can win. Verify an override with:
+#
+#     git check-attr merge -- <path>
+#
+# Not covered: `.pongo` (Kitsoki view templates) and `.vue` have no mergiraf
+# grammar, so those 8 files stay on git's line merge.
+
+*.java merge=mergiraf
+*.properties merge=mergiraf
+*.kt merge=mergiraf
+*.kts merge=mergiraf
+*.rs merge=mergiraf
+*.go merge=mergiraf
+go.mod merge=mergiraf
+go.sum merge=mergiraf
+go.work.sum merge=mergiraf
+*.ini merge=mergiraf
+*.js merge=mergiraf
+*.jsx merge=mergiraf
+*.mjs merge=mergiraf
+*.cjs merge=mergiraf
+*.json merge=mergiraf
+*.yml merge=mergiraf
+*.yaml merge=mergiraf
+pyproject.toml merge=mergiraf
+*.toml merge=mergiraf
+*.html merge=mergiraf
+*.htm merge=mergiraf
+*.xhtml merge=mergiraf
+*.xml merge=mergiraf
+*.c merge=mergiraf
+*.h merge=mergiraf
+*.cc merge=mergiraf
+*.hh merge=mergiraf
+*.cpp merge=mergiraf
+*.hpp merge=mergiraf
+*.cxx merge=mergiraf
+*.hxx merge=mergiraf
+*.c++ merge=mergiraf
+*.h++ merge=mergiraf
+*.mpp merge=mergiraf
+*.cppm merge=mergiraf
+*.ixx merge=mergiraf
+*.tcc merge=mergiraf
+*.cs merge=mergiraf
+*.dart merge=mergiraf
+*.dts merge=mergiraf
+*.scala merge=mergiraf
+*.sbt merge=mergiraf
+*.scm merge=mergiraf
+*.ts merge=mergiraf
+*.mts merge=mergiraf
+*.cts merge=mergiraf
+*.tsx merge=mergiraf
+*.py merge=mergiraf
+*.php merge=mergiraf
+*.phtml merge=mergiraf
+*.php3 merge=mergiraf
+*.php4 merge=mergiraf
+*.php5 merge=mergiraf
+*.phps merge=mergiraf
+*.phpt merge=mergiraf
+*.sol merge=mergiraf
+*.lua merge=mergiraf
+*.rb merge=mergiraf
+*.ex merge=mergiraf
+*.exs merge=mergiraf
+*.nix merge=mergiraf
+*.sv merge=mergiraf
+*.svh merge=mergiraf
+*.md merge=mergiraf
+*.hcl merge=mergiraf
+*.tf merge=mergiraf
+*.tfvars merge=mergiraf
+*.ml merge=mergiraf
+*.mli merge=mergiraf
+*.hs merge=mergiraf
+*.mk merge=mergiraf
+Makefile merge=mergiraf
+GNUmakefile merge=mergiraf
+*.bzl merge=mergiraf
+*.bxl merge=mergiraf
+*.bazel merge=mergiraf
+*.star merge=mergiraf
+*.sky merge=mergiraf
+BUILD merge=mergiraf
+WORKSPACE merge=mergiraf
+BUCK merge=mergiraf
+PACKAGE merge=mergiraf
+*.cmake merge=mergiraf
+CMakeLists.txt merge=mergiraf
+*.f merge=mergiraf
+*.for merge=mergiraf
+*.f90 merge=mergiraf
+*.R merge=mergiraf
+*.r merge=mergiraf
+.Rprofile merge=mergiraf
+requirements.txt merge=mergiraf
+requirements-dev.txt merge=mergiraf
+requirements-docs.txt merge=mergiraf
+requirements-test.txt merge=mergiraf
+*.sh merge=mergiraf
+*.bash merge=mergiraf
+PKGBUILD merge=mergiraf
+*.gleam merge=mergiraf
+
+
+# --- repo-specific overrides (must stay AFTER the mergiraf block) ----------
+#
+# Verify any override with the ambient config neutralised, or a machine-global
+# ~/.config/git/attributes will make a naive check pass regardless of what this
+# file says:
+#
+#     GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+#       git check-attr merge -- <path>
+
+# Dependency lockfiles are NOT source. The generated block above marks *.json
+# and *.yaml `merge=mergiraf`, which would capture them: a syntax-aware merge
+# can emit a structurally valid lockfile whose resolved dependency tree and
+# `integrity` hashes disagree — silently wrong, with no conflict marker to warn
+# anyone. Regenerate instead. None of these are tracked today; they are listed
+# so the first one added is safe by default.
+package-lock.json   merge=text
+npm-shrinkwrap.json merge=text
+pnpm-lock.yaml      merge=text
+yarn.lock           merge=text
+bun.lockb           merge=text
+Cargo.lock          merge=text
+poetry.lock         merge=text
+uv.lock             merge=text
+composer.lock       merge=text
+Gemfile.lock        merge=text
+
+# Emitted trees. packages/feedback-core/dist/kitsoki-embed/** is re-emitted from
+# a pinned source revision (see the `chore(embed): refresh kitsoki-embed
+# manifest` commits) and packages/*/vendor/** is copied in wholesale. Merging
+# two regenerations line-by-line — or worse, syntax-aware — produces a tree that
+# corresponds to no source revision. Take the conflict and re-emit.
+packages/feedback-core/dist/kitsoki-embed/** merge=binary
+packages/*/vendor/**                         merge=binary
+
+# pog/catalog.yaml deliberately STAYS on mergiraf. It is the hottest shared file
+# in the repo — every branch adds nodes to it — and a tree-sitter YAML merge of
+# two additive changesets is exactly the case mergiraf is good at. The risk of a
+# structurally valid but semantically wrong catalog is covered downstream:
+# `scripts/checks.sh` runs `kitsoki graph lint pog/catalog.yaml`, and stories/land
+# re-runs that gate on the REBASED sha before it pushes.
+
+# Recorded evidence and demo/tour goldens are generated artifacts, not source.
+# A three-way merge of two regenerated recordings is never meaningful; take the
+# conflict and re-record instead of silently interleaving two runs.
+pog/evidence/*.json          merge=binary
+stories/*/fixtures/**/*.json merge=binary
+
+# Screenshots / posters.
+*.png binary

@@ -16,6 +16,17 @@ belong in `.context/`, never in tracked files.
 - **Feedback ≠ mutation.** The reviewed note is the artifact; anything that
   changes a host system is a downstream outcome. Keep the boundary in every
   design.
+- **Landing is fast-forward onto `staging/local`.** `main` trails it by dozens
+  of commits; it is not the integration branch. An agent finishing work in a
+  branch worktree lands with `stories/land` (`kitsoki run
+  stories/land/app.yaml`, then `land`) — fetch → rebase onto
+  `origin/staging/local` → `scripts/checks.sh` on the *rebased* sha → refspec
+  push, with an optimistic retry on a lost race and a PR escalation for
+  conflicts the headless resolver can't settle. The loop is imported from
+  `@kitsoki/land`, not copied; read `stories/land/README.md` before changing it,
+  especially "Known gaps". `scripts/land-branch.sh` remains the hand-driven
+  path. Run `make setup` once per clone so the `.gitattributes` mergiraf merge
+  driver and rerere are actually configured — without it those rules are inert.
 
 <!-- pack:conventions:begin — managed by the pog conventions pack installer; edits inside this block are overwritten on reinstall -->
 ## Repo conventions (studio-sassfully)
