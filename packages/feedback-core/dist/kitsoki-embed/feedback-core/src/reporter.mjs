@@ -20,6 +20,10 @@ import { KIND_CONFIG, KINDS } from "./kinds.mjs";
  *   demoMode?: boolean,                  // opt-in narrated-demo surface (never default)
  *   demoOrigins?: string[],              // postMessage caller allowlist (default []: disabled)
  *   demoNarrationUrl?: string,           // optional loopback @sassfully/demo-tts endpoint
+ *   demoAssetBase?: string,               // host-relative root a vendored/re-served
+ *                                          // package tree actually lives under (see
+ *                                          // resolveDemoPresenterSrc in demo-script.mjs);
+ *                                          // omit for Sassfully's own dev-tree layout
  *   demoBridge?: {url: string},           // explicit local embedded-demo bridge
  *   onDemoStepEvent?: (evt: object) => void,
  * }} opts
@@ -72,6 +76,7 @@ export function mountReporter(opts) {
       document: doc,
       allowedOrigins: opts.demoOrigins ?? [],
       narrationUrl: opts.demoNarrationUrl,
+      assetBase: opts.demoAssetBase,
       embeddedBridge: opts.demoBridge,
       onStepEvent: opts.onDemoStepEvent,
     }));

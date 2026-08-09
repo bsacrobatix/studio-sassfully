@@ -11,7 +11,7 @@ import { cancelSpeech, clearDemoOverlay, clickPulse, showCaption, showSpotlight,
 import { createDemoRunState, runDemoScript } from "./demo-player.mjs";
 import { executeDemoAction } from "./actions.mjs";
 import { anchorLabel, resolveAnchorOnce, waitForAnchor } from "./anchor-resolve.mjs";
-import { validateDemoScript } from "./demo-script.mjs";
+import { resolveDemoPresenterSrc, validateDemoScript } from "./demo-script.mjs";
 import { createBrowserEvidenceCapture } from "../../feedback-vue/src/browser-capture.mjs";
 
 function rectPlacement(element) {
@@ -158,7 +158,7 @@ export function bindEmbeddedDemoSession({ window: win, api, bridge, onEvent } = 
 // side-effecting seams injectable ({document, executeAction, speak,
 // onStepEvent}) so sequencing is testable in plain node. One demo at a time:
 // run() cancels any prior run; stop() also clears the overlay and narration.
-export function createDemoController({ document, executeAction, speak, narrationUrl, mountStageLayer, onStepEvent } = {}) {
+export function createDemoController({ document, executeAction, speak, narrationUrl, mountStageLayer, assetBase, onStepEvent } = {}) {
   if (!document) throw new Error("demo controller: a DOM document is required");
   const media = { narration: [], stage: [], audioUnlock: null };
   let evidenceCapture = null; let evidenceActive = false; let evidenceStopped = null;
@@ -208,7 +208,14 @@ export function createDemoController({ document, executeAction, speak, narration
           const placement = stage.anchor === "target" ? rectPlacement(target) : (stage.anchor ?? { mode: "dock", edge: "bottom-right", size: 0.38 });
           const mounted = { kind: "stage", status: "mounted", placement, presenter: stage.presenter?.id ?? null };
           media.stage.push(mounted); emit(mounted);
-          const playing = stageLayer.playScene({ scene: stage.scene, chars: stage.chars, roster: stage.roster, placement, presenter: stage.presenter });
+          // The script only ever names a package-relative presenter path
+          // (DEMO_PRESENTER_SRC in demo-script.mjs); assetBase is a
+          // host-supplied, separately-validated rewrite of where that tree
+          // is actually served from — with no assetBase this is a no-op.
+          const presenter = stage.presenter
+            ? { ...stage.presenter, src: resolveDemoPresenterSrc(stage.presenter.src, assetBase) }
+            : stage.presenter;
+          const playing = stageLayer.playScene({ scene: stage.scene, chars: stage.chars, roster: stage.roster, placement, presenter });
           if (stage.persistent) {
             // Keep the presenter alive, but surface an eventual render/runtime
             // failure rather than leaving a rejected fire-and-forget promise.
@@ -285,7 +292,7 @@ export function createDemoController({ document, executeAction, speak, narration
 // non-empty — listens for postMessage demo commands from exactly those
 // origins, replying to the sender with a `sassfully:demo:result` message.
 // Returns {api, controller, uninstall}.
-export function installDemoEmbed({ window: win, document: doc, allowedOrigins = [], executeAction, speak, narrationUrl, mountStageLayer, embeddedBridge, onStepEvent } = {}) {
+export function installDemoEmbed({ window: win, document: doc, allowedOrigins = [], executeAction, speak, narrationUrl, mountStageLayer, assetBase, embeddedBridge, onStepEvent } = {}) {
   win = win ?? (typeof window !== "undefined" ? window : undefined);
   doc = doc ?? win?.document;
   if (!win || !doc) throw new Error("demo embed: a window and document are required");
@@ -293,7 +300,7 @@ export function installDemoEmbed({ window: win, document: doc, allowedOrigins = 
     const mod = await import("../../demo-stage/src/stage-layer.mjs");
     return mod.mountStageLayer(doc);
   });
-  const controller = createDemoController({ document: doc, executeAction, speak, narrationUrl, mountStageLayer: stageMount, onStepEvent });
+  const controller = createDemoController({ document: doc, executeAction, speak, narrationUrl, mountStageLayer: stageMount, assetBase, onStepEvent });
   const api = {
     run: (script) => controller.run(script),
     stop: () => controller.stop(),
