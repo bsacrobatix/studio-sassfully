@@ -1267,7 +1267,7 @@ nodes:
     title: embedded demo control (story-bridge MCP drafts)
     status: in-progress
     visibility: public
-    summary: The existing local story-bridge stdio server's demoMode-only `embedded_demo` MCP tool: stable bound sessions, in-memory CAS drafts, semantic-anchor validation/drift, validated push to the resident page API, stop/resume, evidence control, and compact execution/media acknowledgements. It remains loopback-only, explicitly host-enabled, and contains no generic eval or browser navigation capability.
+    summary: "The existing local story-bridge stdio server's demoMode-only `embedded_demo` MCP tool: stable bound sessions, in-memory CAS drafts, semantic-anchor validation/drift, validated push to the resident page API, stop/resume, evidence control, and compact execution/media acknowledgements. It remains loopback-only, explicitly host-enabled, and contains no generic eval or browser navigation capability."
     sources: [source-extension-mode]
     edges:
       part_of: [product-sassfully]
