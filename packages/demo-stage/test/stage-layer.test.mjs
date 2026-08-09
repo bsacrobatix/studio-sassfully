@@ -9,13 +9,16 @@ const scene = JSON.parse(readFileSync(new URL('../examples/sample-scene.json', i
 
 function fakeElement(tag = 'div') {
   return {
-    tag, style: {}, children: [], attrs: {}, parent: null,
+    tag, style: {}, children: [], attrs: {}, parent: null, listeners: {},
     setAttribute(k, v) { this.attrs[k] = v; },
     appendChild(child) { child.parent = this; this.children.push(child); return child; },
     remove() {
       if (this.parent) this.parent.children = this.parent.children.filter((c) => c !== this);
       this.parent = null;
     },
+    addEventListener(type, fn) { (this.listeners[type] ??= []).push(fn); },
+    removeEventListener(type, fn) { this.listeners[type] = (this.listeners[type] ?? []).filter((f) => f !== fn); },
+    dispatch(type) { for (const fn of this.listeners[type] ?? []) fn(); },
   };
 }
 
@@ -200,4 +203,37 @@ test('playScene after destroy rejects', async () => {
   const layer = mountStageLayer(doc, { mountPlayer: makeFakePlayer().mountPlayer });
   layer.destroy();
   await assert.rejects(() => layer.playScene({ scene }), /destroyed/);
+});
+
+/* ── an unloadable presenter image must not be reported as mounted ────────── */
+
+test('a presenter image that fails to load rejects playScene instead of silently "mounting"', async () => {
+  const doc = makeDocument();
+  const layer = mountStageLayer(doc, { mountPlayer: makeFakePlayer().mountPlayer });
+  const done = layer.playScene({
+    presenter: { id: 'nova', src: '/packages/demo-stage/assets/nova-cutout.png', alt: 'Nova presenter' },
+    placement: { mode: 'dock', edge: 'bottom-left', size: 0.3 },
+  });
+  const image = layer.container.children[0].children[0];
+  assert.equal(image.tag, 'img');
+  // Simulate what a real browser does when the resolved URL 404s to an HTML
+  // shell (e.g. a vendored asset path the host doesn't serve): the <img>
+  // never fires 'load' — only 'error' — leaving naturalWidth/naturalHeight
+  // at 0 despite complete becoming true.
+  image.dispatch('error');
+  await assert.rejects(() => done, /presenter image failed to load.*nova-cutout\.png/);
+});
+
+test('a superseded presenter image error does not reject the scene that replaced it', async () => {
+  const doc = makeDocument();
+  const layer = mountStageLayer(doc, { mountPlayer: makeFakePlayer().mountPlayer });
+  const first = layer.playScene({ presenter: { id: 'nova', src: '/a.png' } });
+  const staleImage = layer.container.children[0].children[0];
+  const second = layer.playScene({ presenter: { id: 'nova', src: '/b.png' } });
+  await first;   // superseded → resolved, not rejected
+  // A late 'error' from the torn-down first image must not reject the
+  // scene that superseded it.
+  staleImage.dispatch('error');
+  layer.stop();
+  await second;
 });

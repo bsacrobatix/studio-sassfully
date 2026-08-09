@@ -147,7 +147,7 @@ export function mountStageLayer(doc, opts = {}) {
     });
     container.appendChild(host);
 
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       current = { host, player: null, settle: resolve };
       const mine = current;
       const player = scene ? mountPlayer(host, {
@@ -158,13 +158,25 @@ export function mountStageLayer(doc, opts = {}) {
       if (presenter) {
         const image = doc.createElement('img');
         image.setAttribute('data-demo-stage-presenter', presenter.id ?? 'static');
-        image.setAttribute('src', presenter.src);
         image.setAttribute('alt', presenter.alt ?? '');
         image.setAttribute('aria-hidden', 'true');
         Object.assign(image.style, {
           width: '100%', height: '100%', display: 'block', objectFit: 'contain',
           objectPosition: 'center bottom', pointerEvents: 'none', userSelect: 'none',
         });
+        // A "mounted" receipt is only honest once the browser has actually
+        // decoded pixels: an <img> can finish loading (complete: true) with
+        // naturalWidth/naturalHeight still 0 when the resolved URL 404s to
+        // an HTML shell (a vendored/host-relative path served by the wrong
+        // origin, for example) — the element never fires 'load' in that
+        // case, only 'error'. Surface that as a rejection so the caller
+        // (see feedback-core embed.mjs's stage receipt) reports
+        // status:"failed" instead of a presenter no viewer can see.
+        image.addEventListener('error', () => {
+          if (current !== mine) return;   // superseded/stopped before it settled
+          reject(new Error(`presenter image failed to load: ${presenter.src}`));
+        });
+        image.setAttribute('src', presenter.src);
         host.appendChild(image);
       }
       // Feet toward the bottom of the box, whatever its aspect.

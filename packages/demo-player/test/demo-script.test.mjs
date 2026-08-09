@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { DEMO_SCRIPT_MAX_STEPS, DEMO_SCRIPT_VERSION, validateDemoScript } from "../src/demo-script.mjs";
+import { DEMO_SCRIPT_MAX_STEPS, DEMO_SCRIPT_VERSION, resolveDemoPresenterSrc, validateDemoScript, validDemoAssetBase } from "../src/demo-script.mjs";
 
 const step = (extra = {}) => ({ caption: "hi", ...extra });
 const script = (steps) => ({ version: DEMO_SCRIPT_VERSION, steps });
@@ -64,6 +64,46 @@ test("voice and bounded stage scenes are accepted, malformed stage payloads are 
   assert.equal(validateDemoScript(script([step({ stage: { presenter: { ...nova, src: "https://example.test/nova.png" } } })])).ok, false, "remote cutouts are not a script fetch surface");
   assert.equal(validateDemoScript(script([step({ stage: { presenter: { ...nova, src: "data:image/png;base64,AA" } } })])).ok, false);
   assert.equal(validateDemoScript(script([step({ stage: {} })])).ok, false);
+});
+
+test("resolveDemoPresenterSrc is the identity function with no assetBase (default behavior is unchanged)", () => {
+  const src = "/packages/demo-stage/assets/nova-cutout.png";
+  assert.equal(resolveDemoPresenterSrc(src), src);
+  assert.equal(resolveDemoPresenterSrc(src, null), src);
+  assert.equal(resolveDemoPresenterSrc(src, undefined), src);
+});
+
+test("resolveDemoPresenterSrc rewrites the /packages root onto a valid host-relative assetBase", () => {
+  const src = "/packages/demo-stage/assets/nova-cutout.png";
+  assert.equal(
+    resolveDemoPresenterSrc(src, "/vendor/sassfully/kitsoki-embed/v1"),
+    "/vendor/sassfully/kitsoki-embed/v1/demo-stage/assets/nova-cutout.png",
+  );
+  assert.equal(resolveDemoPresenterSrc(src, "/v1"), "/v1/demo-stage/assets/nova-cutout.png");
+});
+
+test("resolveDemoPresenterSrc falls back to the untouched src for any invalid assetBase (never a wider escape)", () => {
+  const src = "/packages/demo-stage/assets/nova-cutout.png";
+  assert.equal(resolveDemoPresenterSrc(src, "https://evil.test"), src, "scheme+authority rejected");
+  assert.equal(resolveDemoPresenterSrc(src, "//evil.test"), src, "protocol-relative authority rejected");
+  assert.equal(resolveDemoPresenterSrc(src, "/../etc"), src, "traversal rejected");
+  assert.equal(resolveDemoPresenterSrc(src, "/vendor/../etc"), src, "embedded traversal rejected");
+  assert.equal(resolveDemoPresenterSrc(src, "/vendor/"), src, "trailing slash rejected");
+  assert.equal(resolveDemoPresenterSrc(src, "not-root-relative"), src, "must be root-relative");
+  assert.equal(resolveDemoPresenterSrc(src, "/vendor?x=1"), src, "query strings rejected");
+  assert.equal(resolveDemoPresenterSrc(src, "/vendor#frag"), src, "fragments rejected");
+  assert.equal(resolveDemoPresenterSrc(src, "x".repeat(201)), src, "assetBase is bounded");
+});
+
+test("validDemoAssetBase accepts only bounded, root-relative, traversal-free paths", () => {
+  assert.equal(validDemoAssetBase("/vendor/sassfully/v1"), true);
+  assert.equal(validDemoAssetBase("/v1"), true);
+  assert.equal(validDemoAssetBase("https://evil.test"), false);
+  assert.equal(validDemoAssetBase("//evil.test"), false);
+  assert.equal(validDemoAssetBase("/a/../b"), false);
+  assert.equal(validDemoAssetBase("/a/"), false);
+  assert.equal(validDemoAssetBase(""), false);
+  assert.equal(validDemoAssetBase(7), false);
 });
 
 test("the extension's validator and this one agree (extraction stays in sync)", async () => {

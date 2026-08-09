@@ -129,6 +129,31 @@ test("a static local presenter flows through the resident stage adapter and rece
   assert.equal(demo.media.stage[0].presenter, "nova");
 });
 
+test("assetBase rewrites a vendored presenter path without touching the script-declared src", async () => {
+  const played = [];
+  const layer = { stop() {}, destroy() {}, playScene: async (args) => played.push(args) };
+  const presenter = { id: "nova", src: "/packages/demo-stage/assets/nova-cutout.png", alt: "Nova" };
+  const controller = createDemoController({
+    document: makeDocument(), speak: async () => {}, mountStageLayer: async () => layer,
+    assetBase: "/vendor/sassfully/kitsoki-embed/v1",
+  });
+  await controller.run({ steps: [{ stage: { presenter, persistent: true, anchor: { mode: "dock", edge: "bottom-left", size: 0.3 } }, dwellMs: 0 }] });
+  assert.equal(played[0].presenter.src, "/vendor/sassfully/kitsoki-embed/v1/demo-stage/assets/nova-cutout.png");
+  assert.equal(presenter.src, "/packages/demo-stage/assets/nova-cutout.png", "the caller's script object is never mutated");
+});
+
+test("an invalid assetBase never escapes to a cross-origin or unbounded src", async () => {
+  const played = [];
+  const layer = { stop() {}, destroy() {}, playScene: async (args) => played.push(args) };
+  const presenter = { id: "nova", src: "/packages/demo-stage/assets/nova-cutout.png", alt: "Nova" };
+  const controller = createDemoController({
+    document: makeDocument(), speak: async () => {}, mountStageLayer: async () => layer,
+    assetBase: "https://evil.test",
+  });
+  await controller.run({ steps: [{ stage: { presenter, persistent: true, anchor: { mode: "dock", edge: "bottom-left", size: 0.3 } }, dwellMs: 0 }] });
+  assert.equal(played[0].presenter.src, "/packages/demo-stage/assets/nova-cutout.png", "an invalid assetBase falls back to the untouched, already-validated src");
+});
+
 test("audio unlock performs only user-gesture media priming", async () => {
   let played = 0;
   class Context { constructor() { this.state = "suspended"; } async resume() { this.state = "running"; } }

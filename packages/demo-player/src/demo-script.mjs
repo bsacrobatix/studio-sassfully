@@ -45,6 +45,15 @@ const plainObject = (value) => value != null && typeof value === "object" && !Ar
 // URL or data URI supplied by an MCP caller. This keeps a demo script from
 // becoming a cross-origin fetch surface while allowing hosts to ship named
 // cutouts alongside demo-stage. `id` is telemetry/display metadata only.
+//
+// This pattern is Sassfully's OWN dev-tree layout (package tree served from
+// the repo root). It is a security boundary, not a routing convenience —
+// never widen it to admit a remote/absolute/data URL or a `..` traversal.
+// A host that vendors this package tree elsewhere (e.g. flattening the
+// `packages/` segment away) does not get a wider script-level regex; it
+// supplies a validated `assetBase` at render time instead, resolved by
+// `resolveDemoPresenterSrc` below.
+const DEMO_PRESENTER_ROOT = "/packages";
 const DEMO_PRESENTER_SRC = /^\/packages\/demo-stage\/assets\/[a-z0-9][a-z0-9._/-]*\.(?:png|webp)$/i;
 export function validDemoStagePresenter(presenter) {
   if (!plainObject(presenter)) return false;
@@ -54,6 +63,42 @@ export function validDemoStagePresenter(presenter) {
     && DEMO_PRESENTER_SRC.test(presenter.src)
     && (presenter.id == null || boundedString(presenter.id, 80))
     && (presenter.alt == null || boundedString(presenter.alt, 160));
+}
+
+// assetBase lets a host that serves this package tree from a different root
+// (a vendored/flattened copy, for example) tell the player where presenter
+// images actually live, WITHOUT loosening what a demo script itself is
+// allowed to name (DEMO_PRESENTER_SRC above is unchanged). It must be a
+// bounded, root-relative, single-origin path: no scheme, no "//" authority,
+// no query/fragment, no ".." traversal. That keeps resolution a same-origin
+// path rewrite, never an escape to an arbitrary or cross-origin URL.
+const DEMO_ASSET_BASE_MAX = 200;
+const DEMO_ASSET_BASE = /^\/[a-z0-9](?:[a-z0-9._-]|\/[a-z0-9])*$/i;
+export function validDemoAssetBase(base) {
+  return typeof base === "string"
+    && boundedString(base, DEMO_ASSET_BASE_MAX)
+    && DEMO_ASSET_BASE.test(base)
+    && !base.includes("..")
+    && !base.endsWith("/");
+}
+
+// Resolve a script-declared presenter.src (already validated against
+// DEMO_PRESENTER_SRC) against an optional host-supplied assetBase.
+//
+//   resolveDemoPresenterSrc("/packages/demo-stage/assets/nova.png")
+//     -> "/packages/demo-stage/assets/nova.png"                (unchanged: no assetBase)
+//   resolveDemoPresenterSrc("/packages/demo-stage/assets/nova.png", "/vendor/sassfully/v1")
+//     -> "/vendor/sassfully/v1/demo-stage/assets/nova.png"
+//
+// With no assetBase (the default), this is the identity function — Sassfully's
+// own dev server and the extension see byte-identical src values to before
+// this option existed. An invalid assetBase is ignored (falls back to the
+// untouched src) rather than silently producing an unbounded/cross-origin URL.
+export function resolveDemoPresenterSrc(src, assetBase) {
+  if (assetBase == null) return src;
+  if (typeof src !== "string" || !src.startsWith(`${DEMO_PRESENTER_ROOT}/`)) return src;
+  if (!validDemoAssetBase(assetBase)) return src;
+  return assetBase + src.slice(DEMO_PRESENTER_ROOT.length);
 }
 
 // stage.anchor is either the string "target" (stand beside the step's
