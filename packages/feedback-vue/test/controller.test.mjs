@@ -18,6 +18,58 @@ test("controller keeps submit blocked for an unclassified context field", async 
   await assert.rejects(() => reporter.submit(), /privacy review must pass/);
 });
 
+// req: a host must be able to route a "bug" draft to its own authenticated
+// endpoint instead of any built-in sink — createRouter's sink contract is
+// {id, async submit(bundle)} (see sinks.mjs), and this exercises "bug"
+// end to end (choose -> draft -> review -> submit) against a sink that is
+// not one of feedback-core's built-ins, plus the privacy gate genuinely
+// blocking submit before the draft is fixed.
+test("controller carries a bug draft through a host-authored sink, blocked until the draft is privacy-clean", async () => {
+  const hostRpcCalls = [];
+  const hostSink = {
+    id: "kitsoki-rpc",
+    async submit(bundle) {
+      hostRpcCalls.push(bundle);
+      return { ref: `kitsoki-${bundle.idempotencyKey}` };
+    },
+  };
+  const router = createRouter({ sinks: [hostSink] });
+  const reporter = createFeedbackReporter({
+    anchorFor: () => ({ producer: "host", artifactId: "item" }),
+    manifest: createPrivacyManifest({ fields }),
+    router,
+    context: { build: "v1", viewer: "unclassified" },
+  });
+
+  reporter.choose("bug");
+  assert.equal(reporter.state.phase, "draft");
+  reporter.setText("The export button throws.");
+
+  // Privacy review fails closed on the unclassified context field: submit
+  // must stay unreachable even though the kind's own required field
+  // (userText) is present.
+  assert.equal(reporter.review().verdict.ok, false);
+  await assert.rejects(() => reporter.submit(), /privacy review must pass/);
+  assert.equal(hostRpcCalls.length, 0, "a blocked review must never reach the host sink");
+
+  // Fixing the draft (dropping the unclassified field) lets review pass and
+  // submit reach the host-authored sink — never a built-in one.
+  const clean = createFeedbackReporter({
+    anchorFor: () => ({ producer: "host", artifactId: "item" }),
+    manifest: createPrivacyManifest({ fields }),
+    router,
+    context: { build: "v1" },
+  });
+  clean.choose("bug");
+  clean.setText("The export button throws.");
+  assert.equal(clean.review().verdict.ok, true);
+  const receipt = await clean.submit();
+  assert.equal(clean.state.phase, "receipt");
+  assert.equal(receipt.sink, "kitsoki-rpc");
+  assert.equal(hostRpcCalls.length, 1);
+  assert.equal(hostRpcCalls[0].kind, "bug");
+});
+
 test("controller submits the bundle before approved sidecars and retries only failed evidence", async () => {
   const calls = []; let fail = true;
   const sink = { id: "evidence", async submit(bundle) { calls.push("bundle"); return { ref: bundle.idempotencyKey }; }, async uploadEvidence(_bundle, item) { calls.push(`sidecar:${item.digest}`); if (fail) { fail = false; throw new Error("temporary blob failure"); } return { digest: item.digest, status: "uploaded" }; } };
