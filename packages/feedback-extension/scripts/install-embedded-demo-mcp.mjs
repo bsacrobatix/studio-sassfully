@@ -21,6 +21,7 @@ const revision = execFileSync("git", ["-C", repoRoot, "rev-parse", "HEAD"], { en
 const files = [
   "story-bridge/stdio-server.mjs",
   "story-bridge/embedded-demo-drafts.mjs",
+  "story-bridge/embedded-qa-driver.mjs",
   "ext/story-bridge-policy.mjs",
 ];
 const digest = createHash("sha256");

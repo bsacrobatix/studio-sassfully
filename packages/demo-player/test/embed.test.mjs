@@ -284,7 +284,7 @@ test("a structured-anchor action acts on the resolved element (no CSS re-query)"
 
 test("installDemoEmbed exposes window.__sassfullyDemo and uninstall removes it", async () => {
   const { win, embed } = makeEmbed();
-  assert.deepEqual(Object.keys(win.__sassfullyDemo).sort(), ["evidence", "resume", "run", "status", "stop", "unlockAudio"]);
+  assert.deepEqual(Object.keys(win.__sassfullyDemo).sort(), ["evidence", "narrate", "resume", "run", "status", "stop", "unlockAudio"]);
   const demo = await win.__sassfullyDemo.run(SCRIPT);
   assert.equal(demo.completed, true);
   embed.uninstall();

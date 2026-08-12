@@ -21,8 +21,10 @@ extension pairing; extension mode retains its user-consented per-tab pairing.
 
 ## MCP tool: `embedded_demo`
 
-`embedded_demo` is intentionally a tour/control surface, not a generic
-browser-evaluation or navigation endpoint. Its actions are:
+`embedded_demo` has two separate lanes. Tours remain page-bound and never
+launch or navigate a browser. QA owns a fresh local Chromium process for an
+explicit loopback URL, in headed or headless mode, but never forwards a
+generic browser-evaluation endpoint. Its actions are:
 
 | Action | Result |
 | --- | --- |
@@ -35,12 +37,50 @@ browser-evaluation or navigation endpoint. Its actions are:
 | `stop` | Stops the resident run and clears its overlay/stage. |
 | `resume` | Re-runs the last resident script after an explicit audio unlock. |
 | `evidence_start`, `evidence_stop`, `evidence_export` | Controls the host's existing opt-in evidence capture; `start` requires `permission:true`. |
+| `qa_start` | Starts owned local Chromium at a loopback URL; `mode` is `headed` or `headless` (default headless). |
+| `qa_action` | Runs exactly one typed operation: `snapshot`, `click`, `fill`, `press`, or `screenshot`; optional `narration` is spoken without a tour overlay. |
+| `qa_stop` | Closes the owned Chromium and removes its disposable profile. |
 
 Drafts are process-local and in memory. A stale CAS revision fails rather
 than overwriting another author’s revision. Any update invalidates prior tab
 validation. A push result includes completed steps, anchor drift, and media
 outcomes; it is the execution acknowledgement, not a claim that physical
 speakers were audible.
+
+### QA lifecycle
+
+QA start is the only browser launch/navigation operation, and accepts only
+`127.0.0.1`, `localhost`, or `::1`. Internally it uses CDP, but callers get no
+CDP or JavaScript-evaluation surface: selectors and values feed fixed actions.
+`snapshot` returns post-JavaScript HTML and `screenshot` returns the actual
+Chrome PNG as base64. QA narration invokes only the resident narrator; it does
+not mount a demo overlay, dimmer, caption, stage, or presenter. A screenshot
+receipt therefore reports `presenter:"suppressed"`. Narration requires the
+launched page to bind the normal demo bridge and configure narration; audio is
+still subject to the browser's gesture/device limits.
+
+### Opt-in CDP inspection and QA evidence
+
+For an owned QA session only, `qa_cdp` sends a CDP command to the single page
+session created by `qa_start`; `qa_events` polls its bounded event transcript.
+It supports DOM/layout (`DOM.*`), runtime/console (`Runtime.*`, `Log.*`),
+network and screenshot inspection. This is not a user-browser connection: the
+browser is launched by this process, its initial URL is loopback-only, and
+`Target.*`, `Browser.*`, and page-navigation CDP commands are refused so it
+cannot attach/create/close another target or leave the local app.
+
+`qa_capture_start` enables Network, Runtime and Log collection;
+`qa_capture_export` returns at most 16 response bodies/65,536 body characters,
+100 console-or-exception entries and 500 events. Credential-shaped
+authorization/cookie/token/secret/password assignments in text bodies are
+redacted; base64-encoded bodies are omitted rather than decoded, and body
+retrieval is best-effort because Chrome may evict responses. The same export
+includes `har`, a bounded HAR 1.2-shaped `log` with request/response metadata,
+redacted textual content, and `_sassfully.omission`/`truncated` markers where
+content is omitted or capped; its zero timings are explicitly not a timing
+measurement. `qa_har_export` returns that HAR object directly for a caller to
+save as a `.har` artifact; the MCP itself never chooses or writes a filesystem
+path.
 
 ### Lifecycle example
 

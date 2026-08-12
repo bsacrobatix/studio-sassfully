@@ -7,6 +7,7 @@ import net from "node:net";
 import readline from "node:readline";
 import { DEFAULT_BRIDGE_PORT, formatPairingToken, PAIRING_CODE_PATTERN, validateStoryCommand } from "../ext/story-bridge-policy.mjs";
 import { createEmbeddedDemoDrafts } from "./embedded-demo-drafts.mjs";
+import { createEmbeddedQADriver, validateQARequest } from "./embedded-qa-driver.mjs";
 
 const args = process.argv.slice(2);
 const value = (name) => { const i = args.indexOf(name); return i < 0 ? null : args[i + 1]; };
@@ -23,6 +24,14 @@ let bridge = null;
 const embeddedSessions = new Map();
 const embeddedDrafts = createEmbeddedDemoDrafts({ validateScript: (script) => validateStoryCommand({ action: "demo_run", script }) });
 const pending = new Map();
+const qaDriver = createEmbeddedQADriver({ narrate: async (text) => {
+  const session = [...embeddedSessions.values()].at(-1);
+  if (!session) throw new Error("QA narration needs a bound embedded demo page with narration enabled");
+  return callEmbeddedPage(session, "embedded-demo:qa-narrate", { text });
+}, beforeScreenshot: async () => {
+  const session = [...embeddedSessions.values()].at(-1);
+  if (session) await callEmbeddedPage(session, "embedded-demo:stop", {});
+} });
 function reply(id, result) { process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id, result })}\n`); }
 function failure(id, message, code = -32602) { process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id, error: { code, message } })}\n`); }
 function websocketAccept(key) { return crypto.createHash("sha1").update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest("base64"); }
@@ -103,7 +112,7 @@ server.listen(port, "127.0.0.1", () => {
 
 const tools = [
   { name: "linkedin_story", description: "Autonomous control of the one loopback-paired Chrome tab. Pairing is the authorization; no per-action modal is shown.", inputSchema: { type: "object", properties: { action: { enum: ["navigate", "snapshot", "click", "fill", "press", "extract", "run_script", "demo_run", "demo_stop"] }, url: { type: "string" }, selector: { type: "string" }, target: { type: "string", description: "Accessible label for click when no selector is supplied" }, text: { type: "string" }, key: { type: "string" }, captureEvidence: { type: "boolean" }, steps: { type: "array" }, script: { type: "object" } }, required: ["action"], additionalProperties: false } },
-  { name: "embedded_demo", description: "Local demoMode-only draft, control, and explicitly consented evidence surface for a bound embedded Sassfully page. No navigation or arbitrary evaluation.", inputSchema: { type: "object", properties: { action: { enum: ["sessions", "propose", "validate", "update", "push", "run", "stop", "resume", "evidence_start", "evidence_stop", "evidence_export"] }, sessionId: { type: "string" }, draftId: { type: "string" }, revision: { type: "number" }, permission: { type: "boolean", description: "required true to start in-page evidence capture" }, script: { type: "object", description: "validated sassfully/demo-script/v1" } }, required: ["action"], additionalProperties: false } },
+  { name: "embedded_demo", description: "Local demoMode tour plus owned headed/headless Chromium QA. QA has typed controls, explicit raw CDP, and bounded console/network-body HAR evidence; all are restricted to the one loopback page launched by this MCP and cannot attach targets or navigate. Screenshots clear the presenter; narration is overlay-free.", inputSchema: { type: "object", properties: { action: { enum: ["sessions", "propose", "validate", "update", "push", "run", "stop", "resume", "evidence_start", "evidence_stop", "evidence_export", "qa_start", "qa_action", "qa_cdp", "qa_events", "qa_capture_start", "qa_capture_export", "qa_har_export", "qa_stop"] }, sessionId: { type: "string" }, draftId: { type: "string" }, revision: { type: "number" }, permission: { type: "boolean" }, script: { type: "object" }, url: { type: "string", description: "qa_start only: absolute loopback app URL" }, mode: { enum: ["headed", "headless"] }, qaSessionId: { type: "string" }, operation: { enum: ["snapshot", "click", "fill", "press", "screenshot"] }, selector: { type: "string" }, text: { type: "string" }, key: { type: "string" }, narration: { type: "string" }, method: { type: "string", description: "qa_cdp only: CDP command on the owned attached page session" }, params: { type: "object" }, since: { type: "integer", minimum: 0 } }, required: ["action"], additionalProperties: false } },
 ];
 function callBridge(command) {
   const check = validateStoryCommand(command); if (!check.ok) return Promise.reject(new Error(check.error));
@@ -112,6 +121,17 @@ function callBridge(command) {
   return new Promise((resolve, reject) => { const timer = setTimeout(() => { pending.delete(id); reject(new Error("Timed out waiting for the paired Chrome tab")); }, 120000); pending.set(id, { resolve: (result) => { clearTimeout(timer); result.ok ? resolve(result.result) : reject(new Error(result.error ?? "Chrome refused the request")); } }); });
 }
 function callEmbedded(args) {
+  if (["qa_start", "qa_action", "qa_cdp", "qa_events", "qa_capture_start", "qa_capture_export", "qa_har_export", "qa_stop"].includes(args.action)) {
+    const error = validateQARequest(args); if (error) return Promise.reject(new Error(error));
+    if (args.action === "qa_start") return qaDriver.start(args);
+    if (args.action === "qa_action") return qaDriver.action(args);
+    if (args.action === "qa_cdp") return qaDriver.cdp(args);
+    if (args.action === "qa_events") return Promise.resolve(qaDriver.events(args.qaSessionId, args));
+    if (args.action === "qa_capture_start") return qaDriver.captureStart(args.qaSessionId);
+    if (args.action === "qa_capture_export") return qaDriver.captureExport(args.qaSessionId);
+    if (args.action === "qa_har_export") return qaDriver.harExport(args.qaSessionId);
+    return qaDriver.stop(args.qaSessionId);
+  }
   if (args.action === "sessions") return Promise.resolve({ sessions: [...embeddedSessions.entries()].map(([sessionId, s]) => ({ sessionId, url: s.url, connectedAt: s.connectedAt })) });
   if (args.action === "propose") return Promise.resolve(embeddedDrafts.propose(args.script));
   if (args.action === "update") return Promise.resolve(embeddedDrafts.update(args));

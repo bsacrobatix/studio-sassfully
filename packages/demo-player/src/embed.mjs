@@ -143,6 +143,10 @@ export function bindEmbeddedDemoSession({ window: win, api, bridge, onEvent } = 
       try { return send({ type: "result", id: message.id, ok: true, result: api.evidence[action]({ permission: message.permission === true }) }); }
       catch (error) { return send({ type: "result", id: message.id, ok: false, error: error.message }); }
     }
+    if (message.type === "embedded-demo:qa-narrate") {
+      try { return send({ type: "result", id: message.id, ok: true, result: { narration: await api.narrate(message.text) } }); }
+      catch (error) { return send({ type: "result", id: message.id, ok: false, error: error.message }); }
+    }
     });
   };
   connect();
@@ -283,7 +287,11 @@ export function createDemoController({ document, executeAction, speak, narration
     if (!lastScript) throw new Error("demo controller: no prior script to resume");
     return run(lastScript);
   };
-  return { run, stop, status, unlockAudio, resume, evidence, destroy() { stop(); evidenceCapture?.dispose(); stageLayer?.destroy(); stageLayer = null; } };
+  const narrate = async (text) => {
+    if (typeof text !== "string" || !text.length || text.length > 2000) throw new Error("QA narration must be a non-empty string (max 2000 chars)");
+    return doSpeak(text, { fallbackMs: 0 });
+  };
+  return { run, stop, status, unlockAudio, resume, evidence, narrate, destroy() { stop(); evidenceCapture?.dispose(); stageLayer?.destroy(); stageLayer = null; } };
 }
 
 // installDemoEmbed is the opt-in surface a host SDK calls when demo mode is
@@ -308,6 +316,7 @@ export function installDemoEmbed({ window: win, document: doc, allowedOrigins = 
     unlockAudio: () => controller.unlockAudio(),
     resume: () => controller.resume(),
     evidence: controller.evidence,
+    narrate: (text) => controller.narrate(text),
   };
   win.__sassfullyDemo = api;
   const session = bindEmbeddedDemoSession({ window: win, api, bridge: embeddedBridge, onEvent: onStepEvent });

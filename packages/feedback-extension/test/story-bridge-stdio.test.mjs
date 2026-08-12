@@ -5,6 +5,7 @@ import net from "node:net";
 import { once } from "node:events";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { validateQARequest } from "../story-bridge/embedded-qa-driver.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const serverPath = `${root}story-bridge/stdio-server.mjs`;
@@ -66,6 +67,15 @@ function nextMcp(state, started = state.stdout.length) {
   return new Promise((resolve, reject) => { const tick = () => { const line = state.stdout.slice(started).trim().split("\n").at(-1); if (line) return resolve(JSON.parse(line)); setTimeout(tick, 10); }; setTimeout(() => reject(new Error("MCP reply timed out")), 3000); tick(); });
 }
 const embeddedRequest = (id, arguments_) => `${JSON.stringify({ jsonrpc: "2.0", id, method: "tools/call", params: { name: "embedded_demo", arguments: arguments_ } })}\n`;
+
+test("embedded QA contract is loopback-only and raw CDP stays scoped to a named QA session", () => {
+  assert.equal(validateQARequest({ action: "qa_start", url: "http://127.0.0.1:8932/", mode: "headless" }), null);
+  assert.equal(validateQARequest({ action: "qa_start", url: "https://example.com/", mode: "headless" }), "qa_start.url must be an absolute loopback http(s) URL");
+  assert.equal(validateQARequest({ action: "qa_action", qaSessionId: "qa-1", operation: "screenshot" }), null);
+  assert.match(validateQARequest({ action: "qa_action", qaSessionId: "qa-1", operation: "evaluate" }), /operation must be/);
+  assert.equal(validateQARequest({ action: "qa_cdp", qaSessionId: "qa-1", method: "Runtime.evaluate", params: { expression: "document.title" } }), null);
+  assert.match(validateQARequest({ action: "qa_cdp", method: "Runtime.evaluate" }), /qaSessionId/);
+});
 
 test("stdio bridge reports an occupied loopback port instead of failing its MCP handshake silently", async () => {
   const listener = net.createServer();
