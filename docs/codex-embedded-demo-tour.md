@@ -42,6 +42,13 @@ The server listens only on `127.0.0.1:8931`; embedded mode has no static
 credential. A second live Codex session cannot share the same port, so finish
 or close the first session before starting another one.
 
+Start the fresh Codex session with `/Users/brad/code` as its project root and
+trust that project, so its checked-in `.codex/config.toml` is loaded. Confirm
+the server in `/mcp` (use its verbose status if it does not connect) or
+`/debug-config`; `sassfully-embedded-demo` must be enabled and expose
+`embedded_demo`. Do not override `CODEX_HOME` or duplicate the entry in a
+personal configuration.
+
 ## Bring up the page
 
 Run a consumer app through a current Kitsoki app-dev surface. Its application
@@ -88,7 +95,10 @@ Expected tool discovery is one MCP tool: `embedded_demo`. Its actions are
 - `blocked_user_gesture`: the human must click the visible Enable audio
   control; use `resume` afterward. Never bypass this with speech synthesis.
 - `EADDRINUSE`: another bridge already owns 8931. Stop that MCP client rather
-  than changing an application's bridge to a remote endpoint.
+  than changing an application's bridge to a remote endpoint. The server is
+  intentionally a single local port owner; a separate validation client may
+  use a temporary free loopback port only when the page's equally temporary
+  declarative `bridge_port` matches it.
 - A push receipt is an execution acknowledgement, not proof speakers are
   audible. Inspect the visible persistent presenter, outline spotlight, and
   changed form/button state in the Browser.
