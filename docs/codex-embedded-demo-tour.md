@@ -69,17 +69,23 @@ ready** and the app page must remain open; do not use a reload as a tour step.
 
 ## Fresh Codex prompt
 
-> Use the `sassfully-embedded-demo` MCP tool `embedded_demo` to give me a
-> live tour of the already-open local application. First call `sessions` and
-> stop if it is empty. Propose a `sassfully/demo-script/v1` with persistent
-> Nova/Pip presentation, `dim:false` on every spotlight, and one real
-> low-risk click or fill. Validate the exact draft against the returned
-> session, use CAS `update` only if revision changes are needed, validate
-> again, then call `evidence_start` with `permission:true`, `push`,
-> `evidence_stop`, and `evidence_export`. Report the session id, draft id,
+Copy this as the initial prompt after opening `/Users/brad/code` as a trusted
+project:
+
+> First open `/mcp` and verify that `sassfully-embedded-demo` is enabled and
+> exposes `embedded_demo`; if not, stop and report its verbose connection
+> status. Then use only `embedded_demo` to call `sessions` for the already-open
+> local application and stop if it is empty. Give me an interactive live tour:
+> propose a `sassfully/demo-script/v1` with persistent Nova/Pip presentation,
+> `dim:false` on every spotlight, and one real low-risk click or fill. Validate
+> the exact draft against the returned session, use CAS `update` only if the
+> revision changes, validate again, then call `evidence_start` with
+> `permission:true`, `push`, `evidence_stop`, and `evidence_export`. Keep the
+> presenter/spotlight visible long enough for me to inspect it and tell me when
+> to take the interactive next action. Report the session id, draft id,
 > revision, action receipt, stage receipt, drift, evidence export, and whether
-> the page reloaded. Never use page eval, navigation, generic RPC, or a
-> static credential.
+> the page reloaded. Never use page eval, navigation, generic RPC, or a static
+> credential.
 
 Expected tool discovery is one MCP tool: `embedded_demo`. Its actions are
 `sessions`, `propose`, `validate`, `update`, `push`, `run`, `stop`, `resume`,
