@@ -66,6 +66,30 @@ The generic toolbar mounts the vendored resident player and creates only
 an application cannot set a host, path, code, bearer, script or remote URL.
 Open the app URL in the in-app Browser. The toolbar should show **Sassfully
 ready** and the app page must remain open; do not use a reload as a tour step.
+Only after that browser tab is visibly ready should `embedded_demo.sessions` be
+called: the local MCP has no browser-launch or navigation capability.
+
+## Current local POC receipt (unlanded)
+
+The validated consumer is the local-only benchmark POC at
+`/Users/brad/code/kitsoki-benchmark-admin/.worktrees/sassfully-embedded-demo-poc`
+commit `7aca001`; its generic Kitsoki bridge support is in
+`/Users/brad/code/Kitsoki/.worktrees/sassfully-tour-proof` commit `e71944f8e`.
+Those commits are not landed, so a fresh session must use the private binary
+built from that Kitsoki worktree until it is promoted:
+
+```sh
+KITSOKI_REPO=/Users/brad/code/Kitsoki/.worktrees/sassfully-tour-proof \
+KITSOKI_STATE_DIR=/Users/brad/code/kitsoki-benchmark-admin/.worktrees/sassfully-embedded-demo-poc/.runtime-state \
+/tmp/kitsoki-sassfully-tour/kitsoki app dev \
+  stories/benchmark-admin/app.yaml --name sassfully-embedded-demo-poc \
+  --port 8932 --backend-url http://127.0.0.1:5598
+```
+
+Then open `http://127.0.0.1:8932/` in the in-app Browser. The `--backend-url`
+is the origin, not `/rpc`; Vite already maps `/rpc` to the backend. Import the
+POC taxonomy first if this disposable state directory is empty, using the path
+the runtime names in its pin error.
 
 ## Fresh Codex prompt
 
