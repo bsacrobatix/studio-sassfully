@@ -3,6 +3,7 @@
 // No browser-debugging port, network client, selector API, or result scraping
 // is present here: Chrome remains the user-visible enforcement point.
 import crypto from "node:crypto";
+import fs from "node:fs";
 import net from "node:net";
 import readline from "node:readline";
 import { DEFAULT_BRIDGE_PORT, formatPairingToken, PAIRING_CODE_PATTERN, validateStoryCommand } from "../ext/story-bridge-policy.mjs";
@@ -14,6 +15,7 @@ const value = (name) => { const i = args.indexOf(name); return i < 0 ? null : ar
 const port = Number(value("--port") ?? DEFAULT_BRIDGE_PORT);
 const code = value("--pairing-code") ?? crypto.randomBytes(24).toString("base64url");
 const allowEmbeddedDemo = args.includes("--allow-embedded-demo");
+const daemonSocket = value("--daemon-socket");
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("--port must be 1024-65535");
 if (!PAIRING_CODE_PATTERN.test(code)) throw new Error("--pairing-code must be 24-128 base64url characters");
 
@@ -32,8 +34,8 @@ const qaDriver = createEmbeddedQADriver({ narrate: async (text) => {
   const session = [...embeddedSessions.values()].at(-1);
   if (session) await callEmbeddedPage(session, "embedded-demo:stop", {});
 } });
-function reply(id, result) { process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id, result })}\n`); }
-function failure(id, message, code = -32602) { process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id, error: { code, message } })}\n`); }
+function reply(id, result) { return { jsonrpc: "2.0", id, result }; }
+function failure(id, message, code = -32602) { return { jsonrpc: "2.0", id, error: { code, message } }; }
 function websocketAccept(key) { return crypto.createHash("sha1").update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest("base64"); }
 function wsSend(socket, body) {
   const bytes = Buffer.from(JSON.stringify(body));
@@ -161,10 +163,9 @@ function callEmbeddedPage(session, type, payload) {
     pending.set(id, { resolve: (result) => { clearTimeout(timer); result.ok ? resolve(result.result) : reject(new Error(result.error ?? "embedded page refused the script")); } });
   });
 }
-readline.createInterface({ input: process.stdin, crlfDelay: Infinity }).on("line", async (line) => {
-  let request; try { request = JSON.parse(line); } catch { return; }
+async function handleMcp(request) {
   if (request.method === "initialize") return reply(request.id, { protocolVersion: "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "sassfully-linkedin-story", version: "0.1.0" } });
-  if (request.method === "notifications/initialized") return;
+  if (request.method === "notifications/initialized") return null;
   if (request.method === "tools/list") return reply(request.id, { tools });
   if (request.method === "tools/call") {
     const name = request.params?.name;
@@ -174,5 +175,34 @@ readline.createInterface({ input: process.stdin, crlfDelay: Infinity }).on("line
       return reply(request.id, { content: [{ type: "text", text: JSON.stringify(result) }] });
     } catch (error) { return reply(request.id, { isError: true, content: [{ type: "text", text: error.message }] }); }
   }
-  if (request.id != null) failure(request.id, "Method not found", -32601);
-});
+  if (request.id != null) return failure(request.id, "Method not found", -32601);
+  return null;
+}
+
+function attachMcpLines(input, send) {
+  readline.createInterface({ input, crlfDelay: Infinity }).on("line", async (line) => {
+    let request; try { request = JSON.parse(line); } catch { return; }
+    const response = await handleMcp(request);
+    if (response) send(`${JSON.stringify(response)}\n`);
+  });
+}
+
+if (daemonSocket) {
+  // The daemon is intentionally local-only and owns the bridge port once.
+  // MCP clients connect through their own stdio relay, never to this socket.
+  if (process.platform !== "win32" && fs.existsSync(daemonSocket)) {
+    process.stderr.write(`Sassfully Story bridge daemon socket already exists: ${daemonSocket}\n`);
+    process.exit(1);
+  }
+  const mcpServer = net.createServer((socket) => attachMcpLines(socket, (line) => socket.write(line)));
+  mcpServer.on("error", (error) => {
+    process.stderr.write(`Sassfully Story bridge daemon could not listen on ${daemonSocket}: ${error.code ?? error.message}\n`);
+    process.exit(1);
+  });
+  mcpServer.listen(daemonSocket, () => {
+    if (process.platform !== "win32") fs.chmodSync(daemonSocket, 0o600);
+    process.stderr.write(`Sassfully Story bridge daemon listening on ${daemonSocket}\n`);
+  });
+} else {
+  attachMcpLines(process.stdin, (line) => process.stdout.write(line));
+}

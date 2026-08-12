@@ -19,6 +19,30 @@ Both endpoints are loopback-only. The page binds only when `demoMode:true`
 and `demoBridge` was explicitly supplied by its host. Embedded mode uses no
 extension pairing; extension mode retains its user-consented per-tab pairing.
 
+## Concurrent MCP clients
+
+Do not configure every local MCP client to launch `stdio-server.mjs` directly:
+each process owns the one page bridge port, so only the first client can start.
+Use the relay instead. Each MCP client gets its own stdio relay, while the
+relay starts or connects to one local daemon over a mode-`0600` Unix socket.
+The daemon is the only process that listens on the page bridge port and keeps
+the shared draft/session state.
+
+```toml
+[mcp_servers.sassfully-embedded-demo]
+command = "node"
+args = [
+  "/absolute/path/to/packages/feedback-extension/story-bridge/mcp-relay.mjs",
+  "--socket", "/tmp/sassfully-embedded-demo.sock",
+  "--port", "8931",
+  "--allow-embedded-demo",
+]
+```
+
+The Unix socket is an internal relay transport, not a browser-control API.
+Only the typed MCP methods are forwarded. Do not point an MCP client at port
+8931: it is a WebSocket endpoint exclusively for an opt-in resident page.
+
 ## MCP tool: `embedded_demo`
 
 `embedded_demo` has two separate lanes. Tours remain page-bound and never

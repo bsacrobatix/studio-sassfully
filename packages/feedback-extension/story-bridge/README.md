@@ -60,3 +60,8 @@ your generated code substituted), then start a new Codex session:
 command = "node"
 args = ["/absolute/path/to/packages/feedback-extension/story-bridge/stdio-server.mjs", "--pairing-code", "YOUR_GENERATED_CODE"]
 ```
+
+For concurrent MCP clients controlling embedded demos, use
+[`mcp-relay.mjs`](mcp-relay.mjs) instead; it multiplexes per-client stdio onto
+one local bridge daemon. See
+[`docs/embedded-demo-control.md`](../../../docs/embedded-demo-control.md).
