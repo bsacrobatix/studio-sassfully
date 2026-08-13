@@ -1,6 +1,6 @@
 {
   "schema": "sassfully/kitsoki-embed/v1",
-  "source_revision": "fabe49aaf66fbbcf2ef9124e39578114f2443a6f",
+  "source_revision": "f19b3dd3a83b6feb882d0a6199173d865b04555d",
   "files": [
     "demo-player/src/actions.mjs",
     "demo-player/src/anchor-resolve.mjs",

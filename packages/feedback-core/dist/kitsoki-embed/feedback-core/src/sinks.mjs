@@ -1,4 +1,20 @@
 // Reviewed bundle routing plus bundle-first, opt-in sidecar transport.
+//
+// Sink contract (what a host implements to route reviewed feedback
+// somewhere of its own choosing — an authenticated RPC, a queue, anything):
+//
+//   {
+//     id: string,                                   // unique among the sinks passed to createRouter
+//     async submit(bundle): Promise<{ ref: string }>, // required; bundle.reviewed is always true here
+//     async uploadEvidence?(bundle, item): Promise<{ digest, status }>, // optional; omit to skip sidecar upload
+//   }
+//
+// `localJsonlSink`/`bundleSink`/`dryRunSink`/`httpSink` below are reference
+// implementations of this same contract, not the only sinks `createRouter`
+// accepts — a host sink that satisfies the shape above is first-class and
+// needs none of them. `createRouter({ sinks, route })` takes any mix of
+// built-in and host-authored sinks; `route(bundle.kind)` (or the first sink
+// when `route` is omitted) picks which one a given reviewed bundle goes to.
 function memorySink(id) {
   const bundles = []; const blobs = new Map();
   return {

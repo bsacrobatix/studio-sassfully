@@ -44,7 +44,9 @@ export function createEdgeNarrator({ window: win, url, fallback = defaultSpeak, 
         if (play) play.then(() => onStatus?.({ kind: "narration", status: "started", mode: "edge-audio", text, audible: "unobservable" })).catch(reject);
       });
       URL.revokeObjectURL(audio.src);
-      return { status: "ended", mode: "edge-audio" };
+      const result = { kind: "narration", status: "ended", mode: "edge-audio", text };
+      onStatus?.(result);
+      return result;
     } catch (error) {
       const blocked = error?.name === "NotAllowedError" || /gesture|notallowed|play\(\)|suspended/i.test(error?.message ?? "");
       const result = { kind: "narration", status: blocked ? "blocked_user_gesture" : "failed", mode: "edge-audio", error: error?.message ?? "edge narration failed", text, ...(blocked ? { needs_audio_unlock: true } : {}) };
@@ -143,6 +145,13 @@ export function bindEmbeddedDemoSession({ window: win, api, bridge, onEvent } = 
       try { return send({ type: "result", id: message.id, ok: true, result: api.evidence[action]({ permission: message.permission === true }) }); }
       catch (error) { return send({ type: "result", id: message.id, ok: false, error: error.message }); }
     }
+    if (message.type === "embedded-demo:qa-narrate") {
+      try { return send({ type: "result", id: message.id, ok: true, result: { narration: await api.narrate(message.text) } }); }
+      catch (error) { return send({ type: "result", id: message.id, ok: false, error: error.message }); }
+    }
+    if (message.type === "embedded-demo:qa-status") {
+      return send({ type: "result", id: message.id, ok: true, result: { sessionId, status: api.status() } });
+    }
     });
   };
   connect();
@@ -160,7 +169,7 @@ export function bindEmbeddedDemoSession({ window: win, api, bridge, onEvent } = 
 // run() cancels any prior run; stop() also clears the overlay and narration.
 export function createDemoController({ document, executeAction, speak, narrationUrl, mountStageLayer, assetBase, onStepEvent } = {}) {
   if (!document) throw new Error("demo controller: a DOM document is required");
-  const media = { narration: [], stage: [], audioUnlock: null };
+  const media = { narration: [], stage: [], presentation: [], audioUnlock: null };
   let evidenceCapture = null; let evidenceActive = false; let evidenceStopped = null;
   const demoStamps = [];
   const safeStamp = (event) => ({
@@ -197,8 +206,8 @@ export function createDemoController({ document, executeAction, speak, narration
       // Targets are CSS strings or structured anchors; waitForAnchor handles
       // both (ranked role -> testid -> text -> css, ambiguity hard-fails).
       waitForTarget: (target) => waitForAnchor(document, target),
-      spotlight: (element, options) => { emit({ type: "spotlight", ...options }); showSpotlight(document, element, options); },
-      caption: (text) => { emit({ type: "caption", text }); showCaption(document, text); },
+      spotlight: (element, options) => { const receipt = { kind: "spotlight", status: "shown", dim: options?.dim !== false }; media.presentation.push(receipt); emit({ type: "spotlight", ...receipt }); showSpotlight(document, element, options); },
+      caption: (text) => { const receipt = { kind: "caption", status: "shown", text }; media.presentation.push(receipt); emit({ type: "caption", ...receipt }); showCaption(document, text); },
       pulse: (element) => clickPulse(document, element),
       narrate: async (text, { fallbackMs, voice }) => { emit({ type: "narrate", text }); const result = await doSpeak(text, { fallbackMs, voice }); return result; },
       stage: async (stage, target) => {
@@ -243,9 +252,9 @@ export function createDemoController({ document, executeAction, speak, narration
       stepStamp: (stamp) => emit({ type: "step", ...stamp }),
     };
     try {
-      media.narration = []; media.stage = [];
+      media.narration = []; media.stage = []; media.presentation = [];
       const raw = await runDemoScript({ script, deps, state });
-      const demo = { ...raw, media: { narration: media.narration, stage: media.stage, audioUnlock: media.audioUnlock } };
+      const demo = { ...raw, media: { narration: media.narration, stage: media.stage, presentation: media.presentation, audioUnlock: media.audioUnlock } };
       lastResult = demo;
       emit({ type: "done", demo });
       return demo;
@@ -258,7 +267,7 @@ export function createDemoController({ document, executeAction, speak, narration
     }
   }
 
-  const status = () => ({ running: active != null, lastResult, media: { narration: media.narration, stage: media.stage, audioUnlock: media.audioUnlock } });
+  const status = () => ({ running: active != null, lastResult, media: { narration: media.narration, stage: media.stage, presentation: media.presentation, audioUnlock: media.audioUnlock } });
   const unlockAudio = async () => {
     media.audioUnlock = await unlockDemoAudio(document.defaultView);
     emit({ type: "audio-unlock", ...media.audioUnlock });
@@ -283,7 +292,11 @@ export function createDemoController({ document, executeAction, speak, narration
     if (!lastScript) throw new Error("demo controller: no prior script to resume");
     return run(lastScript);
   };
-  return { run, stop, status, unlockAudio, resume, evidence, destroy() { stop(); evidenceCapture?.dispose(); stageLayer?.destroy(); stageLayer = null; } };
+  const narrate = async (text) => {
+    if (typeof text !== "string" || !text.length || text.length > 2000) throw new Error("QA narration must be a non-empty string (max 2000 chars)");
+    return doSpeak(text, { fallbackMs: 0 });
+  };
+  return { run, stop, status, unlockAudio, resume, evidence, narrate, destroy() { stop(); evidenceCapture?.dispose(); stageLayer?.destroy(); stageLayer = null; } };
 }
 
 // installDemoEmbed is the opt-in surface a host SDK calls when demo mode is
@@ -308,6 +321,7 @@ export function installDemoEmbed({ window: win, document: doc, allowedOrigins = 
     unlockAudio: () => controller.unlockAudio(),
     resume: () => controller.resume(),
     evidence: controller.evidence,
+    narrate: (text) => controller.narrate(text),
   };
   win.__sassfullyDemo = api;
   const session = bindEmbeddedDemoSession({ window: win, api, bridge: embeddedBridge, onEvent: onStepEvent });
