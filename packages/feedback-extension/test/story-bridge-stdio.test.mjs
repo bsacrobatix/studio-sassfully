@@ -205,3 +205,22 @@ test("an HMR reinstall replaces the stale embedded session for one page without 
     second.socket.destroy();
   } finally { bridge.child.kill(); await once(bridge.child, "exit"); }
 });
+
+test("QA page identity retains its MCP marker but ignores application-owned query state", async () => {
+  const port = await freePort(); const bridge = startBridge(port, ["--allow-embedded-demo"]);
+  try {
+    await bridge.untilStderr(/listening on ws:/);
+    const first = await dialBridge(port, null, "/embedded-demo"); assert.equal(first.status, 101);
+    wsClientSend(first.socket, { type: "embedded-demo:hello", sessionId: "embedded-qa-old", url: "http://127.0.0.1:8932/?demo=1&__sassfully_qa_audio_test=1&study=first" });
+    await nextWsMessage(first.socket);
+    const second = await dialBridge(port, null, "/embedded-demo"); assert.equal(second.status, 101);
+    wsClientSend(second.socket, { type: "embedded-demo:hello", sessionId: "embedded-qa-current", url: "http://127.0.0.1:8932/?demo=1&study=second&__sassfully_qa_audio_test=1" });
+    await nextWsMessage(second.socket);
+    let start = bridge.stdout.length;
+    bridge.child.stdin.write(embeddedRequest(1, { action: "sessions" }));
+    const sessions = JSON.parse((await nextMcp(bridge, start)).result.content[0].text).sessions;
+    assert.deepEqual(sessions.map((session) => session.sessionId), ["embedded-qa-current"]);
+    assert.equal(sessions[0].url, "http://127.0.0.1:8932/?__sassfully_qa_audio_test=1");
+    first.socket.destroy(); second.socket.destroy();
+  } finally { bridge.child.kill(); await once(bridge.child, "exit"); }
+});

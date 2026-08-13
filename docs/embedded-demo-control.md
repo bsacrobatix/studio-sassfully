@@ -161,7 +161,10 @@ one authoritative embedded session per canonical loopback page URL; a new
 hello for that page replaces the old session, and a later close from the old
 socket cannot remove the replacement. QA narration and screenshot cleanup
 select that page identity from the owned QA session URL, never from connection
-arrival order.
+arrival order. For the MCP-owned QA browser only, canonical identity is its
+loopback origin and path plus the private `__sassfully_qa_audio_test=1`
+marker; application-owned query state such as `study=<id>` is ignored, while
+normal page sessions retain their full query identity.
 
 ## Audio, stage, and capability boundaries
 

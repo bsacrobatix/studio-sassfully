@@ -48,6 +48,13 @@ function embeddedPageIdentity(value) {
     const url = new URL(value);
     if (!["http:", "https:"].includes(url.protocol) || !["127.0.0.1", "localhost", "::1"].includes(url.hostname)) return null;
     url.hash = "";
+    // Only an MCP-owned QA browser receives this marker. Its application may
+    // legitimately rewrite query state (for example `study=<id>`), which
+    // cannot be allowed to detach the bound page. Preserve the marker as the
+    // admission authority, but discard every application-owned query key.
+    if (url.searchParams.get("__sassfully_qa_audio_test") === "1") {
+      url.search = "__sassfully_qa_audio_test=1";
+    }
     return url.href;
   } catch { return null; }
 }
