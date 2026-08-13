@@ -27,6 +27,8 @@ const embeddedSessions = new Map();
 const embeddedSessionByPage = new Map();
 const embeddedDrafts = createEmbeddedDemoDrafts({ validateScript: (script) => validateStoryCommand({ action: "demo_run", script }) });
 const pending = new Map();
+const QA_AUDIO_UNLOCK_TIMEOUT_MS = 10_000;
+const QA_REPLAY_RUN_TIMEOUT_MS = 45_000;
 const qaDriver = createEmbeddedQADriver({ narrate: async (text, qaSession) => {
   const session = embeddedSessionForQA(qaSession);
   if (!session) throw new Error("QA narration needs a bound embedded demo page with narration enabled");
@@ -94,7 +96,7 @@ function onBridgeMessage(state, message) {
       const priorSessionId = embeddedSessionByPage.get(pageIdentity);
       if (priorSessionId && priorSessionId !== message.sessionId) removeEmbeddedSession(priorSessionId);
       removeEmbeddedSession(message.sessionId);
-      embeddedSessions.set(message.sessionId, { socket: state.socket, url: pageIdentity, pageIdentity, connectedAt: Date.now() });
+      embeddedSessions.set(message.sessionId, { id: message.sessionId, socket: state.socket, url: pageIdentity, pageIdentity, connectedAt: Date.now() });
       embeddedSessionByPage.set(pageIdentity, message.sessionId);
       return wsSend(state.socket, { type: "embedded-demo:ready", sessionId: message.sessionId });
     }
@@ -197,12 +199,24 @@ async function qaTestNarratedReplay(args) {
   if (!session) throw new Error("qa_test_narrated_replay requires a bound embedded demo session");
   const qa = qaDriver.requireTestAudioMode(args.qaSessionId);
   if (session.pageIdentity !== embeddedPageIdentity(qa.url)) throw new Error("qa_test_narrated_replay embedded session is not bound to this QA page");
-  const unlockResult = await callEmbeddedPage(session, "embedded-demo:qa-audio-unlock", { qaSessionId: args.qaSessionId, embeddedSessionId: args.sessionId });
+  const diagnostics = { format: "sassfully/qa-narrated-replay-diagnostics/v1", qaSessionId: args.qaSessionId, sessionId: args.sessionId, page: session.url, phases: [] };
+  const phaseCall = async (phase, type, payload, timeoutMs) => {
+    const startedAt = new Date().toISOString(); const started = Date.now();
+    try {
+      const result = await callEmbeddedPage(session, type, payload, { phase, timeoutMs });
+      diagnostics.phases.push({ phase, status: "completed", startedAt, durationMs: Date.now() - started });
+      return result;
+    } catch (error) {
+      diagnostics.phases.push({ phase, status: "failed", startedAt, durationMs: Date.now() - started, error: error.message });
+      throw new Error(`qa_test_narrated_replay ${phase} failed; diagnostics=${JSON.stringify(diagnostics)}`);
+    }
+  };
+  const unlockResult = await phaseCall("audio_unlock", "embedded-demo:qa-audio-unlock", { qaSessionId: args.qaSessionId, embeddedSessionId: args.sessionId }, QA_AUDIO_UNLOCK_TIMEOUT_MS);
   const audioUnlock = unlockResult?.audioUnlock;
   if (audioUnlock?.unlocked !== true || audioUnlock?.source !== "qa-cdp") throw new Error("qa_test_narrated_replay did not receive a qa-cdp audio unlock receipt");
   const runs = [];
   for (let index = 0; index < args.runs; index += 1) {
-    const result = await callEmbeddedPage(session, "embedded-demo:run", { script: args.script });
+    const result = await phaseCall(`run_${index + 1}`, "embedded-demo:run", { script: args.script }, QA_REPLAY_RUN_TIMEOUT_MS);
     const demo = result?.demo;
     const narration = demo?.media?.narration ?? [];
     const presentation = demo?.media?.presentation ?? [];
@@ -214,13 +228,18 @@ async function qaTestNarratedReplay(args) {
     if (presentation.filter((item) => item.kind === "caption" && item.status === "shown").length !== args.script.steps.filter((step) => step.caption).length) throw new Error(`qa_test_narrated_replay run ${index + 1} did not show every caption`);
     runs.push({ index: index + 1, completedSteps: demo.completedSteps, narration: { expected: expectedNarration, started, ended }, presentation, completed: true });
   }
-  return { qaSessionId: args.qaSessionId, sessionId: args.sessionId, testOnly: true, audioUnlock: { ...qa, page: audioUnlock }, runs };
+  return { qaSessionId: args.qaSessionId, sessionId: args.sessionId, testOnly: true, audioUnlock: { ...qa, page: audioUnlock }, runs, diagnostics };
 }
-function callEmbeddedPage(session, type, payload) {
+function callEmbeddedPage(session, type, payload, { phase = type, timeoutMs = 120_000 } = {}) {
+  if (!session?.socket || session.socket.destroyed || session.socket.closed) throw new Error(`embedded bridge phase ${phase} cannot send: bound session ${session?.id ?? "unknown"} is closed`);
   const id = crypto.randomUUID();
-  wsSend(session.socket, { type, id, ...payload });
+  try { wsSend(session.socket, { type, id, ...payload }); }
+  catch (error) { throw new Error(`embedded bridge phase ${phase} could not send to ${session.id}: ${error.message}`); }
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => { pending.delete(id); reject(new Error("Timed out waiting for the bound embedded demo page")); }, 120000);
+    const timer = setTimeout(() => {
+      pending.delete(id);
+      reject(new Error(`embedded bridge phase ${phase} timed out after ${timeoutMs}ms waiting for session ${session.id} at ${session.url ?? "unknown"}`));
+    }, timeoutMs);
     pending.set(id, { resolve: (result) => { clearTimeout(timer); result.ok ? resolve(result.result) : reject(new Error(result.error ?? "embedded page refused the script")); } });
   });
 }

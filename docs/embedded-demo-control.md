@@ -100,6 +100,12 @@ contains, per run, every completed step, narration `started`/`ended` counts,
 and explicit `presentation` receipts for shown spotlights and captions. It is
 an automated test facility, not a normal tour-control primitive.
 
+Its receipt includes a `sassfully/qa-narrated-replay-diagnostics/v1` phase
+trace. Audio unlock has a 10-second bound and each replay a 45-second bound;
+a timeout names `audio_unlock`, `run_1`, or `run_2`, the bound session, and the
+canonical QA page. A timeout is a failed test—not an assumed narration or
+presentation success.
+
 ### Opt-in CDP inspection and QA evidence
 
 For an owned QA session only, `qa_cdp` sends a CDP command to the single page
