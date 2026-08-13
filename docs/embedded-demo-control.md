@@ -63,6 +63,7 @@ generic browser-evaluation endpoint. Its actions are:
 | `evidence_start`, `evidence_stop`, `evidence_export` | Controls the host's existing opt-in evidence capture; `start` requires `permission:true`. |
 | `qa_start` | Starts owned local Chromium at a loopback URL; `mode` is `headed` or `headless` (default headless). |
 | `qa_action` | Runs exactly one typed operation: `snapshot`, `click`, `fill`, `press`, or `screenshot`; optional `narration` is spoken without a tour overlay. |
+| `qa_test_narrated_replay` | Test-only: runs a validated script twice through the bound page after its owned QA browser receives the private CDP audio-test admission; returns explicit audio, spotlight, caption, and completed-step receipts. |
 | `qa_stop` | Closes the owned Chromium and removes its disposable profile. |
 
 Drafts are process-local and in memory. A stale CAS revision fails rather
@@ -82,6 +83,22 @@ not mount a demo overlay, dimmer, caption, stage, or presenter. A screenshot
 receipt therefore reports `presenter:"suppressed"`. Narration requires the
 launched page to bind the normal demo bridge and configure narration; audio is
 still subject to the browser's gesture/device limits.
+
+### Automated narrated replay
+
+Production and human-facing tours never get a remote audio-unlock operation:
+the visible host control must be clicked by the user. `qa_start` alone adds
+the private `__sassfully_qa_audio_test=1` marker to its disposable,
+MCP-owned loopback page. Only that page can accept the page-side
+`embedded-demo:qa-audio-unlock` request, which is bound to both its
+`qaSessionId` and embedded session id and reports `source:"qa-cdp"`.
+
+`qa_test_narrated_replay` is the sole consumer of that admission. It accepts
+`qaSessionId`, `sessionId`, a normal bounded demo script, and `runs:2`; it
+refuses any other run count. The result proves both replays completed and
+contains, per run, every completed step, narration `started`/`ended` counts,
+and explicit `presentation` receipts for shown spotlights and captions. It is
+an automated test facility, not a normal tour-control primitive.
 
 ### Opt-in CDP inspection and QA evidence
 

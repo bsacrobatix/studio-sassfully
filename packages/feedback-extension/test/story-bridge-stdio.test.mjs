@@ -75,6 +75,8 @@ test("embedded QA contract is loopback-only and raw CDP stays scoped to a named 
   assert.match(validateQARequest({ action: "qa_action", qaSessionId: "qa-1", operation: "evaluate" }), /operation must be/);
   assert.equal(validateQARequest({ action: "qa_cdp", qaSessionId: "qa-1", method: "Runtime.evaluate", params: { expression: "document.title" } }), null);
   assert.match(validateQARequest({ action: "qa_cdp", method: "Runtime.evaluate" }), /qaSessionId/);
+  assert.equal(validateQARequest({ action: "qa_test_narrated_replay", qaSessionId: "qa-1", sessionId: "embedded-1", script: { steps: [{ caption: "test" }] }, runs: 2 }), null);
+  assert.match(validateQARequest({ action: "qa_test_narrated_replay", qaSessionId: "qa-1", sessionId: "embedded-1", script: { steps: [] }, runs: 1 }), /runs must be exactly 2/);
 });
 
 test("stdio bridge reports an occupied loopback port instead of failing its MCP handshake silently", async () => {

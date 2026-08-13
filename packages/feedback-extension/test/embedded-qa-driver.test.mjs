@@ -89,3 +89,18 @@ test("QA screenshot temporarily removes Kitsoki chrome and preserves exported ev
     assert.match(cdp.calls[screenshotIndex + 1].params.expression, /insertBefore/);
   }
 });
+
+test("QA start privately marks its owned page for the test-only audio lane", async () => {
+  const cdp = fakeCDP();
+  const root = await mkdtemp(join(tmpdir(), "sassfully-qa-audio-test-"));
+  let directories = 0;
+  const driver = createEmbeddedQADriver({ runtime: {
+    chrome: "fake-chrome", spawn: () => fakeChild(),
+    mkdtemp: async () => { const directory = join(root, directories++ === 0 ? "profile" : "evidence"); await mkdir(directory); return directory; },
+    tmpdir: () => root, json: async () => ({ webSocketDebuggerUrl: "ws://127.0.0.1:9222/devtools/browser/fake" }), createCDP: async () => cdp,
+  } });
+  const started = await driver.start({ url: "http://127.0.0.1:8932/?demo=1" });
+  assert.match(started.url, /[?&]__sassfully_qa_audio_test=1/);
+  assert.deepEqual(driver.requireTestAudioMode(started.qaSessionId), { qaSessionId: started.qaSessionId, mode: "qa-cdp", url: started.url });
+  await driver.stop(started.qaSessionId);
+});

@@ -66,14 +66,14 @@ test("the controller runs a script against injected deps and reports status", as
     speak: async () => {},
     onStepEvent: (evt) => events.push(evt),
   });
-  assert.deepEqual(controller.status(), { running: false, lastResult: null, media: { narration: [], stage: [], audioUnlock: null } });
+  assert.deepEqual(controller.status(), { running: false, lastResult: null, media: { narration: [], stage: [], presentation: [], audioUnlock: null } });
   const demo = await controller.run(SCRIPT);
   assert.equal(demo.completed, true);
   assert.deepEqual(demo.completedSteps, [
     { index: 0, id: "s1", ok: true, anchor: null, healed: null },
     { index: 1, id: "s2", ok: true, anchor: null, healed: null },
   ]);
-  assert.deepEqual(controller.status(), { running: false, lastResult: demo, media: { narration: [], stage: [], audioUnlock: null } });
+  assert.deepEqual(controller.status(), { running: false, lastResult: demo, media: { narration: [], stage: [], presentation: [], audioUnlock: null } });
   assert.deepEqual(events.map((evt) => evt.type), ["step", "narrate", "step", "step", "act", "step", "done"]);
   // Per-step lifecycle info flows through onStepEvent exactly like the
   // extension's rrweb stamps: start/end with id, index, anchor, healed.
@@ -171,6 +171,23 @@ test("edge narration reports a gesture block and never silently falls back to sp
   assert.equal(result.needs_audio_unlock, true);
   assert.equal(fallbackCalls, 0);
   assert.equal(statuses[0].status, "blocked_user_gesture");
+});
+
+test("edge narration records both playback start and end for a replay receipt", async () => {
+  const statuses = [];
+  class Audio {
+    constructor() { this.listeners = new Map(); this.src = "blob:test"; }
+    addEventListener(type, fn) { this.listeners.set(type, fn); }
+    play() { queueMicrotask(() => this.listeners.get("ended")()); return Promise.resolve(); }
+  }
+  const narrator = createEdgeNarrator({
+    url: "http://127.0.0.1:4547/narration",
+    window: { fetch: async () => ({ ok: true, blob: async () => new Blob(["mp3"]) }), Audio },
+    onStatus: (status) => statuses.push(status),
+  });
+  const result = await narrator("Pip speaks", { fallbackMs: 0 });
+  assert.equal(result.status, "ended");
+  assert.deepEqual(statuses.map((status) => status.status), ["started", "ended"]);
 });
 
 test("embedded evidence composes redacted browser providers with demo stamps only after permission", async () => {

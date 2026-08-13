@@ -68,6 +68,12 @@ export function validateQARequest(args) {
     if (args.params != null && (typeof args.params !== "object" || Array.isArray(args.params) || JSON.stringify(args.params).length > 131072)) return "qa_cdp.params must be a bounded object";
     return null;
   }
+  if (args.action === "qa_test_narrated_replay") {
+    if (typeof args.qaSessionId !== "string" || typeof args.sessionId !== "string") return "qa_test_narrated_replay needs qaSessionId and sessionId";
+    if (!args.script || typeof args.script !== "object" || Array.isArray(args.script)) return "qa_test_narrated_replay needs a script object";
+    if (args.runs !== 2) return "qa_test_narrated_replay runs must be exactly 2";
+    return null;
+  }
   if (args.action === "qa_events") return typeof args.qaSessionId === "string" ? null : "qa_events.qaSessionId is required";
   if (["qa_capture_start", "qa_capture_export", "qa_har_export"].includes(args.action)) return typeof args.qaSessionId === "string" ? null : `${args.action}.qaSessionId is required`;
   return "unknown QA action";
@@ -88,6 +94,11 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
   };
   const sessions = new Map();
   async function start({ url, mode = "headless" }) {
+    const qaURL = new URL(url);
+    // This marker is minted only for the disposable MCP-owned QA page. It is
+    // never supplied by a normal demo client and is the page-side admission
+    // check for the test-only CDP audio lane.
+    qaURL.searchParams.set("__sassfully_qa_audio_test", "1");
     const profile = await driverRuntime.mkdtemp(join(driverRuntime.tmpdir(), "sassfully-qa-"));
     const evidenceDir = await driverRuntime.mkdtemp(join(driverRuntime.tmpdir(), "sassfully-qa-evidence-"));
     const args = ["--remote-debugging-port=0", "--remote-debugging-address=127.0.0.1", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--disable-sync", "--disable-background-networking"];
@@ -99,11 +110,11 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
     if (!endpoint) { child.kill(); await driverRuntime.waitForExit(child); await driverRuntime.removeProfile(profile); throw new Error("Chromium did not publish a local DevTools endpoint"); }
     const version = await driverRuntime.json(endpoint.replace(/^ws:\/\/(.*)\/devtools\/browser\/.*$/, "http://$1/json/version"));
     const cdp = driverRuntime.createCDP ? await driverRuntime.createCDP(version.webSocketDebuggerUrl) : new CDP(version.webSocketDebuggerUrl); await cdp.connect?.();
-    const target = await cdp.call("Target.createTarget", { url });
+    const target = await cdp.call("Target.createTarget", { url: qaURL.href });
     const attached = await cdp.call("Target.attachToTarget", { targetId: target.targetId, flatten: true });
-    const session = { id: `qa-${crypto.randomUUID()}`, child, profile, evidenceDir, screenshotCount: 0, cdp, cdpSession: attached.sessionId, mode, url, captureCursor: null };
+    const session = { id: `qa-${crypto.randomUUID()}`, child, profile, evidenceDir, screenshotCount: 0, cdp, cdpSession: attached.sessionId, mode, url: qaURL.href, captureCursor: null };
     sessions.set(session.id, session);
-    return { qaSessionId: session.id, mode, url, browser: "local-chromium-cdp", presenter: "suppressed" };
+    return { qaSessionId: session.id, mode, url: qaURL.href, browser: "local-chromium-cdp", presenter: "suppressed" };
   }
   async function command(session, method, params = {}) { return session.cdp.call(method, params, session.cdpSession); }
   async function captureChromeFreeScreenshot(session, params = {}) {
@@ -141,6 +152,12 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
         : `(() => { const e=document.activeElement; if(!e) throw new Error('no active element'); e.dispatchEvent(new KeyboardEvent('keydown',{key:${js(args.key)},bubbles:true})); e.dispatchEvent(new KeyboardEvent('keyup',{key:${js(args.key)},bubbles:true})); return true; })()`;
     await command(session, "Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
     return { qaSessionId: session.id, operation: args.operation, ok: true, narrator: args.narration ? "started" : "not_requested", presenter: "suppressed" };
+  }
+  function requireTestAudioMode(id) {
+    const session = sessions.get(id); if (!session) throw new Error("QA session not found");
+    const url = new URL(session.url);
+    if (url.searchParams.get("__sassfully_qa_audio_test") !== "1") throw new Error("qa_test_narrated_replay requires qa_start URL query __sassfully_qa_audio_test=1");
+    return { qaSessionId: id, mode: "qa-cdp", url: session.url };
   }
   async function cdp(args) {
     const session = sessions.get(args.qaSessionId); if (!session) throw new Error("QA session not found");
@@ -190,5 +207,5 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
     if (cleanupError) throw new Error(`QA browser stopped but its temporary profile could not be removed: ${cleanupError.message}`);
     return { qaSessionId: id, stopped: true, evidenceDir: session.evidenceDir };
   }
-  return { start, action, cdp, events, captureStart, captureExport, harExport, stop };
+  return { start, action, cdp, requireTestAudioMode, events, captureStart, captureExport, harExport, stop };
 }

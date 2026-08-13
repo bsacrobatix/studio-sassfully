@@ -114,7 +114,7 @@ server.listen(port, "127.0.0.1", () => {
 
 const tools = [
   { name: "linkedin_story", description: "Autonomous control of the one loopback-paired Chrome tab. Pairing is the authorization; no per-action modal is shown.", inputSchema: { type: "object", properties: { action: { enum: ["navigate", "snapshot", "click", "fill", "press", "extract", "run_script", "demo_run", "demo_stop"] }, url: { type: "string" }, selector: { type: "string" }, target: { type: "string", description: "Accessible label for click when no selector is supplied" }, text: { type: "string" }, key: { type: "string" }, captureEvidence: { type: "boolean" }, steps: { type: "array" }, script: { type: "object" } }, required: ["action"], additionalProperties: false } },
-  { name: "embedded_demo", description: "Local demoMode tour plus owned headed/headless Chromium QA. QA has typed controls, explicit raw CDP, and bounded console/network-body HAR evidence; all are restricted to the one loopback page launched by this MCP and cannot attach targets or navigate. Screenshots clear the presenter; narration is overlay-free.", inputSchema: { type: "object", properties: { action: { enum: ["sessions", "propose", "validate", "update", "push", "run", "stop", "resume", "evidence_start", "evidence_stop", "evidence_export", "qa_start", "qa_action", "qa_cdp", "qa_events", "qa_capture_start", "qa_capture_export", "qa_har_export", "qa_stop"] }, sessionId: { type: "string" }, draftId: { type: "string" }, revision: { type: "number" }, permission: { type: "boolean" }, script: { type: "object" }, url: { type: "string", description: "qa_start only: absolute loopback app URL" }, mode: { enum: ["headed", "headless"] }, qaSessionId: { type: "string" }, operation: { enum: ["snapshot", "click", "fill", "press", "screenshot"] }, selector: { type: "string" }, text: { type: "string" }, key: { type: "string" }, narration: { type: "string" }, method: { type: "string", description: "qa_cdp only: CDP command on the owned attached page session" }, params: { type: "object" }, since: { type: "integer", minimum: 0 } }, required: ["action"], additionalProperties: false } },
+  { name: "embedded_demo", description: "Local demoMode tour plus owned headed/headless Chromium QA. QA has typed controls, explicit raw CDP, and bounded console/network-body HAR evidence; all are restricted to the one loopback page launched by this MCP and cannot attach targets or navigate. qa_test_narrated_replay is a test-only, two-run CDP audio path: qa_start must load __sassfully_qa_audio_test=1; normal tours still require a human click. Screenshots clear the presenter; narration is overlay-free.", inputSchema: { type: "object", properties: { action: { enum: ["sessions", "propose", "validate", "update", "push", "run", "stop", "resume", "evidence_start", "evidence_stop", "evidence_export", "qa_start", "qa_action", "qa_cdp", "qa_events", "qa_capture_start", "qa_capture_export", "qa_har_export", "qa_test_narrated_replay", "qa_stop"] }, sessionId: { type: "string" }, draftId: { type: "string" }, revision: { type: "number" }, permission: { type: "boolean" }, script: { type: "object" }, url: { type: "string", description: "qa_start only: absolute loopback app URL" }, mode: { enum: ["headed", "headless"] }, qaSessionId: { type: "string" }, operation: { enum: ["snapshot", "click", "fill", "press", "screenshot"] }, selector: { type: "string" }, text: { type: "string" }, key: { type: "string" }, narration: { type: "string" }, method: { type: "string", description: "qa_cdp only: CDP command on the owned attached page session" }, params: { type: "object" }, since: { type: "integer", minimum: 0 }, runs: { type: "integer", enum: [2] } }, required: ["action"], additionalProperties: false } },
 ];
 function callBridge(command) {
   const check = validateStoryCommand(command); if (!check.ok) return Promise.reject(new Error(check.error));
@@ -123,7 +123,7 @@ function callBridge(command) {
   return new Promise((resolve, reject) => { const timer = setTimeout(() => { pending.delete(id); reject(new Error("Timed out waiting for the paired Chrome tab")); }, 120000); pending.set(id, { resolve: (result) => { clearTimeout(timer); result.ok ? resolve(result.result) : reject(new Error(result.error ?? "Chrome refused the request")); } }); });
 }
 function callEmbedded(args) {
-  if (["qa_start", "qa_action", "qa_cdp", "qa_events", "qa_capture_start", "qa_capture_export", "qa_har_export", "qa_stop"].includes(args.action)) {
+  if (["qa_start", "qa_action", "qa_cdp", "qa_events", "qa_capture_start", "qa_capture_export", "qa_har_export", "qa_test_narrated_replay", "qa_stop"].includes(args.action)) {
     const error = validateQARequest(args); if (error) return Promise.reject(new Error(error));
     if (args.action === "qa_start") return qaDriver.start(args);
     if (args.action === "qa_action") return qaDriver.action(args);
@@ -132,6 +132,7 @@ function callEmbedded(args) {
     if (args.action === "qa_capture_start") return qaDriver.captureStart(args.qaSessionId);
     if (args.action === "qa_capture_export") return qaDriver.captureExport(args.qaSessionId);
     if (args.action === "qa_har_export") return qaDriver.harExport(args.qaSessionId);
+    if (args.action === "qa_test_narrated_replay") return qaTestNarratedReplay(args);
     return qaDriver.stop(args.qaSessionId);
   }
   if (args.action === "sessions") return Promise.resolve({ sessions: [...embeddedSessions.entries()].map(([sessionId, s]) => ({ sessionId, url: s.url, connectedAt: s.connectedAt })) });
@@ -154,6 +155,29 @@ function callEmbedded(args) {
   } else if (args.action.startsWith("evidence_")) return callEmbeddedPage(session, "embedded-demo:evidence", { action: args.action.slice("evidence_".length), permission: args.permission === true });
   else if (args.action !== "stop") return Promise.reject(new Error("embedded_demo action is not supported"));
   return callEmbeddedPage(session, args.action === "run" ? "embedded-demo:run" : "embedded-demo:stop", { script: args.script }).then((result) => ({ sessionId: args.sessionId, ...result }));
+}
+async function qaTestNarratedReplay(args) {
+  const session = embeddedSessions.get(args.sessionId);
+  if (!session) throw new Error("qa_test_narrated_replay requires a bound embedded demo session");
+  const qa = qaDriver.requireTestAudioMode(args.qaSessionId);
+  const unlockResult = await callEmbeddedPage(session, "embedded-demo:qa-audio-unlock", { qaSessionId: args.qaSessionId, embeddedSessionId: args.sessionId });
+  const audioUnlock = unlockResult?.audioUnlock;
+  if (audioUnlock?.unlocked !== true || audioUnlock?.source !== "qa-cdp") throw new Error("qa_test_narrated_replay did not receive a qa-cdp audio unlock receipt");
+  const runs = [];
+  for (let index = 0; index < args.runs; index += 1) {
+    const result = await callEmbeddedPage(session, "embedded-demo:run", { script: args.script });
+    const demo = result?.demo;
+    const narration = demo?.media?.narration ?? [];
+    const presentation = demo?.media?.presentation ?? [];
+    const expectedNarration = args.script.steps.filter((step) => typeof step.narration === "string").length;
+    const started = narration.filter((item) => item.status === "started").length;
+    const ended = narration.filter((item) => item.status === "ended").length;
+    if (demo?.completed !== true || started !== expectedNarration || ended !== expectedNarration) throw new Error(`qa_test_narrated_replay run ${index + 1} did not complete every narration (started ${started}/${expectedNarration}, ended ${ended}/${expectedNarration})`);
+    if (presentation.filter((item) => item.kind === "spotlight" && item.status === "shown").length !== args.script.steps.filter((step) => step.spotlight).length) throw new Error(`qa_test_narrated_replay run ${index + 1} did not show every spotlight`);
+    if (presentation.filter((item) => item.kind === "caption" && item.status === "shown").length !== args.script.steps.filter((step) => step.caption).length) throw new Error(`qa_test_narrated_replay run ${index + 1} did not show every caption`);
+    runs.push({ index: index + 1, completedSteps: demo.completedSteps, narration: { expected: expectedNarration, started, ended }, presentation, completed: true });
+  }
+  return { qaSessionId: args.qaSessionId, sessionId: args.sessionId, testOnly: true, audioUnlock: { ...qa, page: audioUnlock }, runs };
 }
 function callEmbeddedPage(session, type, payload) {
   const id = crypto.randomUUID();
