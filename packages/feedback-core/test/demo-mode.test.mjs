@@ -51,7 +51,7 @@ test("demoMode: true exposes window.__sassfullyDemo; postMessage stays off witho
   const api = mountReporter({ ...baseOpts(), window: win, demoMode: true });
   const embed = await api.demo;
   assert.deepEqual(Object.keys(win.__sassfullyDemo).sort(), ["evidence", "narrate", "resume", "run", "status", "stop", "unlockAudio"]);
-  assert.deepEqual(win.__sassfullyDemo.status(), { running: false, lastResult: null, media: { narration: [], stage: [], audioUnlock: null } });
+  assert.deepEqual(win.__sassfullyDemo.status(), { running: false, lastResult: null, media: { narration: [], stage: [], presentation: [], audioUnlock: null } });
   assert.equal(win.listeners.size, 0, "default demoOrigins [] keeps the postMessage channel disabled");
   embed.uninstall();
   assert.equal("__sassfullyDemo" in win, false);
