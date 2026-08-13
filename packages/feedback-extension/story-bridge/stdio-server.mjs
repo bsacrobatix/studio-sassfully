@@ -24,14 +24,15 @@ let bridge = null;
 // session channel. This is not an automation backdoor: it accepts only a
 // validated demo script and calls the page's resident demo API.
 const embeddedSessions = new Map();
+const embeddedSessionByPage = new Map();
 const embeddedDrafts = createEmbeddedDemoDrafts({ validateScript: (script) => validateStoryCommand({ action: "demo_run", script }) });
 const pending = new Map();
-const qaDriver = createEmbeddedQADriver({ narrate: async (text) => {
-  const session = [...embeddedSessions.values()].at(-1);
+const qaDriver = createEmbeddedQADriver({ narrate: async (text, qaSession) => {
+  const session = embeddedSessionForQA(qaSession);
   if (!session) throw new Error("QA narration needs a bound embedded demo page with narration enabled");
   return callEmbeddedPage(session, "embedded-demo:qa-narrate", { text });
-}, beforeScreenshot: async () => {
-  const session = [...embeddedSessions.values()].at(-1);
+}, beforeScreenshot: async (qaSession) => {
+  const session = embeddedSessionForQA(qaSession);
   if (session) await callEmbeddedPage(session, "embedded-demo:stop", {});
 } });
 function reply(id, result) { return { jsonrpc: "2.0", id, result }; }
@@ -41,6 +42,25 @@ function wsSend(socket, body) {
   const bytes = Buffer.from(JSON.stringify(body));
   const header = bytes.length < 126 ? Buffer.from([0x81, bytes.length]) : Buffer.from([0x81, 126, bytes.length >> 8, bytes.length & 255]);
   socket.write(Buffer.concat([header, bytes]));
+}
+function embeddedPageIdentity(value) {
+  try {
+    const url = new URL(value);
+    if (!["http:", "https:"].includes(url.protocol) || !["127.0.0.1", "localhost", "::1"].includes(url.hostname)) return null;
+    url.hash = "";
+    return url.href;
+  } catch { return null; }
+}
+function embeddedSessionForQA(qaSession) {
+  const identity = embeddedPageIdentity(qaSession?.url);
+  const sessionId = identity && embeddedSessionByPage.get(identity);
+  return sessionId ? embeddedSessions.get(sessionId) : null;
+}
+function removeEmbeddedSession(sessionId, expectedSocket = null) {
+  const session = embeddedSessions.get(sessionId);
+  if (!session || (expectedSocket && session.socket !== expectedSocket)) return;
+  embeddedSessions.delete(sessionId);
+  if (session.pageIdentity && embeddedSessionByPage.get(session.pageIdentity) === sessionId) embeddedSessionByPage.delete(session.pageIdentity);
 }
 function decodeFrames(state, chunk) {
   state.buffer = Buffer.concat([state.buffer, chunk]);
@@ -59,7 +79,16 @@ function decodeFrames(state, chunk) {
 function onBridgeMessage(state, message) {
   if (state.kind === "embedded") {
     if (message.type === "embedded-demo:hello" && typeof message.sessionId === "string" && /^[A-Za-z0-9_-]{8,100}$/.test(message.sessionId)) {
-      embeddedSessions.set(message.sessionId, { socket: state.socket, url: typeof message.url === "string" ? message.url.slice(0, 2000) : null, connectedAt: Date.now() });
+      const pageIdentity = embeddedPageIdentity(message.url);
+      if (!pageIdentity) return;
+      // Vite/HMR can reinstall demo mode before the old WebSocket closes. The
+      // current page identity has exactly one authority: a new hello replaces
+      // its stale session, while close handlers cannot delete the replacement.
+      const priorSessionId = embeddedSessionByPage.get(pageIdentity);
+      if (priorSessionId && priorSessionId !== message.sessionId) removeEmbeddedSession(priorSessionId);
+      removeEmbeddedSession(message.sessionId);
+      embeddedSessions.set(message.sessionId, { socket: state.socket, url: pageIdentity, pageIdentity, connectedAt: Date.now() });
+      embeddedSessionByPage.set(pageIdentity, message.sessionId);
       return wsSend(state.socket, { type: "embedded-demo:ready", sessionId: message.sessionId });
     }
   }
@@ -98,7 +127,7 @@ const server = net.createServer((socket) => {
     socket.on("close", () => {
       log(`${socket._sassfully.kind} bridge connection from ${peer} closed`);
       if (bridge === socket) bridge = null;
-      for (const [sessionId, session] of embeddedSessions) if (session.socket === socket) embeddedSessions.delete(sessionId);
+      for (const [sessionId, session] of embeddedSessions) if (session.socket === socket) removeEmbeddedSession(sessionId, socket);
     });
     if (remainder.length) decodeFrames(socket._sassfully, remainder);
   });
@@ -160,6 +189,7 @@ async function qaTestNarratedReplay(args) {
   const session = embeddedSessions.get(args.sessionId);
   if (!session) throw new Error("qa_test_narrated_replay requires a bound embedded demo session");
   const qa = qaDriver.requireTestAudioMode(args.qaSessionId);
+  if (session.pageIdentity !== embeddedPageIdentity(qa.url)) throw new Error("qa_test_narrated_replay embedded session is not bound to this QA page");
   const unlockResult = await callEmbeddedPage(session, "embedded-demo:qa-audio-unlock", { qaSessionId: args.qaSessionId, embeddedSessionId: args.sessionId });
   const audioUnlock = unlockResult?.audioUnlock;
   if (audioUnlock?.unlocked !== true || audioUnlock?.source !== "qa-cdp") throw new Error("qa_test_narrated_replay did not receive a qa-cdp audio unlock receipt");

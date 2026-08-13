@@ -156,6 +156,13 @@ same loopback port; the page rebinds without navigation. Source changes still
 need normal HMR/reload deployment before an already-loaded page can understand
 new script fields—MCP script pushes themselves never require one.
 
+HMR may reinstall demo mode before its prior socket closes. The bridge keeps
+one authoritative embedded session per canonical loopback page URL; a new
+hello for that page replaces the old session, and a later close from the old
+socket cannot remove the replacement. QA narration and screenshot cleanup
+select that page identity from the owned QA session URL, never from connection
+arrival order.
+
 ## Audio, stage, and capability boundaries
 
 `@sassfully/demo-tts` is a loopback Edge-TTS service. The page reports

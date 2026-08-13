@@ -172,3 +172,36 @@ test("embedded MCP lifecycle proposes, validates, updates, and pushes to a resid
     page.socket.destroy();
   } finally { bridge.child.kill(); await once(bridge.child, "exit"); }
 });
+
+test("an HMR reinstall replaces the stale embedded session for one page without letting its close erase the replacement", async () => {
+  const port = await freePort(); const bridge = startBridge(port, ["--allow-embedded-demo"]);
+  try {
+    await bridge.untilStderr(/listening on ws:/);
+    const first = await dialBridge(port, null, "/embedded-demo"); assert.equal(first.status, 101);
+    wsClientSend(first.socket, { type: "embedded-demo:hello", sessionId: "embedded-old-1", url: "http://127.0.0.1:8932/?demo=1" });
+    await nextWsMessage(first.socket);
+    const second = await dialBridge(port, null, "/embedded-demo"); assert.equal(second.status, 101);
+    wsClientSend(second.socket, { type: "embedded-demo:hello", sessionId: "embedded-new-1", url: "http://127.0.0.1:8932/?demo=1" });
+    await nextWsMessage(second.socket);
+
+    let start = bridge.stdout.length;
+    bridge.child.stdin.write(embeddedRequest(1, { action: "sessions" }));
+    const sessions = JSON.parse((await nextMcp(bridge, start)).result.content[0].text).sessions;
+    assert.deepEqual(sessions.map((session) => session.sessionId), ["embedded-new-1"]);
+
+    first.socket.destroy();
+    start = bridge.stdout.length;
+    bridge.child.stdin.write(embeddedRequest(2, { action: "run", sessionId: "embedded-new-1", script: { steps: [{ caption: "replacement remains authoritative" }] } }));
+    const run = await nextWsMessage(second.socket); assert.equal(run.type, "embedded-demo:run");
+    wsClientSend(second.socket, { type: "result", id: run.id, ok: true, result: { demo: { completed: true, completedSteps: [] } } });
+    const result = JSON.parse((await nextMcp(bridge, start)).result.content[0].text);
+    assert.equal(result.sessionId, "embedded-new-1");
+
+    start = bridge.stdout.length;
+    bridge.child.stdin.write(embeddedRequest(3, { action: "run", sessionId: "embedded-old-1", script: { steps: [{ caption: "stale must not receive commands" }] } }));
+    const stale = await nextMcp(bridge, start);
+    assert.equal(stale.result.isError, true);
+    assert.match(stale.result.content[0].text, /No bound embedded demo session/);
+    second.socket.destroy();
+  } finally { bridge.child.kill(); await once(bridge.child, "exit"); }
+});

@@ -129,7 +129,7 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
   }
   async function action(args) {
     const session = sessions.get(args.qaSessionId); if (!session) throw new Error("QA session not found");
-    if (args.narration) await narrate?.(args.narration);
+    if (args.narration) await narrate?.(args.narration, session);
     if (args.operation === "snapshot") {
       const result = await command(session, "Runtime.evaluate", { expression: "document.documentElement.outerHTML", returnByValue: true, awaitPromise: true });
       return { qaSessionId: session.id, operation: "snapshot", html: result.result.value, narrator: args.narration ? "started" : "not_requested", presenter: "suppressed" };
@@ -137,7 +137,7 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
     if (args.operation === "screenshot") {
       // A persistent tour presenter is an intentional showcase affordance, but
       // is not QA evidence. Clear it through the page's bounded stop API first.
-      await beforeScreenshot?.();
+      await beforeScreenshot?.(session);
       const result = await captureChromeFreeScreenshot(session, { format: "png" });
       session.screenshotCount += 1;
       const screenshotPath = join(session.evidenceDir, `screenshot-${String(session.screenshotCount).padStart(3, "0")}.png`);
@@ -164,9 +164,9 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
     // Raw CDP is constrained to the exact flattened session this driver
     // created. Target attach/create/close and navigation could escape it.
     if (/^(Target\.|Browser\.|Page\.navigate$|Page\.navigateToHistoryEntry$)/.test(args.method)) throw new Error("qa_cdp cannot attach, create, close, or navigate targets");
-    if (args.narration) await narrate?.(args.narration);
+    if (args.narration) await narrate?.(args.narration, session);
     const isScreenshot = args.method === "Page.captureScreenshot";
-    if (isScreenshot) await beforeScreenshot?.();
+    if (isScreenshot) await beforeScreenshot?.(session);
     const result = isScreenshot ? await captureChromeFreeScreenshot(session, args.params ?? {}) : await command(session, args.method, args.params ?? {});
     return { qaSessionId: session.id, method: args.method, result, narrator: args.narration ? "started" : "not_requested", presenter: isScreenshot ? "suppressed" : undefined, chrome: isScreenshot ? "suppressed" : undefined };
   }
