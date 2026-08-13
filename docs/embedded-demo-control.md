@@ -100,6 +100,12 @@ contains, per run, every completed step, narration `started`/`ended` counts,
 and explicit `presentation` receipts for shown spotlights and captions. It is
 an automated test facility, not a normal tour-control primitive.
 
+Before the typed page-side QA unlock request, it sends one CDP pointer gesture
+to the fixed visible `[data-testid="sassfully-demo-audio"]` control in the
+owned page. The control must exist, be enabled, and have clickable geometry.
+Callers cannot supply a selector or evaluate code; ordinary tour controls do
+not expose this activation path.
+
 Its receipt includes a `sassfully/qa-narrated-replay-diagnostics/v1` phase
 trace. Audio unlock has a 10-second bound and each replay a 45-second bound;
 a timeout names `audio_unlock`, `run_1`, or `run_2`, the bound session, and the

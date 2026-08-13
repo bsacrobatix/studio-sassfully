@@ -197,7 +197,7 @@ function callEmbedded(args) {
 async function qaTestNarratedReplay(args) {
   const session = embeddedSessions.get(args.sessionId);
   if (!session) throw new Error("qa_test_narrated_replay requires a bound embedded demo session");
-  const qa = qaDriver.requireTestAudioMode(args.qaSessionId);
+  const qa = await qaDriver.activateTestAudio(args.qaSessionId);
   if (session.pageIdentity !== embeddedPageIdentity(qa.url)) throw new Error("qa_test_narrated_replay embedded session is not bound to this QA page");
   const diagnostics = { format: "sassfully/qa-narrated-replay-diagnostics/v1", qaSessionId: args.qaSessionId, sessionId: args.sessionId, page: session.url, phases: [] };
   const phaseCall = async (phase, type, payload, timeoutMs) => {

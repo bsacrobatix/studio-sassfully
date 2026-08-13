@@ -13,6 +13,7 @@ const loopback = (value) => {
 const selector = (value) => typeof value === "string" && value.length > 0 && value.length <= 500;
 const text = (value) => typeof value === "string" && value.length <= 2000;
 const js = (value) => JSON.stringify(value);
+const QA_AUDIO_ENABLE_SELECTOR = '[data-testid="sassfully-demo-audio"]';
 
 async function sleep(ms) { await new Promise((resolve) => setTimeout(resolve, ms)); }
 async function json(url) { const response = await fetch(url); if (!response.ok) throw new Error(`Chrome DevTools returned ${response.status}`); return response.json(); }
@@ -159,6 +160,24 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
     if (url.searchParams.get("__sassfully_qa_audio_test") !== "1") throw new Error("qa_test_narrated_replay requires qa_start URL query __sassfully_qa_audio_test=1");
     return { qaSessionId: id, mode: "qa-cdp", url: session.url };
   }
+  async function activateTestAudio(id) {
+    const session = sessions.get(id); if (!session) throw new Error("QA session not found");
+    const receipt = requireTestAudioMode(id);
+    // This is not a generic evaluation or caller-selected click: the only
+    // permitted selector is the page's visible, user-facing audio control.
+    // CDP pointer events give the owned page a genuine activation before its
+    // separately gated typed bridge request primes media.
+    const bounds = await command(session, "Runtime.evaluate", {
+      expression: `(() => { const e=document.querySelector(${js(QA_AUDIO_ENABLE_SELECTOR)}); if(!e) throw new Error('QA audio enable control not found'); const r=e.getBoundingClientRect(); const s=getComputedStyle(e); if(r.width<=0||r.height<=0||s.display==='none'||s.visibility==='hidden'||s.pointerEvents==='none'||e.disabled) throw new Error('QA audio enable control is not clickable'); return { x:r.left+r.width/2, y:r.top+r.height/2 }; })()`,
+      returnByValue: true, awaitPromise: true,
+    });
+    const point = bounds.result?.value;
+    if (!Number.isFinite(point?.x) || !Number.isFinite(point?.y)) throw new Error("QA audio enable control has no clickable bounds");
+    await command(session, "Input.dispatchMouseEvent", { type: "mouseMoved", x: point.x, y: point.y });
+    await command(session, "Input.dispatchMouseEvent", { type: "mousePressed", x: point.x, y: point.y, button: "left", clickCount: 1 });
+    await command(session, "Input.dispatchMouseEvent", { type: "mouseReleased", x: point.x, y: point.y, button: "left", clickCount: 1 });
+    return { ...receipt, activation: { source: "qa-cdp-input", selector: QA_AUDIO_ENABLE_SELECTOR, x: point.x, y: point.y } };
+  }
   async function cdp(args) {
     const session = sessions.get(args.qaSessionId); if (!session) throw new Error("QA session not found");
     // Raw CDP is constrained to the exact flattened session this driver
@@ -207,5 +226,5 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
     if (cleanupError) throw new Error(`QA browser stopped but its temporary profile could not be removed: ${cleanupError.message}`);
     return { qaSessionId: id, stopped: true, evidenceDir: session.evidenceDir };
   }
-  return { start, action, cdp, requireTestAudioMode, events, captureStart, captureExport, harExport, stop };
+  return { start, action, cdp, requireTestAudioMode, activateTestAudio, events, captureStart, captureExport, harExport, stop };
 }

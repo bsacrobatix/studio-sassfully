@@ -24,6 +24,7 @@ function fakeCDP() {
       calls.push({ method, params, sessionId });
       if (method === "Target.createTarget") return { targetId: "page-target" };
       if (method === "Target.attachToTarget") return { sessionId: "page-session" };
+      if (method === "Runtime.evaluate" && /sassfully-demo-audio/.test(params.expression ?? "")) return { result: { value: { x: 40, y: 24 } } };
       if (method === "Page.captureScreenshot") {
         cdp.events.push(
           { sessionId: "page-session", method: "Network.requestWillBeSent", params: { requestId: "r1", request: { method: "GET", url: "http://127.0.0.1:8932/health", headers: {} } } },
@@ -102,5 +103,20 @@ test("QA start privately marks its owned page for the test-only audio lane", asy
   const started = await driver.start({ url: "http://127.0.0.1:8932/?demo=1" });
   assert.match(started.url, /[?&]__sassfully_qa_audio_test=1/);
   assert.deepEqual(driver.requireTestAudioMode(started.qaSessionId), { qaSessionId: started.qaSessionId, mode: "qa-cdp", url: started.url });
+  await driver.stop(started.qaSessionId);
+});
+
+test("QA test audio activation clicks only the visible fixed control through owned CDP input", async () => {
+  const cdp = fakeCDP(); const root = await mkdtemp(join(tmpdir(), "sassfully-qa-audio-activation-")); let directories = 0;
+  const driver = createEmbeddedQADriver({ runtime: {
+    chrome: "fake-chrome", spawn: () => fakeChild(),
+    mkdtemp: async () => { const directory = join(root, directories++ === 0 ? "profile" : "evidence"); await mkdir(directory); return directory; },
+    tmpdir: () => root, json: async () => ({ webSocketDebuggerUrl: "ws://127.0.0.1:9222/devtools/browser/fake" }), createCDP: async () => cdp,
+  } });
+  const started = await driver.start({ url: "http://127.0.0.1:8932/" });
+  const receipt = await driver.activateTestAudio(started.qaSessionId);
+  assert.deepEqual(receipt.activation, { source: "qa-cdp-input", selector: '[data-testid="sassfully-demo-audio"]', x: 40, y: 24 });
+  const input = cdp.calls.filter(({ method }) => method === "Input.dispatchMouseEvent");
+  assert.deepEqual(input.map(({ params }) => params.type), ["mouseMoved", "mousePressed", "mouseReleased"]);
   await driver.stop(started.qaSessionId);
 });
