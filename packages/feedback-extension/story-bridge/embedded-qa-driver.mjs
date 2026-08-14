@@ -1,10 +1,30 @@
 // Local Chromium QA driver.  This is intentionally not a general CDP proxy:
 // callers get a short, typed vocabulary and screenshots, never evaluate JS.
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import crypto from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
+const DEFAULT_KEYCHAIN_ACCOUNT = "kitsoki-staging";
+// An MCP launch environment (e.g. a config-declared stdio server) does not
+// reliably carry an operator's shell env vars, so a named bearer env var
+// that is absent/empty falls back to resolving the SAME logical secret from
+// the macOS Keychain, in-process, held only in memory. Never logs, never
+// throws the resolved value in an error, never touches argv. Returns null
+// (not a throw) on any failure -- "not found" and "security unavailable on
+// this platform" are the same outcome to the caller.
+async function defaultResolveKeychainSecret({ service, account }) {
+  try {
+    const { stdout } = await execFileAsync("security", ["find-generic-password", "-a", account, "-s", service, "-w"]);
+    const value = stdout.replace(/\r?\n$/, "");
+    return value || null;
+  } catch {
+    return null;
+  }
+}
 
 const chrome = process.env.SASSFULLY_CHROME_BIN || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const LOOPBACK_HOSTNAMES = ["127.0.0.1", "localhost", "::1"];
@@ -136,7 +156,7 @@ export function validateQARequest(args, { allowedOrigins } = {}) {
   return "unknown QA action";
 }
 
-export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}, allowedOrigins = new Set(), authBearerEnv = null } = {}) {
+export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}, allowedOrigins = new Set(), authBearerEnv = null, authBearerKeychainService = null, authBearerKeychainAccount = null } = {}) {
   const driverRuntime = {
     chrome,
     spawn,
@@ -147,9 +167,23 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
     json,
     waitForExit,
     removeProfile,
+    resolveKeychainSecret: defaultResolveKeychainSecret,
     ...runtime,
   };
   const sessions = new Map();
+  // Direct env var wins when present (today's behavior, unchanged). Only
+  // when it is absent/empty does this fall back to the Keychain, once, right
+  // before the token is needed -- so a loopback qa_start (see `start` below,
+  // which never calls this at all) still never touches the Keychain either.
+  async function resolveBearerToken(origin) {
+    const direct = process.env[authBearerEnv];
+    if (direct) return direct;
+    const service = authBearerKeychainService ?? authBearerEnv;
+    const account = authBearerKeychainAccount ?? DEFAULT_KEYCHAIN_ACCOUNT;
+    const fromKeychain = await driverRuntime.resolveKeychainSecret({ service, account }).catch(() => null);
+    if (fromKeychain) return fromKeychain;
+    throw new Error(`qa_start requires env var ${authBearerEnv} (or a Keychain entry -s ${service} -a ${account}) to be set for allowlisted origin ${origin}`);
+  }
   async function start({ url, mode = "headless" }) {
     const qaURL = new URL(url);
     if (!isAllowedQAUrl(qaURL.href, allowedOrigins)) throw new Error("qa_start.url must be loopback or an explicitly allowlisted origin");
@@ -167,14 +201,16 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
     let endpoint = ""; child.stderr.on("data", (chunk) => { const match = /DevTools listening on (ws:\/\/[^\s]+)/.exec(String(chunk)); if (match) endpoint = match[1]; });
     for (let tries = 0; tries < 100 && !endpoint; tries += 1) await sleep(50);
     if (!endpoint) { child.kill(); await driverRuntime.waitForExit(child); await driverRuntime.removeProfile(profile); throw new Error("Chromium did not publish a local DevTools endpoint"); }
-    // The credential travels as an env var NAME end to end -- never as an
-    // argv value and never logged. Resolved once per session, right before
-    // it is needed, and never placed on `session` in cleartext form beyond
-    // this closure's use in the Fetch interceptor below.
+    // The credential travels as an env var NAME (with a Keychain fallback
+    // when that var is absent/empty -- see resolveBearerToken above) end to
+    // end -- never as an argv value and never logged. Resolved once per
+    // session, right before it is needed, and never placed on `session` in
+    // cleartext form beyond this closure's use in the Fetch interceptor
+    // below.
     let bearerToken = null;
     if (isRemoteTarget && authBearerEnv) {
-      bearerToken = process.env[authBearerEnv];
-      if (!bearerToken) { child.kill(); await driverRuntime.waitForExit(child); await driverRuntime.removeProfile(profile); throw new Error(`qa_start requires env var ${authBearerEnv} to be set for allowlisted origin ${qaURL.origin}`); }
+      try { bearerToken = await resolveBearerToken(qaURL.origin); }
+      catch (error) { child.kill(); await driverRuntime.waitForExit(child); await driverRuntime.removeProfile(profile); throw error; }
     }
     const version = await driverRuntime.json(endpoint.replace(/^ws:\/\/(.*)\/devtools\/browser\/.*$/, "http://$1/json/version"));
     const cdp = driverRuntime.createCDP ? await driverRuntime.createCDP(version.webSocketDebuggerUrl) : new CDP(version.webSocketDebuggerUrl); await cdp.connect?.();

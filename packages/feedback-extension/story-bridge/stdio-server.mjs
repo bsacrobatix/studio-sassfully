@@ -38,6 +38,15 @@ const allowedOrigins = new Set(values("--allow-origin").map((raw) => {
 // docs/embedded-demo-control.md for the operator-facing contract.
 const authBearerEnv = value("--auth-bearer-env");
 if (authBearerEnv != null && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(authBearerEnv)) throw new Error("--auth-bearer-env must be a valid environment variable name");
+// An MCP launch environment does not reliably carry the operator's shell env
+// vars, so when --auth-bearer-env names a var that is absent/empty AT THE
+// POINT OF USE, embedded-qa-driver.mjs falls back to resolving the same
+// logical secret from the macOS Keychain in-process (never argv, never
+// logged). These two flags only override the Keychain lookup's `-s`/`-a`;
+// sensible defaults (service = the --auth-bearer-env name, account =
+// "kitsoki-staging") apply when omitted -- see docs/embedded-demo-control.md.
+const authBearerKeychainService = value("--auth-bearer-keychain-service");
+const authBearerKeychainAccount = value("--auth-bearer-keychain-account");
 
 let bridge = null;
 // Embedded hosts use the same loopback server but a distinct, explicit
@@ -56,7 +65,7 @@ const qaDriver = createEmbeddedQADriver({ narrate: async (text, qaSession) => {
 }, beforeScreenshot: async (qaSession) => {
   const session = embeddedSessionForQA(qaSession);
   if (session) await callEmbeddedPage(session, "embedded-demo:stop", {});
-}, allowedOrigins, authBearerEnv });
+}, allowedOrigins, authBearerEnv, authBearerKeychainService, authBearerKeychainAccount });
 function reply(id, result) { return { jsonrpc: "2.0", id, result }; }
 function failure(id, message, code = -32602) { return { jsonrpc: "2.0", id, error: { code, message } }; }
 function websocketAccept(key) { return crypto.createHash("sha1").update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest("base64"); }

@@ -137,20 +137,46 @@ node packages/feedback-extension/story-bridge/stdio-server.mjs \
   --auth-bearer-env KITSOKI_STAGING_SERVICE_TOKEN
 ```
 
+Or, through the multiplexing relay ([`mcp-relay.mjs`](../packages/feedback-extension/story-bridge/mcp-relay.mjs) — the entry point an `.mcp.json` config actually launches), which forwards every one of these flags verbatim to the daemon it spawns:
+
+```sh
+node packages/feedback-extension/story-bridge/mcp-relay.mjs \
+  --socket /tmp/sassfully-embedded-demo.sock --port 8931 --allow-embedded-demo \
+  --allow-origin https://staging.kitsoki.dev \
+  --auth-bearer-env KITSOKI_STAGING_SERVICE_TOKEN
+```
+
 `--allow-origin` is repeatable and takes a bare origin (scheme + host[:port],
-no path); with none given, behavior is unchanged from before this existed.
+no path); with none given, behavior is unchanged from before this existed —
+through the relay too, since the daemon-multiplexing model means the daemon
+is only ever spawned with the *first* relay's flags (the same pre-existing
+limitation `--allow-embedded-demo` already has).
+
 `--auth-bearer-env` names an **environment variable** whose value (never the
 flag's own argv value) is attached as `Authorization: Bearer <value>` to
 requests whose resolved origin is *exactly* the allowlisted one — never to a
 third-party subresource (a CDN, a font host, analytics) the page may also
 load. The credential is read once per `qa_start` against that origin and is
 never logged, never placed in an MCP tool result, and never written to a
-screenshot. `qa_start` refuses with a named-env-var error if the variable is
-unset; a loopback target never reads it at all, even when the flag is
-present. `qa_capture_export`/`qa_har_export`/`qa_events` redact `Authorization`,
-`Proxy-Authorization`, `Cookie`, and `Set-Cookie` header values by NAME
-(unconditionally, not by pattern-matching the value text) in both the raw
-event transcript and the HAR entries.
+screenshot. `qa_capture_export`/`qa_har_export`/`qa_events` redact
+`Authorization`, `Proxy-Authorization`, `Cookie`, and `Set-Cookie` header
+values by NAME (unconditionally, not by pattern-matching the value text) in
+both the raw event transcript and the HAR entries — this covers the value
+regardless of which of the two sources below produced it.
+
+**An MCP launch environment (an `.mcp.json`-declared stdio server, for
+example) does not reliably carry an operator's own shell env vars.** So when
+the named env var is absent or empty *at the point of use*, the driver falls
+back to resolving the same logical secret from the macOS Keychain, once,
+in-process, held only in memory — never written to argv, config, logs,
+evidence, or an error message. The default lookup is
+`security find-generic-password -a kitsoki-staging -s <the --auth-bearer-env name> -w`;
+override either half with `--auth-bearer-keychain-service <name>` /
+`--auth-bearer-keychain-account <name>` if the real entry uses a different
+`-s`/`-a`. `qa_start` refuses (naming both the env var and the exact
+Keychain `-s`/`-a` it tried) only when *both* the env var and the Keychain
+lookup come up empty; a loopback target never attempts either, even when
+`--auth-bearer-env` is configured.
 
 The embedded-session websocket handshake (`embeddedPageIdentity`, used by
 `sessions`/`propose`/`validate`/`push`/`run`) accepts the same allowlisted

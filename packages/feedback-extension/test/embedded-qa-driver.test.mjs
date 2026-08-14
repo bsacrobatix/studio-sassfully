@@ -142,7 +142,7 @@ function fakeCDPWithFetch() {
   return cdp;
 }
 
-function fakeDriverRuntime(cdp, root, directories) {
+function fakeDriverRuntime(cdp, root, directories, overrides = {}) {
   return {
     chrome: "fake-chrome",
     spawn: () => fakeChild(),
@@ -150,6 +150,12 @@ function fakeDriverRuntime(cdp, root, directories) {
     tmpdir: () => root,
     json: async () => ({ webSocketDebuggerUrl: "ws://127.0.0.1:9222/devtools/browser/fake" }),
     createCDP: async () => cdp,
+    // Every test that does not care about the Keychain fallback gets a
+    // deterministic "no entry found" resolver -- never the real `security`
+    // binary, per the rule that only a fake/injected resolver is used in
+    // tests, never a real Keychain lookup.
+    resolveKeychainSecret: async () => null,
+    ...overrides,
   };
 }
 
@@ -214,20 +220,49 @@ test("qa_start against an allowlisted remote origin attaches the named-env beare
   } finally { delete process.env.SASSFULLY_TEST_BEARER; }
 });
 
-test("qa_start against an allowlisted origin refuses cleanly when the named bearer env var is unset", async () => {
+test("qa_start against an allowlisted origin refuses cleanly when the named bearer env var is unset and the Keychain has no matching entry", async () => {
   delete process.env.SASSFULLY_TEST_BEARER_MISSING;
   const cdp = fakeCDPWithFetch();
   const root = await mkdtemp(join(tmpdir(), "sassfully-qa-missing-bearer-"));
   const directories = { n: 0 };
+  let keychainCall = null;
   const driver = createEmbeddedQADriver({
     allowedOrigins: new Set(["https://staging.kitsoki.dev"]),
     authBearerEnv: "SASSFULLY_TEST_BEARER_MISSING",
-    runtime: fakeDriverRuntime(cdp, root, directories),
+    // Injected fake resolver -- never the real `security` binary in a test.
+    runtime: fakeDriverRuntime(cdp, root, directories, { resolveKeychainSecret: async (args) => { keychainCall = args; return null; } }),
   });
   await assert.rejects(
     driver.start({ url: "https://staging.kitsoki.dev/tour" }),
-    /requires env var SASSFULLY_TEST_BEARER_MISSING/,
+    /requires env var SASSFULLY_TEST_BEARER_MISSING \(or a Keychain entry -s SASSFULLY_TEST_BEARER_MISSING -a kitsoki-staging\)/,
   );
+  // Service defaults to the env var name, account to "kitsoki-staging" --
+  // the operator's actual `security find-generic-password -a kitsoki-staging
+  // -s KITSOKI_STAGING_SERVICE_TOKEN -w` shape -- when neither flag is set.
+  assert.deepEqual(keychainCall, { service: "SASSFULLY_TEST_BEARER_MISSING", account: "kitsoki-staging" });
+});
+
+test("qa_start falls back to a Keychain-resolved bearer when the named env var is absent, and attaches it identically to the env-var path", async () => {
+  delete process.env.SASSFULLY_TEST_BEARER_KEYCHAIN;
+  const cdp = fakeCDPWithFetch();
+  const root = await mkdtemp(join(tmpdir(), "sassfully-qa-keychain-bearer-"));
+  const directories = { n: 0 };
+  const driver = createEmbeddedQADriver({
+    allowedOrigins: new Set(["https://staging.kitsoki.dev"]),
+    authBearerEnv: "SASSFULLY_TEST_BEARER_KEYCHAIN",
+    authBearerKeychainService: "custom-service",
+    authBearerKeychainAccount: "custom-account",
+    runtime: fakeDriverRuntime(cdp, root, directories, {
+      resolveKeychainSecret: async ({ service, account }) => (service === "custom-service" && account === "custom-account" ? "k3ychain-staging-token" : null),
+    }),
+  });
+  const started = await driver.start({ url: "https://staging.kitsoki.dev/tour" });
+  assert.equal(started.authBearer, "attached");
+  cdp.trigger("Fetch.requestPaused", "page-session", { requestId: "req-doc", request: { url: "https://staging.kitsoki.dev/tour", headers: {} } });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const continued = cdp.calls.find((c) => c.method === "Fetch.continueRequest" && c.params.requestId === "req-doc");
+  assert.equal(continued.params.headers.find((h) => h.name === "Authorization")?.value, "Bearer k3ychain-staging-token");
+  await driver.stop(started.qaSessionId);
 });
 
 test("qa_start against a loopback URL never reads the bearer env var, even when --auth-bearer-env is configured", async () => {
@@ -279,5 +314,40 @@ test("HAR/evidence export redacts the Authorization header by name, not by patte
   assert.equal(entry.request.headers.find((h) => h.name === "Authorization").value, "[REDACTED]");
   assert.equal(entry.request.headers.find((h) => h.name === "Cookie").value, "[REDACTED]");
   assert.equal(entry.response.headers.find((h) => h.name === "Set-Cookie").value, "[REDACTED]");
+  await driver.stop(started.qaSessionId);
+});
+
+test("the SAME redaction covers a Keychain-resolved bearer end to end: attached via Fetch interception, then redacted on export", async () => {
+  delete process.env.SASSFULLY_TEST_BEARER_REDACT_KEYCHAIN;
+  const cdp = fakeCDPWithFetch();
+  const root = await mkdtemp(join(tmpdir(), "sassfully-qa-redact-keychain-"));
+  const directories = { n: 0 };
+  const driver = createEmbeddedQADriver({
+    allowedOrigins: new Set(["https://staging.kitsoki.dev"]),
+    authBearerEnv: "SASSFULLY_TEST_BEARER_REDACT_KEYCHAIN",
+    runtime: fakeDriverRuntime(cdp, root, directories, { resolveKeychainSecret: async () => "keychain-only-s3cr3t" }),
+  });
+  const started = await driver.start({ url: "https://staging.kitsoki.dev/rpc" });
+  assert.equal(started.authBearer, "attached");
+  await driver.captureStart(started.qaSessionId);
+  // Simulate Chrome having actually sent the header the Fetch interceptor
+  // attached (rather than re-asserting the interceptor itself, which the
+  // earlier allowlist test already covers) -- the point here is redaction.
+  cdp.trigger("Fetch.requestPaused", "page-session", { requestId: "req-doc", request: { url: "https://staging.kitsoki.dev/rpc", headers: {} } });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const continued = cdp.calls.find((c) => c.method === "Fetch.continueRequest" && c.params.requestId === "req-doc");
+  const attachedHeaders = Object.fromEntries(continued.params.headers.map((h) => [h.name, h.value]));
+  assert.equal(attachedHeaders.Authorization, "Bearer keychain-only-s3cr3t");
+  cdp.events.push(
+    { sessionId: "page-session", method: "Network.requestWillBeSent", params: { requestId: "req-doc", request: { method: "GET", url: "https://staging.kitsoki.dev/rpc", headers: attachedHeaders } } },
+    { sessionId: "page-session", method: "Network.responseReceived", params: { requestId: "req-doc", response: { status: 200, statusText: "OK", headers: {}, mimeType: "application/json", encodedDataLength: 2 } } },
+    { sessionId: "page-session", method: "Network.loadingFinished", params: { requestId: "req-doc" } },
+  );
+  const evidence = await driver.captureExport(started.qaSessionId);
+  const har = await driver.harExport(started.qaSessionId);
+  const raw = JSON.stringify(evidence) + JSON.stringify(har);
+  assert.doesNotMatch(raw, /keychain-only-s3cr3t/, "a Keychain-sourced bearer must be redacted identically to an env-var-sourced one");
+  const entry = har.log.entries.find((e) => e.request.url === "https://staging.kitsoki.dev/rpc");
+  assert.equal(entry.request.headers.find((h) => h.name === "Authorization").value, "[REDACTED]");
   await driver.stop(started.qaSessionId);
 });
