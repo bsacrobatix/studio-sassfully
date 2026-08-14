@@ -22,6 +22,12 @@ const files = [
   "story-bridge/stdio-server.mjs",
   "story-bridge/embedded-demo-drafts.mjs",
   "story-bridge/embedded-qa-driver.mjs",
+  // mcp-relay.mjs is the process .mcp.json actually launches (it multiplexes
+  // per-client stdio onto one local bridge daemon, spawning stdio-server.mjs
+  // from its own directory). It was missing from this list even though the
+  // multiplex daemon architecture requires it -- an install built from a
+  // clean prefix produced a directory .mcp.json could not actually run.
+  "story-bridge/mcp-relay.mjs",
   "ext/story-bridge-policy.mjs",
 ];
 const digest = createHash("sha256");
