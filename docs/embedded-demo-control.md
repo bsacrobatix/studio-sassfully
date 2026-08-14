@@ -178,6 +178,24 @@ Keychain `-s`/`-a` it tried) only when *both* the env var and the Keychain
 lookup come up empty; a loopback target never attempts either, even when
 `--auth-bearer-env` is configured.
 
+**A remote-origin QA session launches Chromium with one extra flag.** Chrome
+enforces Local Network Access (LNA): a page on a public origin cannot open a
+plain `ws://127.0.0.1` connection at all — confirmed empirically (headless
+Chrome 151.0.7922.138, a page on a public https origin, a real WebSocket
+handshake server on loopback): `new WebSocket("ws://127.0.0.1:…")` fails
+with `net::ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS`, on every public
+origin tested, not just staging specifically. Headless Chrome auto-denies
+with no prompt; headed Chrome would at best interrupt a tour with a
+permission dialog, and there is no scriptable CDP/Playwright grant for this
+permission. So `qa_start` launches its owned Chromium with
+`--disable-features=LocalNetworkAccessChecks` **only when the target is a
+remote allowlisted origin** — confirmed to reliably restore the connection
+(2/2 reruns); two guessed sibling feature names
+(`LocalNetworkAccessChecksForNavigations`, `LocalNetworkAccessChecksWeb`)
+do **not** work alone and are not used. A loopback `qa_start` — the
+overwhelming majority of traffic — keeps today's exact launch args,
+unchanged.
+
 The embedded-session websocket handshake (`embeddedPageIdentity`, used by
 `sessions`/`propose`/`validate`/`push`/`run`) accepts the same allowlisted
 origins, so a demoMode page served by staging can bind exactly like a

@@ -187,6 +187,61 @@ test("GREEN: qa_start accepts a URL on an explicitly allowlisted origin, and sti
   );
 });
 
+// --- Local Network Access: real Chrome blocks a public-origin page's plain
+// ws://127.0.0.1 connection with net::ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS
+// (empirically confirmed: headless Chrome 151.0.7922.138, a page on
+// https://example.com, a real ws-handshake server on 127.0.0.1 -- see
+// bootstrap-tracking.md SASS-STAGING entry for the probe). The owned QA
+// Chromium must launch with the feature disabled, but ONLY for a
+// remote-origin session -- a loopback qa_start keeps today's exact args.
+
+function launchArgsCapture() {
+  const calls = [];
+  return { calls, spawn: (bin, args, opts) => { calls.push({ bin, args, opts }); return fakeChild(); } };
+}
+
+test("RED (regression): a loopback qa_start launches Chromium with today's exact args -- no LocalNetworkAccessChecks flag", async () => {
+  const cdp = fakeCDP();
+  const root = await mkdtemp(join(tmpdir(), "sassfully-qa-lna-loopback-"));
+  const directories = { n: 0 };
+  const capture = launchArgsCapture();
+  const driver = createEmbeddedQADriver({ runtime: fakeDriverRuntime(cdp, root, directories, capture) });
+  const started = await driver.start({ url: "http://127.0.0.1:8932/" });
+  assert.equal(capture.calls.length, 1);
+  assert.equal(capture.calls[0].args.some((a) => a.includes("LocalNetworkAccessChecks")), false, "a loopback launch must not carry the LNA-disabling flag");
+  await driver.stop(started.qaSessionId);
+});
+
+test("GREEN: a qa_start against an allowlisted remote origin launches Chromium with --disable-features=LocalNetworkAccessChecks", async () => {
+  const cdp = fakeCDP();
+  const root = await mkdtemp(join(tmpdir(), "sassfully-qa-lna-remote-"));
+  const directories = { n: 0 };
+  const capture = launchArgsCapture();
+  const driver = createEmbeddedQADriver({
+    allowedOrigins: new Set(["https://staging.kitsoki.dev"]),
+    runtime: fakeDriverRuntime(cdp, root, directories, capture),
+  });
+  const started = await driver.start({ url: "https://staging.kitsoki.dev/tour" });
+  assert.equal(capture.calls.length, 1);
+  assert.ok(capture.calls[0].args.includes("--disable-features=LocalNetworkAccessChecks"), "a remote-origin launch must carry the LNA-disabling flag");
+  await driver.stop(started.qaSessionId);
+});
+
+test("qa_start against an allowlisted remote origin carries the LNA flag alongside headed/headless mode, not instead of it", async () => {
+  const cdp = fakeCDP();
+  const root = await mkdtemp(join(tmpdir(), "sassfully-qa-lna-headed-"));
+  const directories = { n: 0 };
+  const capture = launchArgsCapture();
+  const driver = createEmbeddedQADriver({
+    allowedOrigins: new Set(["https://staging.kitsoki.dev"]),
+    runtime: fakeDriverRuntime(cdp, root, directories, capture),
+  });
+  const started = await driver.start({ url: "https://staging.kitsoki.dev/tour", mode: "headed" });
+  assert.ok(capture.calls[0].args.includes("--disable-features=LocalNetworkAccessChecks"));
+  assert.equal(capture.calls[0].args.some((a) => a === "--headless=new"), false, "headed mode must not add --headless=new");
+  await driver.stop(started.qaSessionId);
+});
+
 test("qa_start against an allowlisted remote origin attaches the named-env bearer only to same-origin requests, never third parties", async () => {
   process.env.SASSFULLY_TEST_BEARER = "s3cr3t-staging-token";
   try {

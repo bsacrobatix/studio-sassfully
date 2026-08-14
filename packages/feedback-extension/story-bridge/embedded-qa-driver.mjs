@@ -196,6 +196,23 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
     const evidenceDir = await driverRuntime.mkdtemp(join(driverRuntime.tmpdir(), "sassfully-qa-evidence-"));
     const args = ["--remote-debugging-port=0", "--remote-debugging-address=127.0.0.1", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--disable-sync", "--disable-background-networking"];
     if (mode === "headless") args.push("--headless=new");
+    if (isRemoteTarget) {
+      // Empirically confirmed (real Chrome 151.0.7922.138, headless, a page
+      // on a public https origin, a real ws:// handshake server on
+      // 127.0.0.1): with no extra flags, `new WebSocket("ws://127.0.0.1:…")`
+      // fails with net::ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS -- Chrome's
+      // Local Network Access policy blocks a public-origin page from reaching
+      // loopback at all (headless auto-denies; headed would at best interrupt
+      // the tour with a permission prompt, no scriptable grant exists for
+      // it). `--disable-features=LocalNetworkAccessChecks` alone reliably
+      // (2/2 reruns) restores the connection; two guessed sibling feature
+      // names (`LocalNetworkAccessChecksForNavigations`,
+      // `LocalNetworkAccessChecksWeb`) do NOT work alone and were dropped.
+      // Scoped to a remote-origin session ONLY: a loopback qa_start (the
+      // overwhelming majority of traffic, including every existing test)
+      // keeps today's exact launch args, byte for byte.
+      args.push("--disable-features=LocalNetworkAccessChecks");
+    }
     args.push("about:blank");
     const child = driverRuntime.spawn(driverRuntime.chrome, args, { stdio: ["ignore", "ignore", "pipe"] });
     let endpoint = ""; child.stderr.on("data", (chunk) => { const match = /DevTools listening on (ws:\/\/[^\s]+)/.exec(String(chunk)); if (match) endpoint = match[1]; });
