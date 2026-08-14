@@ -12,12 +12,32 @@ import { createEmbeddedQADriver, validateQARequest } from "./embedded-qa-driver.
 
 const args = process.argv.slice(2);
 const value = (name) => { const i = args.indexOf(name); return i < 0 ? null : args[i + 1]; };
+const values = (name) => args.reduce((found, arg, i) => (arg === name ? [...found, args[i + 1]] : found), []);
 const port = Number(value("--port") ?? DEFAULT_BRIDGE_PORT);
 const code = value("--pairing-code") ?? crypto.randomBytes(24).toString("base64url");
 const allowEmbeddedDemo = args.includes("--allow-embedded-demo");
 const daemonSocket = value("--daemon-socket");
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("--port must be 1024-65535");
 if (!PAIRING_CODE_PATTERN.test(code)) throw new Error("--pairing-code must be 24-128 base64url characters");
+
+// --allow-origin is the whole opt-in: with none given, QA/demo targets stay
+// loopback-only exactly as before. Each value must be a bare origin (scheme
+// + host [+ port], no path) so an operator cannot accidentally allowlist a
+// broader surface than intended.
+const allowedOrigins = new Set(values("--allow-origin").map((raw) => {
+  let url;
+  try { url = new URL(raw); } catch { throw new Error(`--allow-origin value is not a valid absolute URL: ${raw}`); }
+  if (!["http:", "https:"].includes(url.protocol)) throw new Error(`--allow-origin must be http(s): ${raw}`);
+  if ((url.pathname !== "/" && url.pathname !== "") || url.search || url.hash) throw new Error(`--allow-origin must be a bare origin (scheme://host[:port]), not a URL with a path/query/hash: ${raw}`);
+  return url.origin;
+}));
+// The credential travels as an env var NAME only -- never as an argv value,
+// never logged, never printed. See embedded-qa-driver.mjs for where the
+// named env var is actually read (once per qa_start against an allowlisted
+// remote origin) and packages/feedback-extension/story-bridge/README.md /
+// docs/embedded-demo-control.md for the operator-facing contract.
+const authBearerEnv = value("--auth-bearer-env");
+if (authBearerEnv != null && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(authBearerEnv)) throw new Error("--auth-bearer-env must be a valid environment variable name");
 
 let bridge = null;
 // Embedded hosts use the same loopback server but a distinct, explicit
@@ -36,7 +56,7 @@ const qaDriver = createEmbeddedQADriver({ narrate: async (text, qaSession) => {
 }, beforeScreenshot: async (qaSession) => {
   const session = embeddedSessionForQA(qaSession);
   if (session) await callEmbeddedPage(session, "embedded-demo:stop", {});
-} });
+}, allowedOrigins, authBearerEnv });
 function reply(id, result) { return { jsonrpc: "2.0", id, result }; }
 function failure(id, message, code = -32602) { return { jsonrpc: "2.0", id, error: { code, message } }; }
 function websocketAccept(key) { return crypto.createHash("sha1").update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest("base64"); }
@@ -48,7 +68,13 @@ function wsSend(socket, body) {
 function embeddedPageIdentity(value) {
   try {
     const url = new URL(value);
-    if (!["http:", "https:"].includes(url.protocol) || !["127.0.0.1", "localhost", "::1"].includes(url.hostname)) return null;
+    if (!["http:", "https:"].includes(url.protocol)) return null;
+    const isLoopback = ["127.0.0.1", "localhost", "::1"].includes(url.hostname);
+    // A page served from an --allow-origin remote (e.g. staging) can bind an
+    // embedded session identically to a loopback page. This is additive: with
+    // no allowlist configured, `allowedOrigins` is empty and the boundary is
+    // unchanged.
+    if (!isLoopback && !allowedOrigins.has(url.origin)) return null;
     url.hash = "";
     // Only an MCP-owned QA browser receives this marker. Its application may
     // legitimately rewrite query state (for example `study=<id>`), which
@@ -152,7 +178,7 @@ server.listen(port, "127.0.0.1", () => {
 
 const tools = [
   { name: "linkedin_story", description: "Autonomous control of the one loopback-paired Chrome tab. Pairing is the authorization; no per-action modal is shown.", inputSchema: { type: "object", properties: { action: { enum: ["navigate", "snapshot", "click", "fill", "press", "extract", "run_script", "demo_run", "demo_stop"] }, url: { type: "string" }, selector: { type: "string" }, target: { type: "string", description: "Accessible label for click when no selector is supplied" }, text: { type: "string" }, key: { type: "string" }, captureEvidence: { type: "boolean" }, steps: { type: "array" }, script: { type: "object" } }, required: ["action"], additionalProperties: false } },
-  { name: "embedded_demo", description: "Local demoMode tour plus owned headed/headless Chromium QA. QA has typed controls, explicit raw CDP, and bounded console/network-body HAR evidence; all are restricted to the one loopback page launched by this MCP and cannot attach targets or navigate. qa_test_narrated_replay is a test-only, two-run CDP audio path: qa_start must load __sassfully_qa_audio_test=1; normal tours still require a human click. Screenshots clear the presenter; narration is overlay-free.", inputSchema: { type: "object", properties: { action: { enum: ["sessions", "propose", "validate", "update", "push", "run", "stop", "resume", "evidence_start", "evidence_stop", "evidence_export", "qa_start", "qa_action", "qa_cdp", "qa_events", "qa_capture_start", "qa_capture_export", "qa_har_export", "qa_test_narrated_replay", "qa_stop"] }, sessionId: { type: "string" }, draftId: { type: "string" }, revision: { type: "number" }, permission: { type: "boolean" }, script: { type: "object" }, url: { type: "string", description: "qa_start only: absolute loopback app URL" }, mode: { enum: ["headed", "headless"] }, qaSessionId: { type: "string" }, operation: { enum: ["snapshot", "click", "fill", "press", "screenshot"] }, selector: { type: "string" }, text: { type: "string" }, key: { type: "string" }, narration: { type: "string" }, method: { type: "string", description: "qa_cdp only: CDP command on the owned attached page session" }, params: { type: "object" }, since: { type: "integer", minimum: 0 }, runs: { type: "integer", enum: [2] } }, required: ["action"], additionalProperties: false } },
+  { name: "embedded_demo", description: `Local demoMode tour plus owned headed/headless Chromium QA. QA has typed controls, explicit raw CDP, and bounded console/network-body HAR evidence; all are restricted to the one loopback page launched by this MCP${allowedOrigins.size ? ` or an explicitly allowlisted remote origin (${[...allowedOrigins].join(", ")})` : ""} and cannot attach targets or navigate elsewhere. qa_test_narrated_replay is a test-only, two-run CDP audio path: qa_start must load __sassfully_qa_audio_test=1; normal tours still require a human click. Screenshots clear the presenter; narration is overlay-free.`, inputSchema: { type: "object", properties: { action: { enum: ["sessions", "propose", "validate", "update", "push", "run", "stop", "resume", "evidence_start", "evidence_stop", "evidence_export", "qa_start", "qa_action", "qa_cdp", "qa_events", "qa_capture_start", "qa_capture_export", "qa_har_export", "qa_test_narrated_replay", "qa_stop"] }, sessionId: { type: "string" }, draftId: { type: "string" }, revision: { type: "number" }, permission: { type: "boolean" }, script: { type: "object" }, url: { type: "string", description: "qa_start only: absolute loopback app URL, or a URL on an --allow-origin allowlisted remote origin" }, mode: { enum: ["headed", "headless"] }, qaSessionId: { type: "string" }, operation: { enum: ["snapshot", "click", "fill", "press", "screenshot"] }, selector: { type: "string" }, text: { type: "string" }, key: { type: "string" }, narration: { type: "string" }, method: { type: "string", description: "qa_cdp only: CDP command on the owned attached page session" }, params: { type: "object" }, since: { type: "integer", minimum: 0 }, runs: { type: "integer", enum: [2] } }, required: ["action"], additionalProperties: false } },
 ];
 function callBridge(command) {
   const check = validateStoryCommand(command); if (!check.ok) return Promise.reject(new Error(check.error));
@@ -162,7 +188,7 @@ function callBridge(command) {
 }
 function callEmbedded(args) {
   if (["qa_start", "qa_action", "qa_cdp", "qa_events", "qa_capture_start", "qa_capture_export", "qa_har_export", "qa_test_narrated_replay", "qa_stop"].includes(args.action)) {
-    const error = validateQARequest(args); if (error) return Promise.reject(new Error(error));
+    const error = validateQARequest(args, { allowedOrigins }); if (error) return Promise.reject(new Error(error));
     if (args.action === "qa_start") return qaDriver.start(args);
     if (args.action === "qa_action") return qaDriver.action(args);
     if (args.action === "qa_cdp") return qaDriver.cdp(args);

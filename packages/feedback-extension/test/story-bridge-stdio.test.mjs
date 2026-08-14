@@ -224,3 +224,76 @@ test("QA page identity retains its MCP marker but ignores application-owned quer
     first.socket.destroy(); second.socket.destroy();
   } finally { bridge.child.kill(); await once(bridge.child, "exit"); }
 });
+
+// --- --allow-origin / --auth-bearer-env CLI wiring --------------------------
+
+test("RED: with no --allow-origin, qa_start against staging is refused exactly as before, end to end over MCP", async () => {
+  const port = await freePort(); const bridge = startBridge(port, ["--allow-embedded-demo"]);
+  try {
+    await bridge.untilStderr(/listening on ws:/);
+    const start = bridge.stdout.length;
+    bridge.child.stdin.write(embeddedRequest(1, { action: "qa_start", url: "https://staging.kitsoki.dev/", mode: "headless" }));
+    const response = await nextMcp(bridge, start);
+    assert.equal(response.result.isError, true);
+    assert.equal(response.result.content[0].text, "qa_start.url must be an absolute loopback http(s) URL");
+  } finally { bridge.child.kill(); await once(bridge.child, "exit"); }
+});
+
+test("GREEN: --allow-origin admits the configured origin but still refuses everything else, end to end over MCP", async () => {
+  const port = await freePort();
+  const bridge = startBridge(port, ["--allow-embedded-demo", "--allow-origin", "https://staging.kitsoki.dev"]);
+  try {
+    await bridge.untilStderr(/listening on ws:/);
+    // Not admitted: a different, unlisted remote origin.
+    let start = bridge.stdout.length;
+    bridge.child.stdin.write(embeddedRequest(1, { action: "qa_start", url: "https://not-allowlisted.example.com/", mode: "headless" }));
+    const refused = await nextMcp(bridge, start);
+    assert.equal(refused.result.isError, true);
+    assert.match(refused.result.content[0].text, /explicitly allowlisted origin/);
+  } finally { bridge.child.kill(); await once(bridge.child, "exit"); }
+});
+
+test("tools/list advertises the configured --allow-origin allowlist in the embedded_demo tool description, and says nothing extra when none is configured", async () => {
+  const plainPort = await freePort();
+  const plain = startBridge(plainPort, ["--allow-embedded-demo"]);
+  const allowlistedPort = await freePort();
+  const allowlisted = startBridge(allowlistedPort, ["--allow-embedded-demo", "--allow-origin", "https://staging.kitsoki.dev"]);
+  try {
+    await plain.untilStderr(/listening on ws:/);
+    await allowlisted.untilStderr(/listening on ws:/);
+    let start = plain.stdout.length;
+    plain.child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" })}\n`);
+    const plainTools = (await nextMcp(plain, start)).result.tools;
+    const plainDescription = plainTools.find((t) => t.name === "embedded_demo").description;
+    assert.doesNotMatch(plainDescription, /allowlisted/);
+
+    start = allowlisted.stdout.length;
+    allowlisted.child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" })}\n`);
+    const allowlistedTools = (await nextMcp(allowlisted, start)).result.tools;
+    const allowlistedDescription = allowlistedTools.find((t) => t.name === "embedded_demo").description;
+    assert.match(allowlistedDescription, /staging\.kitsoki\.dev/);
+  } finally {
+    plain.child.kill(); await once(plain.child, "exit");
+    allowlisted.child.kill(); await once(allowlisted.child, "exit");
+  }
+});
+
+test("--allow-origin rejects a value that is not a bare http(s) origin", async () => {
+  const port = await freePort();
+  const child = spawn(process.execPath, [serverPath, "--port", String(port), "--pairing-code", code, "--allow-origin", "https://staging.kitsoki.dev/some/path"], { stdio: ["ignore", "pipe", "pipe"] });
+  let stderr = "";
+  child.stderr.on("data", (chunk) => { stderr += chunk; });
+  const [exitCode] = await once(child, "exit");
+  assert.notEqual(exitCode, 0);
+  assert.match(stderr, /--allow-origin must be a bare origin/);
+});
+
+test("--auth-bearer-env rejects a value that is not a valid environment variable name", async () => {
+  const port = await freePort();
+  const child = spawn(process.execPath, [serverPath, "--port", String(port), "--pairing-code", code, "--auth-bearer-env", "not a valid name"], { stdio: ["ignore", "pipe", "pipe"] });
+  let stderr = "";
+  child.stderr.on("data", (chunk) => { stderr += chunk; });
+  const [exitCode] = await once(child, "exit");
+  assert.notEqual(exitCode, 0);
+  assert.match(stderr, /--auth-bearer-env must be a valid environment variable name/);
+});

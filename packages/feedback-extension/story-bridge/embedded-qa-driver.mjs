@@ -7,13 +7,46 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const chrome = process.env.SASSFULLY_CHROME_BIN || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const loopback = (value) => {
-  try { const url = new URL(value); return ["http:", "https:"].includes(url.protocol) && ["127.0.0.1", "localhost", "::1"].includes(url.hostname); } catch { return false; }
+const LOOPBACK_HOSTNAMES = ["127.0.0.1", "localhost", "::1"];
+const isLoopbackHostname = (hostname) => LOOPBACK_HOSTNAMES.includes(hostname);
+// A qa_start target is admitted when it is loopback (today's behavior,
+// unconditionally) OR its exact origin was explicitly allowlisted by the
+// operator via --allow-origin. No allowlist means no non-loopback target is
+// ever admitted — this is the whole security boundary for "cannot navigate
+// off the owned page".
+const isAllowedQAUrl = (value, allowedOrigins) => {
+  try {
+    const url = new URL(value);
+    if (!["http:", "https:"].includes(url.protocol)) return false;
+    if (isLoopbackHostname(url.hostname)) return true;
+    return Boolean(allowedOrigins) && allowedOrigins.has(url.origin);
+  } catch { return false; }
 };
 const selector = (value) => typeof value === "string" && value.length > 0 && value.length <= 500;
 const text = (value) => typeof value === "string" && value.length <= 2000;
 const js = (value) => JSON.stringify(value);
 const QA_AUDIO_ENABLE_SELECTOR = '[data-testid="sassfully-demo-audio"]';
+const SENSITIVE_HEADER_NAMES = new Set(["authorization", "proxy-authorization", "cookie", "set-cookie"]);
+const redactHeaderMap = (raw) => {
+  if (!raw || typeof raw !== "object") return raw;
+  const result = {};
+  for (const [name, value] of Object.entries(raw)) result[name] = SENSITIVE_HEADER_NAMES.has(name.toLowerCase()) ? "[REDACTED]" : value;
+  return result;
+};
+// Every raw-CDP-event export path (qa_events polling, and the events[] field
+// inside evidence.json/HAR export) hands back the live CDP event shape,
+// which is NOT the same object the HAR-entry `headers()` helper redacts --
+// so without this, a raw Network.requestWillBeSent/responseReceived event's
+// header object still carried the live Authorization/Cookie value verbatim
+// even when the HAR entry right next to it was already redacted. Same
+// header-by-NAME rule, applied uniformly to every export surface.
+const redactPolledEvent = ({ method, params }) => {
+  if (!params || typeof params !== "object") return { method, params };
+  const cloned = { ...params };
+  if (cloned.request?.headers) cloned.request = { ...cloned.request, headers: redactHeaderMap(cloned.request.headers) };
+  if (cloned.response?.headers) cloned.response = { ...cloned.response, headers: redactHeaderMap(cloned.response.headers) };
+  return { method, params: cloned };
+};
 
 async function sleep(ms) { await new Promise((resolve) => setTimeout(resolve, ms)); }
 async function json(url) { const response = await fetch(url); if (!response.ok) throw new Error(`Chrome DevTools returned ${response.status}`); return response.json(); }
@@ -37,20 +70,43 @@ async function removeProfile(profile) {
 }
 
 class CDP {
-  constructor(url) { this.url = url; this.next = 1; this.pending = new Map(); this.events = []; }
+  constructor(url) { this.url = url; this.next = 1; this.pending = new Map(); this.events = []; this.listeners = new Map(); }
   async connect() {
     this.socket = new WebSocket(this.url);
     await new Promise((resolve, reject) => { this.socket.addEventListener("open", resolve, { once: true }); this.socket.addEventListener("error", () => reject(new Error("could not connect to Chromium CDP")), { once: true }); });
-    this.socket.addEventListener("message", (event) => { const message = JSON.parse(event.data); const pending = this.pending.get(message.id); if (pending) { this.pending.delete(message.id); return message.error ? pending.reject(new Error(message.error.message)) : pending.resolve(message.result); } if (message.method) { this.events.push(message); if (this.events.length > 500) this.events.shift(); } });
+    this.socket.addEventListener("message", (event) => {
+      const message = JSON.parse(event.data);
+      const pending = this.pending.get(message.id);
+      if (pending) { this.pending.delete(message.id); return message.error ? pending.reject(new Error(message.error.message)) : pending.resolve(message.result); }
+      if (message.method) {
+        this.events.push(message); if (this.events.length > 500) this.events.shift();
+        const key = `${message.method} ${message.sessionId ?? ""}`;
+        for (const handler of this.listeners.get(key) ?? []) handler(message.params);
+      }
+    });
+  }
+  // Scoped by (method, sessionId) so a listener never observes another
+  // flattened session's events -- the same boundary `call`'s sessionId param
+  // already enforces for outbound commands.
+  on(method, sessionId, handler) {
+    const key = `${method} ${sessionId ?? ""}`;
+    if (!this.listeners.has(key)) this.listeners.set(key, new Set());
+    this.listeners.get(key).add(handler);
   }
   call(method, params = {}, sessionId = null) { const id = this.next++; this.socket.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) })); return new Promise((resolve, reject) => this.pending.set(id, { resolve, reject })); }
   close() { this.socket?.close(); }
 }
 
-export function validateQARequest(args) {
+export function validateQARequest(args, { allowedOrigins } = {}) {
   if (!args || typeof args !== "object") return "qa request must be an object";
   if (args.action === "qa_start") {
-    if (!loopback(args.url)) return "qa_start.url must be an absolute loopback http(s) URL";
+    if (!isAllowedQAUrl(args.url, allowedOrigins)) {
+      // No --allow-origin configured: byte-identical to the pre-allowlist
+      // message, so a caller with no allowlist sees exactly today's refusal.
+      return allowedOrigins && allowedOrigins.size
+        ? "qa_start.url must be an absolute loopback http(s) URL or an explicitly allowlisted origin"
+        : "qa_start.url must be an absolute loopback http(s) URL";
+    }
     if (args.mode != null && !["headed", "headless"].includes(args.mode)) return "qa_start.mode must be headed or headless";
     return null;
   }
@@ -80,7 +136,7 @@ export function validateQARequest(args) {
   return "unknown QA action";
 }
 
-export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {} } = {}) {
+export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}, allowedOrigins = new Set(), authBearerEnv = null } = {}) {
   const driverRuntime = {
     chrome,
     spawn,
@@ -96,6 +152,8 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
   const sessions = new Map();
   async function start({ url, mode = "headless" }) {
     const qaURL = new URL(url);
+    if (!isAllowedQAUrl(qaURL.href, allowedOrigins)) throw new Error("qa_start.url must be loopback or an explicitly allowlisted origin");
+    const isRemoteTarget = !isLoopbackHostname(qaURL.hostname);
     // This marker is minted only for the disposable MCP-owned QA page. It is
     // never supplied by a normal demo client and is the page-side admission
     // check for the test-only CDP audio lane.
@@ -109,13 +167,45 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
     let endpoint = ""; child.stderr.on("data", (chunk) => { const match = /DevTools listening on (ws:\/\/[^\s]+)/.exec(String(chunk)); if (match) endpoint = match[1]; });
     for (let tries = 0; tries < 100 && !endpoint; tries += 1) await sleep(50);
     if (!endpoint) { child.kill(); await driverRuntime.waitForExit(child); await driverRuntime.removeProfile(profile); throw new Error("Chromium did not publish a local DevTools endpoint"); }
+    // The credential travels as an env var NAME end to end -- never as an
+    // argv value and never logged. Resolved once per session, right before
+    // it is needed, and never placed on `session` in cleartext form beyond
+    // this closure's use in the Fetch interceptor below.
+    let bearerToken = null;
+    if (isRemoteTarget && authBearerEnv) {
+      bearerToken = process.env[authBearerEnv];
+      if (!bearerToken) { child.kill(); await driverRuntime.waitForExit(child); await driverRuntime.removeProfile(profile); throw new Error(`qa_start requires env var ${authBearerEnv} to be set for allowlisted origin ${qaURL.origin}`); }
+    }
     const version = await driverRuntime.json(endpoint.replace(/^ws:\/\/(.*)\/devtools\/browser\/.*$/, "http://$1/json/version"));
     const cdp = driverRuntime.createCDP ? await driverRuntime.createCDP(version.webSocketDebuggerUrl) : new CDP(version.webSocketDebuggerUrl); await cdp.connect?.();
-    const target = await cdp.call("Target.createTarget", { url: qaURL.href });
-    const attached = await cdp.call("Target.attachToTarget", { targetId: target.targetId, flatten: true });
-    const session = { id: `qa-${crypto.randomUUID()}`, child, profile, evidenceDir, screenshotCount: 0, cdp, cdpSession: attached.sessionId, mode, url: qaURL.href, captureCursor: null };
+    let target, attached;
+    if (bearerToken) {
+      // Attach to a blank page first so Fetch interception is armed before
+      // the one navigation this driver performs -- otherwise the initial
+      // document request (which needs the bearer most) races ahead of it.
+      target = await cdp.call("Target.createTarget", { url: "about:blank" });
+      attached = await cdp.call("Target.attachToTarget", { targetId: target.targetId, flatten: true });
+      const cdpSession = attached.sessionId;
+      const targetOrigin = qaURL.origin;
+      await cdp.call("Fetch.enable", { patterns: [{ urlPattern: "*" }] }, cdpSession);
+      cdp.on("Fetch.requestPaused", cdpSession, (params) => {
+        let requestOrigin = null;
+        try { requestOrigin = new URL(params.request.url).origin; } catch { /* leave unmatched, forward unmodified */ }
+        const headers = Object.entries(params.request.headers ?? {}).filter(([name]) => name.toLowerCase() !== "authorization").map(([name, value]) => ({ name, value }));
+        // The bearer is attached ONLY to requests whose resolved origin is
+        // exactly the allowlisted target -- never to third-party subresources
+        // (fonts, CDNs, analytics) the page may also load.
+        if (requestOrigin === targetOrigin) headers.push({ name: "Authorization", value: `Bearer ${bearerToken}` });
+        cdp.call("Fetch.continueRequest", { requestId: params.requestId, headers }, cdpSession).catch(() => {});
+      });
+      await cdp.call("Page.navigate", { url: qaURL.href }, cdpSession);
+    } else {
+      target = await cdp.call("Target.createTarget", { url: qaURL.href });
+      attached = await cdp.call("Target.attachToTarget", { targetId: target.targetId, flatten: true });
+    }
+    const session = { id: `qa-${crypto.randomUUID()}`, child, profile, evidenceDir, screenshotCount: 0, cdp, cdpSession: attached.sessionId, mode, url: qaURL.href, captureCursor: null, remoteOrigin: isRemoteTarget ? qaURL.origin : null };
     sessions.set(session.id, session);
-    return { qaSessionId: session.id, mode, url: qaURL.href, browser: "local-chromium-cdp", presenter: "suppressed" };
+    return { qaSessionId: session.id, mode, url: qaURL.href, browser: "local-chromium-cdp", presenter: "suppressed", ...(isRemoteTarget ? { origin: qaURL.origin, authBearer: bearerToken ? "attached" : "not_configured" } : {}) };
   }
   async function command(session, method, params = {}) { return session.cdp.call(method, params, session.cdpSession); }
   async function captureChromeFreeScreenshot(session, params = {}) {
@@ -189,7 +279,7 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
     const result = isScreenshot ? await captureChromeFreeScreenshot(session, args.params ?? {}) : await command(session, args.method, args.params ?? {});
     return { qaSessionId: session.id, method: args.method, result, narrator: args.narration ? "started" : "not_requested", presenter: isScreenshot ? "suppressed" : undefined, chrome: isScreenshot ? "suppressed" : undefined };
   }
-  function events(id, { since = 0 } = {}) { const session = sessions.get(id); if (!session) throw new Error("QA session not found"); const start = Number.isInteger(since) && since >= 0 ? since : 0; const events = session.cdp.events.filter((event) => event.sessionId === session.cdpSession); return { qaSessionId: id, cursor: events.length, events: events.slice(start).map(({ method, params }) => ({ method, params })) }; }
+  function events(id, { since = 0 } = {}) { const session = sessions.get(id); if (!session) throw new Error("QA session not found"); const start = Number.isInteger(since) && since >= 0 ? since : 0; const events = session.cdp.events.filter((event) => event.sessionId === session.cdpSession); return { qaSessionId: id, cursor: events.length, events: events.slice(start).map(redactPolledEvent) }; }
   async function captureStart(id) { const session = sessions.get(id); if (!session) throw new Error("QA session not found"); await command(session, "Network.enable"); await command(session, "Runtime.enable"); await command(session, "Log.enable"); session.captureCursor = session.cdp.events.length; return { qaSessionId: id, active: true, limits: { responses: 16, bodyChars: 65536 }, presenter: "suppressed" }; }
   const redact = (body) => body.replace(/(authorization|cookie|token|secret|password)\s*[:=]\s*[^\s",&]+/gi, "$1=[REDACTED]");
   async function captureExport(id) {
@@ -197,7 +287,12 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
     const all = session.cdp.events.slice(session.captureCursor).filter((event) => event.sessionId === session.cdpSession);
     const byRequest = new Map();
     for (const event of all) { const requestId = event.params?.requestId; if (!requestId) continue; const item = byRequest.get(requestId) ?? {}; if (event.method === "Network.requestWillBeSent") item.request = event.params; if (event.method === "Network.responseReceived") item.response = event.params; if (event.method === "Network.loadingFinished") item.finished = event.params; byRequest.set(requestId, item); }
-    const headers = (raw = {}) => Object.entries(raw).map(([name, value]) => ({ name, value: redact(String(value)) }));
+    // `redact` pattern-matches a "keyword: value" shape inside one string --
+    // exactly what a response BODY looks like, but a header value never
+    // repeats its own name ("Bearer xyz" contains no literal "authorization"),
+    // so applying it to a header's value alone silently redacted nothing.
+    // Sensitive headers are stripped by NAME instead, unconditionally.
+    const headers = (raw = {}) => Object.entries(raw).map(([name, value]) => ({ name, value: SENSITIVE_HEADER_NAMES.has(name.toLowerCase()) ? "[REDACTED]" : redact(String(value)) }));
     const network = []; const harEntries = []; let remaining = 65536;
     for (const [requestId, item] of [...byRequest].filter(([, item]) => item.finished && item.response).slice(0, 16)) {
       const req = item.request?.request ?? {}; const res = item.response.response ?? {}; let body = "[response body unavailable]"; let encoded = false; let truncated = true;
@@ -208,7 +303,7 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
     }
     const console = all.filter((event) => ["Runtime.consoleAPICalled", "Runtime.exceptionThrown", "Log.entryAdded"].includes(event.method)).map(({ method, params }) => ({ method, params })).slice(0, 100);
     const har = { log: { version: "1.2", creator: { name: "sassfully embedded QA", version: "1" }, pages: [{ startedDateTime: new Date().toISOString(), id: id, title: session.url, pageTimings: {} }], entries: harEntries } };
-    const evidence = { format: "sassfully/qa-evidence/v1", qaSessionId: id, limits: { responses: 16, bodyChars: 65536, console: 100 }, network, har, console, events: all.map(({ method, params }) => ({ method, params })).slice(0, 500), presenter: "suppressed" };
+    const evidence = { format: "sassfully/qa-evidence/v1", qaSessionId: id, limits: { responses: 16, bodyChars: 65536, console: 100 }, network, har, console, events: all.map(redactPolledEvent).slice(0, 500), presenter: "suppressed" };
     const evidencePath = join(session.evidenceDir, "evidence.json");
     await driverRuntime.writeFile(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`, { mode: 0o600 });
     return { ...evidence, evidencePath, screenshotPaths: Array.from({ length: session.screenshotCount }, (_, index) => join(session.evidenceDir, `screenshot-${String(index + 1).padStart(3, "0")}.png`)) };

@@ -61,7 +61,7 @@ generic browser-evaluation endpoint. Its actions are:
 | `stop` | Stops the resident run and clears its overlay/stage. |
 | `resume` | Re-runs the last resident script after an explicit audio unlock. |
 | `evidence_start`, `evidence_stop`, `evidence_export` | Controls the host's existing opt-in evidence capture; `start` requires `permission:true`. |
-| `qa_start` | Starts owned local Chromium at a loopback URL; `mode` is `headed` or `headless` (default headless). |
+| `qa_start` | Starts owned local Chromium at a loopback URL, or a URL on an origin the server was started with `--allow-origin` for; `mode` is `headed` or `headless` (default headless). |
 | `qa_action` | Runs exactly one typed operation: `snapshot`, `click`, `fill`, `press`, or `screenshot`; optional `narration` is spoken without a tour overlay. |
 | `qa_test_narrated_replay` | Test-only: runs a validated script twice through the bound page after its owned QA browser receives the private CDP audio-test admission; returns explicit audio, spotlight, caption, and completed-step receipts. |
 | `qa_stop` | Closes the owned Chromium and removes its disposable profile. |
@@ -118,9 +118,45 @@ For an owned QA session only, `qa_cdp` sends a CDP command to the single page
 session created by `qa_start`; `qa_events` polls its bounded event transcript.
 It supports DOM/layout (`DOM.*`), runtime/console (`Runtime.*`, `Log.*`),
 network and screenshot inspection. This is not a user-browser connection: the
-browser is launched by this process, its initial URL is loopback-only, and
-`Target.*`, `Browser.*`, and page-navigation CDP commands are refused so it
-cannot attach/create/close another target or leave the local app.
+browser is launched by this process, its initial URL is loopback-only unless
+`--allow-origin` explicitly names its origin, and `Target.*`, `Browser.*`, and
+page-navigation CDP commands are refused so it cannot attach/create/close
+another target or leave the launched page's origin.
+
+### Targeting an allowlisted remote origin (e.g. staging)
+
+By default `qa_start`/`embedded_demo run` only ever admit a loopback URL —
+this is the whole "cannot navigate off the owned page" boundary. To let a
+narrated demo/QA session target one explicit remote deployment (for example
+`https://staging.kitsoki.dev`), start the server with:
+
+```sh
+node packages/feedback-extension/story-bridge/stdio-server.mjs \
+  --port 8931 --allow-embedded-demo \
+  --allow-origin https://staging.kitsoki.dev \
+  --auth-bearer-env KITSOKI_STAGING_SERVICE_TOKEN
+```
+
+`--allow-origin` is repeatable and takes a bare origin (scheme + host[:port],
+no path); with none given, behavior is unchanged from before this existed.
+`--auth-bearer-env` names an **environment variable** whose value (never the
+flag's own argv value) is attached as `Authorization: Bearer <value>` to
+requests whose resolved origin is *exactly* the allowlisted one — never to a
+third-party subresource (a CDN, a font host, analytics) the page may also
+load. The credential is read once per `qa_start` against that origin and is
+never logged, never placed in an MCP tool result, and never written to a
+screenshot. `qa_start` refuses with a named-env-var error if the variable is
+unset; a loopback target never reads it at all, even when the flag is
+present. `qa_capture_export`/`qa_har_export`/`qa_events` redact `Authorization`,
+`Proxy-Authorization`, `Cookie`, and `Set-Cookie` header values by NAME
+(unconditionally, not by pattern-matching the value text) in both the raw
+event transcript and the HAR entries.
+
+The embedded-session websocket handshake (`embeddedPageIdentity`, used by
+`sessions`/`propose`/`validate`/`push`/`run`) accepts the same allowlisted
+origins, so a demoMode page served by staging can bind exactly like a
+loopback one — this is additive and requires no change to the page's own
+demo-bridge wiring beyond it being reachable.
 
 `qa_capture_start` enables Network, Runtime and Log collection;
 `qa_capture_export` returns at most 16 response bodies/65,536 body characters,
