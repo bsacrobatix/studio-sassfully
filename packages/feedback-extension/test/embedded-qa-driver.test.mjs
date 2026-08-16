@@ -4,7 +4,7 @@ import { EventEmitter } from "node:events";
 import { access, mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createEmbeddedQADriver, validateQARequest } from "../story-bridge/embedded-qa-driver.mjs";
+import { boundSnapshotDigest, createEmbeddedQADriver, SNAPSHOT_FULL_MAX_CHARS, SNAPSHOT_LIMITS, validateQARequest } from "../story-bridge/embedded-qa-driver.mjs";
 
 function fakeChild() {
   const child = new EventEmitter();
@@ -404,5 +404,249 @@ test("the SAME redaction covers a Keychain-resolved bearer end to end: attached 
   assert.doesNotMatch(raw, /keychain-only-s3cr3t/, "a Keychain-sourced bearer must be redacted identically to an env-var-sourced one");
   const entry = har.log.entries.find((e) => e.request.url === "https://staging.kitsoki.dev/rpc");
   assert.equal(entry.request.headers.find((h) => h.name === "Authorization").value, "[REDACTED]");
+  await driver.stop(started.qaSessionId);
+});
+
+// --- Bounded observation: qa_action snapshot / screenshot -------------------
+//
+// Measured defect (2026-08-16, a local dev app): `qa_action
+// {operation:"snapshot"}` returned 265,507 characters on a SINGLE line. That
+// is past the MCP tool-result limit, so it spilled to a temp file whose lines
+// were then too long to read back in chunks -- an agent could not read its own
+// observation at all, and fell back to screenshots.
+
+// A minimal fake document. The package has zero dependencies on purpose, so
+// there is no jsdom here; `querySelectorAll` answers the three selector
+// constants the page-side digest builder actually asks for, which is what the
+// digest's mapping, naming, selector-generation and caps need to be exercised.
+function fakeElement(tag, attributes = {}, textContent = "") {
+  return {
+    tagName: tag.toUpperCase(),
+    id: attributes.id ?? "",
+    textContent,
+    disabled: attributes.disabled === true,
+    children: [],
+    parentElement: null,
+    hasAttribute: (name) => attributes[name] != null,
+    getAttribute: (name) => (attributes[name] == null ? null : String(attributes[name])),
+    getClientRects: () => [{}],
+  };
+}
+
+function fakePage({ interactive = [], headings = [], landmarks = [], htmlChars = 1000, title = "Runboard" } = {}) {
+  const body = fakeElement("body");
+  const html = fakeElement("html");
+  html.children = [body];
+  body.parentElement = html;
+  body.children = [...interactive, ...headings, ...landmarks];
+  for (const node of body.children) node.parentElement = body;
+  html.outerHTML = "<".padEnd(htmlChars, "x");
+  const all = [html, body, ...body.children];
+  const document = {
+    title,
+    documentElement: html,
+    querySelectorAll(selectors) {
+      if (selectors === "*") return all;
+      if (selectors.startsWith("a[href]")) return interactive;
+      if (selectors.startsWith("h1, h2")) return headings;
+      return landmarks;
+    },
+  };
+  return { document, location: { href: "http://127.0.0.1:8932/home" }, getComputedStyle: () => ({ display: "block", visibility: "visible" }) };
+}
+
+// A CDP fake that serves BOTH shapes of snapshot request, so one test file is
+// a valid red proof against the pre-fix driver and a valid green proof after:
+// the old driver asks for `document.documentElement.outerHTML` and gets the
+// wall; the new one ships a serialized digest builder, which this evaluates
+// for real against the fake page.
+function fakeCDPWithPage(page, { pngBytes = "png-test-bytes" } = {}) {
+  const calls = [];
+  const cdp = {
+    calls,
+    events: [],
+    async call(method, params, sessionId) {
+      calls.push({ method, params, sessionId });
+      if (method === "Target.createTarget") return { targetId: "page-target" };
+      if (method === "Target.attachToTarget") return { sessionId: "page-session" };
+      if (method === "Page.captureScreenshot") return { data: Buffer.from(pngBytes).toString("base64") };
+      if (method === "Runtime.evaluate") {
+        const expression = params.expression ?? "";
+        if (expression === "document.documentElement.outerHTML") return { result: { value: page.document.documentElement.outerHTML } };
+        if (expression.startsWith("(function snapshotDigestInPage")) {
+          const build = new Function("document", "location", "getComputedStyle", `return (${expression});`);
+          return { result: { value: build(page.document, page.location, page.getComputedStyle) } };
+        }
+        return { result: { value: true } };
+      }
+      return { result: { value: true } };
+    },
+    close() { cdp.closed = true; },
+  };
+  return cdp;
+}
+
+async function startDriverOn(page, options = {}, cdpOverride = null) {
+  const cdp = cdpOverride ?? fakeCDPWithPage(page);
+  const root = await mkdtemp(join(tmpdir(), "sassfully-qa-snapshot-"));
+  const directories = { n: 0 };
+  const driver = createEmbeddedQADriver({ ...options, runtime: fakeDriverRuntime(cdp, root, directories, options.runtime ?? {}) });
+  const started = await driver.start({ url: "http://127.0.0.1:8932/home" });
+  return { driver, cdp, started };
+}
+
+function busyPage() {
+  const interactive = Array.from({ length: 400 }, (_, index) =>
+    fakeElement("button", { "aria-label": `Open the very long accessible name for record number ${index} in the workbench` }, ""));
+  const headings = Array.from({ length: 30 }, (_, index) => fakeElement(`h${(index % 6) + 1}`, {}, `Section heading ${index}`));
+  const landmarks = [fakeElement("main", { "aria-label": "Runboard" }), fakeElement("nav", { "aria-label": "Primary" })];
+  return fakePage({ interactive, headings, landmarks, htmlChars: 265_507 });
+}
+
+test("RED: qa_action snapshot returns a BOUNDED structured digest, not the raw document", async () => {
+  const page = busyPage();
+  const { driver, started } = await startDriverOn(page);
+  const snapshot = await driver.action({ qaSessionId: started.qaSessionId, operation: "snapshot" });
+
+  const size = JSON.stringify(snapshot).length;
+  assert.ok(size <= 32_768, `a snapshot must be readable in one MCP tool result; this one is ${size} characters (the raw document is ${page.document.documentElement.outerHTML.length})`);
+  assert.equal(snapshot.detail, "digest");
+  assert.equal(snapshot.html, undefined, "the default snapshot must not carry the raw document at all");
+  assert.ok(Array.isArray(snapshot.interactive) && snapshot.interactive.length > 0, "a digest must list interactive elements");
+  assert.ok(Array.isArray(snapshot.headings) && snapshot.headings.length > 0, "a digest must list headings");
+  assert.ok(Array.isArray(snapshot.landmarks) && snapshot.landmarks.length > 0, "a digest must list landmark regions");
+  await driver.stop(started.qaSessionId);
+});
+
+test("the digest carries what an agent needs to decide what to click, and says where it was cut", async () => {
+  const page = busyPage();
+  const { driver, started } = await startDriverOn(page);
+  const snapshot = await driver.action({ qaSessionId: started.qaSessionId, operation: "snapshot" });
+
+  assert.equal(snapshot.url, "http://127.0.0.1:8932/home");
+  assert.equal(snapshot.title, "Runboard");
+  // Counts report the TRUE totals even where the lists are capped -- an agent
+  // must never mistake a cap for the page being small.
+  assert.equal(snapshot.counts.interactive, 400);
+  assert.equal(snapshot.counts.headings, 30);
+  assert.equal(snapshot.counts.htmlChars, 265_507);
+  assert.equal(snapshot.interactive.length, SNAPSHOT_LIMITS.interactive);
+  assert.equal(snapshot.truncated.interactive, true, "a capped list must declare itself truncated");
+  assert.equal(snapshot.truncated.headings, false);
+  const first = snapshot.interactive[0];
+  assert.equal(first.role, "button");
+  assert.match(first.name, /^Open the very long accessible name for record number 0/);
+  assert.ok(first.name.length <= SNAPSHOT_LIMITS.name, `an accessible name must be capped at ${SNAPSHOT_LIMITS.name}; got ${first.name.length}`);
+  assert.equal(first.selector, "html > body:nth-child(1) > button:nth-child(1)");
+  assert.deepEqual(snapshot.landmarks.map((entry) => [entry.role, entry.name]), [["main", "Runboard"], ["nav", "Primary"]]);
+  assert.deepEqual(snapshot.headings[0], { level: 1, text: "Section heading 0", selector: "html > body:nth-child(1) > h1:nth-child(401)" });
+  await driver.stop(started.qaSessionId);
+});
+
+test("a data-testid becomes the selector, matching the anchor vocabulary the demo player already resolves", async () => {
+  const page = fakePage({
+    interactive: [fakeElement("button", { "data-testid": "compose-open" }, "Compose"), fakeElement("input", { type: "checkbox", "aria-disabled": "true", "aria-label": "Archived" })],
+    headings: [fakeElement("h2", {}, "Inbox")],
+    landmarks: [],
+  });
+  const { driver, started } = await startDriverOn(page);
+  const snapshot = await driver.action({ qaSessionId: started.qaSessionId, operation: "snapshot" });
+  assert.deepEqual(snapshot.interactive[0], { role: "button", name: "Compose", selector: '[data-testid="compose-open"]', testid: "compose-open" });
+  assert.deepEqual(snapshot.interactive[1], { role: "checkbox", name: "Archived", selector: "html > body:nth-child(1) > input:nth-child(2)", disabled: true });
+  assert.deepEqual(snapshot.truncated, { interactive: false, headings: false, landmarks: false });
+  await driver.stop(started.qaSessionId);
+});
+
+test("RED: detail:\"full\" is an explicit opt-in, is itself bounded, and reports the size it was cut from", async () => {
+  const page = busyPage();
+  const { driver, started } = await startDriverOn(page);
+  const snapshot = await driver.action({ qaSessionId: started.qaSessionId, operation: "snapshot", detail: "full" });
+
+  assert.equal(snapshot.detail, "full");
+  assert.equal(snapshot.htmlChars, 265_507, "the true document size must be reported");
+  assert.equal(snapshot.returnedChars, SNAPSHOT_FULL_MAX_CHARS);
+  assert.equal(snapshot.html.length, SNAPSHOT_FULL_MAX_CHARS, `even the opt-in raw dump is bounded at ${SNAPSHOT_FULL_MAX_CHARS}`);
+  assert.equal(snapshot.truncated, true);
+  assert.match(snapshot.truncationNote, /265507 characters; the first 65536 are returned/);
+  await driver.stop(started.qaSessionId);
+});
+
+test("RED: qa_action rejects an unknown snapshot detail, and detail on a non-snapshot operation", () => {
+  assert.equal(validateQARequest({ action: "qa_action", qaSessionId: "q", operation: "snapshot", detail: "digest" }), null);
+  assert.equal(validateQARequest({ action: "qa_action", qaSessionId: "q", operation: "snapshot", detail: "full" }), null);
+  assert.equal(validateQARequest({ action: "qa_action", qaSessionId: "q", operation: "snapshot", detail: "everything" }), "qa_action.detail must be digest or full");
+  assert.equal(validateQARequest({ action: "qa_action", qaSessionId: "q", operation: "screenshot", detail: "full" }), "qa_action.detail applies only to snapshot");
+});
+
+test("boundSnapshotDigest trims the least decision-relevant list first and never exceeds its ceiling", () => {
+  const entry = (index) => ({ role: "button", name: `n${index}`.padEnd(80, "x"), selector: `#s${index}` });
+  const digest = {
+    url: "http://127.0.0.1:8932/", title: "t",
+    counts: { elements: 9, interactive: 60, headings: 60, landmarks: 60 },
+    interactive: Array.from({ length: 60 }, (_, i) => entry(i)),
+    headings: Array.from({ length: 60 }, (_, i) => ({ level: 2, text: `h${i}`.padEnd(80, "x"), selector: `#h${i}` })),
+    landmarks: Array.from({ length: 60 }, (_, i) => ({ role: "main", name: `l${i}`.padEnd(80, "x"), selector: `#l${i}` })),
+    truncated: { interactive: false, headings: false, landmarks: false },
+  };
+  assert.ok(JSON.stringify(digest).length > 4096, "the fixture must actually be over the ceiling under test");
+  const bounded = boundSnapshotDigest(digest, 4096);
+  assert.ok(JSON.stringify(bounded).length <= 4096, `boundSnapshotDigest must respect its ceiling; got ${JSON.stringify(bounded).length}`);
+  assert.equal(bounded.landmarks.length, 0, "landmarks are shed before anything else");
+  assert.equal(bounded.truncated.landmarks, true, "every trim is declared");
+  assert.equal(bounded.counts.interactive, 60, "counts still report the true totals after trimming");
+});
+
+// --- Defect 2: a screenshot must never wait on a reply that cannot arrive ---
+//
+// Measured: `qa_action {operation:"screenshot"}` against a healthy,
+// already-loaded local page blew past a 120s caller budget. Cause: the
+// pre-screenshot presenter stop (stdio-server.mjs beforeScreenshot ->
+// callEmbeddedPage "embedded-demo:stop") inherited callEmbeddedPage's 120_000
+// default. A reloaded or navigated page leaves an open socket with nobody left
+// to answer, so that reply never arrives.
+//
+// This is asserted as STATE, not timing: `delay` is injected to fire the
+// driver's bound with no wall-clock wait at all, so the green path performs
+// zero waiting and cannot be affected by machine load. The sentinel below
+// exists only to turn the pre-fix hang into a legible failure instead of a
+// silent stall.
+test("RED: a presenter stop that can never be answered does not hold the screenshot; the result names what it stopped waiting for", async () => {
+  const page = fakePage({ interactive: [fakeElement("button", {}, "Go")] });
+  const { driver, started } = await startDriverOn(page, {
+    beforeScreenshot: () => new Promise(() => {}), // a reply that can never arrive
+    runtime: { delay: () => Promise.resolve() },   // the driver's bound, fired with no wall-clock wait
+  });
+
+  let sentinelTimer;
+  const sentinel = new Promise((resolve) => { sentinelTimer = setTimeout(() => resolve("HUNG"), 5_000); });
+  const outcome = await Promise.race([driver.action({ qaSessionId: started.qaSessionId, operation: "screenshot" }), sentinel]);
+  clearTimeout(sentinelTimer);
+
+  assert.notEqual(outcome, "HUNG", "a screenshot must never wait unboundedly on the presenter-stop hook");
+  assert.equal(outcome.presenter, "stop_timed_out");
+  assert.match(outcome.presenterDetail, /presenter stop did not settle within \d+ms \(waiting for the bound embedded page to acknowledge embedded-demo:stop\); captured anyway/);
+  assert.equal(outcome.chrome, "suppressed", "the capture still happened, and still stripped Kitsoki chrome");
+  assert.equal(outcome.bytes, Buffer.from("png-test-bytes").length, "the caller still gets the pixels, not just an error");
+  await driver.stop(started.qaSessionId);
+});
+
+test("a presenter-stop hook that REJECTS is reported by name and still yields the capture", async () => {
+  const page = fakePage({ interactive: [fakeElement("button", {}, "Go")] });
+  const { driver, started } = await startDriverOn(page, {
+    beforeScreenshot: async () => { throw new Error("embedded bridge phase screenshot_presenter_stop timed out after 10000ms waiting for session s1"); },
+  });
+  const screenshot = await driver.action({ qaSessionId: started.qaSessionId, operation: "screenshot" });
+  assert.equal(screenshot.presenter, "stop_failed");
+  assert.match(screenshot.presenterDetail, /phase screenshot_presenter_stop timed out after 10000ms/);
+  assert.equal(screenshot.chrome, "suppressed");
+  await driver.stop(started.qaSessionId);
+});
+
+test("a presenter-stop hook that succeeds keeps today's exact receipt", async () => {
+  const page = fakePage({ interactive: [fakeElement("button", {}, "Go")] });
+  const { driver, started } = await startDriverOn(page, { beforeScreenshot: async () => ({ presenter: "suppressed" }) });
+  const screenshot = await driver.action({ qaSessionId: started.qaSessionId, operation: "screenshot" });
+  assert.equal(screenshot.presenter, "suppressed");
+  assert.equal(screenshot.presenterDetail, undefined);
   await driver.stop(started.qaSessionId);
 });

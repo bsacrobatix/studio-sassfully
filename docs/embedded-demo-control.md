@@ -63,6 +63,25 @@ generic browser-evaluation endpoint. Its actions are:
 | `evidence_start`, `evidence_stop`, `evidence_export` | Controls the host's existing opt-in evidence capture; `start` requires `permission:true`. |
 | `qa_start` | Starts owned local Chromium at a loopback URL, or a URL on an origin the server was started with `--allow-origin` for; `mode` is `headed` or `headless` (default headless). |
 | `qa_action` | Runs exactly one typed operation: `snapshot`, `click`, `fill`, `press`, or `screenshot`; optional `narration` is spoken without a tour overlay. |
+
+`qa_action snapshot` returns a **bounded structured digest** by default
+(`detail: "digest"`): `url`, `title`, true `counts`, and capped lists of
+`interactive` elements (`role`, `name`, `selector`, `testid`, `disabled`),
+`headings` and `landmarks` — the anchor vocabulary
+`packages/demo-player/src/anchor-resolve.mjs` already resolves, so an entry's
+`selector` can be handed straight back as a `click`/`fill` selector. Every cap
+that bites is declared in `truncated`, and `counts` always reports the real
+totals. `detail: "full"` opts into the raw document; it is still bounded (64
+KiB) and always reports `htmlChars`, the true size it was cut from. The
+unbounded form this replaced measured 265,507 characters on one line — past the
+MCP tool-result limit, spilled to a temp file whose lines were then too long to
+read back, so the caller could not read its own observation at all.
+
+`qa_action screenshot` clears the tour presenter first, but that is a courtesy
+and never blocks the evidence: the stop is bounded, and a page that cannot
+answer it (reloaded, navigated, socket open with nobody listening) yields the
+capture anyway with `presenter: "stop_timed_out"` and a `presenterDetail`
+naming what was waited for.
 | `qa_test_narrated_replay` | Test-only: runs a validated script twice through the bound page after its owned QA browser receives the private CDP audio-test admission; returns explicit audio, spotlight, caption, and completed-step receipts. |
 | `qa_stop` | Closes the owned Chromium and removes its disposable profile. |
 

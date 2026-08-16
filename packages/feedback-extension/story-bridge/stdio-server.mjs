@@ -58,14 +58,31 @@ const embeddedDrafts = createEmbeddedDemoDrafts({ validateScript: (script) => va
 const pending = new Map();
 const QA_AUDIO_UNLOCK_TIMEOUT_MS = 10_000;
 const QA_REPLAY_RUN_TIMEOUT_MS = 45_000;
+// The presenter stop that precedes a screenshot used to inherit
+// callEmbeddedPage's 120s default. A page that was reloaded or navigated
+// leaves a still-open socket with nobody left to answer, so that reply can
+// never arrive and the screenshot -- against a healthy, already-loaded page --
+// blew straight past a 120s caller budget. Bounded here AND in the driver
+// (embedded-qa-driver.mjs `clearPresenter`), so neither layer alone can hang.
+const QA_PRESENTER_STOP_TIMEOUT_MS = 10_000;
 const qaDriver = createEmbeddedQADriver({ narrate: async (text, qaSession) => {
   const session = embeddedSessionForQA(qaSession);
   if (!session) throw new Error("QA narration needs a bound embedded demo page with narration enabled");
   return callEmbeddedPage(session, "embedded-demo:qa-narrate", { text });
 }, beforeScreenshot: async (qaSession) => {
   const session = embeddedSessionForQA(qaSession);
-  if (session) await callEmbeddedPage(session, "embedded-demo:stop", {});
-}, allowedOrigins, authBearerEnv, authBearerKeychainService, authBearerKeychainAccount });
+  if (!session) return { presenter: "suppressed" };
+  try {
+    await callEmbeddedPage(session, "embedded-demo:stop", {}, { phase: "screenshot_presenter_stop", timeoutMs: QA_PRESENTER_STOP_TIMEOUT_MS });
+    return { presenter: "suppressed" };
+  } catch (error) {
+    // Clearing the presenter is a courtesy; the screenshot is the evidence.
+    // Report why it was skipped instead of losing the capture to it.
+    return { presenter: "stop_timed_out", presenterDetail: error.message };
+  }
+// The driver's own bound is deliberately the outer one: when the bridge can
+// name the phase it timed out on, that more specific message should win.
+}, presenterStopTimeoutMs: QA_PRESENTER_STOP_TIMEOUT_MS + 2_000, allowedOrigins, authBearerEnv, authBearerKeychainService, authBearerKeychainAccount });
 function reply(id, result) { return { jsonrpc: "2.0", id, result }; }
 function failure(id, message, code = -32602) { return { jsonrpc: "2.0", id, error: { code, message } }; }
 function websocketAccept(key) { return crypto.createHash("sha1").update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest("base64"); }
@@ -187,7 +204,7 @@ server.listen(port, "127.0.0.1", () => {
 
 const tools = [
   { name: "linkedin_story", description: "Autonomous control of the one loopback-paired Chrome tab. Pairing is the authorization; no per-action modal is shown.", inputSchema: { type: "object", properties: { action: { enum: ["navigate", "snapshot", "click", "fill", "press", "extract", "run_script", "demo_run", "demo_stop"] }, url: { type: "string" }, selector: { type: "string" }, target: { type: "string", description: "Accessible label for click when no selector is supplied" }, text: { type: "string" }, key: { type: "string" }, captureEvidence: { type: "boolean" }, steps: { type: "array" }, script: { type: "object" } }, required: ["action"], additionalProperties: false } },
-  { name: "embedded_demo", description: `Local demoMode tour plus owned headed/headless Chromium QA. QA has typed controls, explicit raw CDP, and bounded console/network-body HAR evidence; all are restricted to the one loopback page launched by this MCP${allowedOrigins.size ? ` or an explicitly allowlisted remote origin (${[...allowedOrigins].join(", ")})` : ""} and cannot attach targets or navigate elsewhere. qa_test_narrated_replay is a test-only, two-run CDP audio path: qa_start must load __sassfully_qa_audio_test=1; normal tours still require a human click. Screenshots clear the presenter; narration is overlay-free.`, inputSchema: { type: "object", properties: { action: { enum: ["sessions", "propose", "validate", "update", "push", "run", "stop", "resume", "evidence_start", "evidence_stop", "evidence_export", "qa_start", "qa_action", "qa_cdp", "qa_events", "qa_capture_start", "qa_capture_export", "qa_har_export", "qa_test_narrated_replay", "qa_stop"] }, sessionId: { type: "string" }, draftId: { type: "string" }, revision: { type: "number" }, permission: { type: "boolean" }, script: { type: "object" }, url: { type: "string", description: "qa_start only: absolute loopback app URL, or a URL on an --allow-origin allowlisted remote origin" }, mode: { enum: ["headed", "headless"] }, qaSessionId: { type: "string" }, operation: { enum: ["snapshot", "click", "fill", "press", "screenshot"] }, selector: { type: "string" }, text: { type: "string" }, key: { type: "string" }, narration: { type: "string" }, method: { type: "string", description: "qa_cdp only: CDP command on the owned attached page session" }, params: { type: "object" }, since: { type: "integer", minimum: 0 }, runs: { type: "integer", enum: [2] } }, required: ["action"], additionalProperties: false } },
+  { name: "embedded_demo", description: `Local demoMode tour plus owned headed/headless Chromium QA. QA has typed controls, explicit raw CDP, and bounded console/network-body HAR evidence; all are restricted to the one loopback page launched by this MCP${allowedOrigins.size ? ` or an explicitly allowlisted remote origin (${[...allowedOrigins].join(", ")})` : ""} and cannot attach targets or navigate elsewhere. qa_action snapshot returns a bounded structured digest (interactive elements with role/name/selector, headings, landmarks, counts) -- pass detail:"full" for the bounded raw document. A screenshot never blocks on the presenter stop. qa_test_narrated_replay is a test-only, two-run CDP audio path: qa_start must load __sassfully_qa_audio_test=1; normal tours still require a human click. Screenshots clear the presenter; narration is overlay-free.`, inputSchema: { type: "object", properties: { action: { enum: ["sessions", "propose", "validate", "update", "push", "run", "stop", "resume", "evidence_start", "evidence_stop", "evidence_export", "qa_start", "qa_action", "qa_cdp", "qa_events", "qa_capture_start", "qa_capture_export", "qa_har_export", "qa_test_narrated_replay", "qa_stop"] }, sessionId: { type: "string" }, draftId: { type: "string" }, revision: { type: "number" }, permission: { type: "boolean" }, script: { type: "object" }, url: { type: "string", description: "qa_start only: absolute loopback app URL, or a URL on an --allow-origin allowlisted remote origin" }, mode: { enum: ["headed", "headless"] }, qaSessionId: { type: "string" }, operation: { enum: ["snapshot", "click", "fill", "press", "screenshot"] }, detail: { enum: ["digest", "full"], description: "snapshot only: 'digest' (default) returns a bounded structured observation — interactive elements with role/name/selector, headings, landmarks and counts; 'full' returns the raw document, bounded, with its true size reported" }, selector: { type: "string" }, text: { type: "string" }, key: { type: "string" }, narration: { type: "string" }, method: { type: "string", description: "qa_cdp only: CDP command on the owned attached page session" }, params: { type: "object" }, since: { type: "integer", minimum: 0 }, runs: { type: "integer", enum: [2] } }, required: ["action"], additionalProperties: false } },
 ];
 function callBridge(command) {
   const check = validateStoryCommand(command); if (!check.ok) return Promise.reject(new Error(check.error));

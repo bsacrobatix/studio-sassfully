@@ -45,6 +45,26 @@ const isAllowedQAUrl = (value, allowedOrigins) => {
 const selector = (value) => typeof value === "string" && value.length > 0 && value.length <= 500;
 const text = (value) => typeof value === "string" && value.length <= 2000;
 const js = (value) => JSON.stringify(value);
+// A snapshot is an OBSERVATION, and an observation nobody can read is not one.
+// The unbounded `document.documentElement.outerHTML` this used to return
+// measured 265,507 characters on a single line against a real dev app -- past
+// the MCP tool-result limit, spilled to a temp file whose lines were then too
+// long to read back in chunks. So `snapshot` defaults to a bounded structured
+// digest, and the raw dump is an explicit `detail: "full"` opt-in that is
+// ALSO bounded and always reports the full size it came from.
+export const SNAPSHOT_DETAILS = ["digest", "full"];
+export const SNAPSHOT_LIMITS = { interactive: 120, headings: 60, landmarks: 40, name: 160 };
+// Hard ceiling on the serialized digest. Chosen well under a typical MCP
+// result limit so a digest is always readable in one piece; the per-list caps
+// above are the usual binding constraint and this is the backstop.
+export const SNAPSHOT_DIGEST_MAX_CHARS = 24_576;
+// `detail: "full"` reuses the same 64 KiB body budget the evidence exporter
+// already uses for a captured response body, rather than inventing a second
+// number for "how much raw text is reasonable to hand back".
+export const SNAPSHOT_FULL_MAX_CHARS = 65_536;
+// How long the pre-screenshot presenter-stop hook may take before the capture
+// proceeds anyway with a named reason. See `clearPresenter` below.
+export const PRESENTER_STOP_TIMEOUT_MS = 10_000;
 const QA_AUDIO_ENABLE_SELECTOR = '[data-testid="sassfully-demo-audio"]';
 const SENSITIVE_HEADER_NAMES = new Set(["authorization", "proxy-authorization", "cookie", "set-cookie"]);
 const redactHeaderMap = (raw) => {
@@ -68,7 +88,137 @@ const redactPolledEvent = ({ method, params }) => {
   return { method, params: cloned };
 };
 
+// Page-side snapshot digest builder. It is serialized with
+// Function.prototype.toString and evaluated INSIDE the QA page, so it may only
+// use DOM globals and its own argument -- it must never close over module
+// scope. Its anchor vocabulary (role / name / testid / selector) is
+// deliberately the same one packages/demo-player/src/anchor-resolve.mjs
+// already resolves against, so a digest entry can be handed straight back as a
+// qa_action `selector` or a demo step target without translation.
+export function snapshotDigestInPage(limits) {
+  const norm = (value) => String(value == null ? "" : value).replace(/\s+/g, " ").trim();
+  const cap = (value, max) => { const s = norm(value); return s.length > max ? `${s.slice(0, max - 1)}\u2026` : s; };
+  const quote = (value) => String(value).replace(/(["\\])/g, "\\$1");
+  const attr = (element, name) => (element.getAttribute ? element.getAttribute(name) : null);
+  const roleOf = (element) => {
+    const explicit = attr(element, "role");
+    if (explicit) return norm(explicit).split(" ")[0];
+    const tag = String(element.tagName || "").toLowerCase();
+    if (tag === "a") return element.hasAttribute && element.hasAttribute("href") ? "link" : "generic";
+    if (tag === "button" || tag === "summary") return "button";
+    if (tag === "select") return "combobox";
+    if (tag === "textarea") return "textbox";
+    if (tag === "input") {
+      const type = String(attr(element, "type") || "text").toLowerCase();
+      if (type === "checkbox" || type === "radio") return type;
+      if (type === "button" || type === "submit" || type === "reset" || type === "image") return "button";
+      return "textbox";
+    }
+    if (/^h[1-6]$/.test(tag)) return "heading";
+    return tag;
+  };
+  const nameOf = (element) => {
+    const label = attr(element, "aria-label");
+    if (label) return norm(label);
+    const body = norm(element.textContent);
+    if (body) return body;
+    for (const name of ["value", "placeholder", "alt", "title", "name"]) {
+      const value = attr(element, name);
+      if (value) return norm(value);
+    }
+    return "";
+  };
+  const selectorOf = (element) => {
+    const testid = attr(element, "data-testid");
+    if (testid) return `[data-testid="${quote(testid)}"]`;
+    const parts = [];
+    let node = element;
+    for (let depth = 0; node && depth < 6; depth += 1) {
+      if (node.id && /^[A-Za-z][\w-]*$/.test(node.id)) { parts.unshift(`#${node.id}`); break; }
+      const parent = node.parentElement;
+      if (!parent) { parts.unshift(String(node.tagName || "").toLowerCase()); break; }
+      const index = Array.prototype.indexOf.call(parent.children, node) + 1;
+      parts.unshift(`${String(node.tagName || "").toLowerCase()}:nth-child(${index})`);
+      node = parent;
+    }
+    return parts.join(" > ");
+  };
+  const shown = (element) => {
+    const style = typeof getComputedStyle === "function" ? getComputedStyle(element) : null;
+    if (style && (style.display === "none" || style.visibility === "hidden")) return false;
+    if (typeof element.getClientRects !== "function") return true;
+    return element.getClientRects().length > 0;
+  };
+  const INTERACTIVE = 'a[href], button, summary, select, textarea, input:not([type="hidden"]), [role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="checkbox"], [role="radio"], [role="switch"], [role="combobox"], [role="textbox"], [contenteditable="true"], [data-testid]';
+  const HEADING = 'h1, h2, h3, h4, h5, h6, [role="heading"]';
+  const LANDMARK = 'main, nav, header, footer, aside, form, [role="main"], [role="navigation"], [role="banner"], [role="contentinfo"], [role="complementary"], [role="search"], [role="region"], [role="dialog"], [role="alertdialog"]';
+  const query = (selectors) => Array.prototype.filter.call(document.querySelectorAll(selectors), shown);
+
+  const interactive = query(INTERACTIVE);
+  const headings = query(HEADING);
+  const landmarks = query(LANDMARK);
+  return {
+    url: typeof location === "undefined" ? "" : location.href,
+    title: document.title || "",
+    counts: {
+      elements: document.querySelectorAll("*").length,
+      interactive: interactive.length,
+      headings: headings.length,
+      landmarks: landmarks.length,
+      htmlChars: document.documentElement.outerHTML.length,
+    },
+    interactive: interactive.slice(0, limits.interactive).map((element) => {
+      const entry = { role: roleOf(element), name: cap(nameOf(element), limits.name), selector: selectorOf(element) };
+      const testid = attr(element, "data-testid");
+      if (testid) entry.testid = testid;
+      if (element.disabled === true || attr(element, "aria-disabled") === "true") entry.disabled = true;
+      return entry;
+    }),
+    headings: headings.slice(0, limits.headings).map((element) => ({
+      level: Number((/^h([1-6])$/.exec(String(element.tagName || "").toLowerCase()) || [])[1]) || Number(attr(element, "aria-level")) || 0,
+      text: cap(nameOf(element), limits.name),
+      selector: selectorOf(element),
+    })),
+    landmarks: landmarks.slice(0, limits.landmarks).map((element) => ({
+      role: roleOf(element),
+      name: cap(attr(element, "aria-label") || "", limits.name),
+      selector: selectorOf(element),
+    })),
+    truncated: {
+      interactive: interactive.length > limits.interactive,
+      headings: headings.length > limits.headings,
+      landmarks: landmarks.length > limits.landmarks,
+    },
+  };
+}
+
+// The per-list caps are usually enough, but a page with very long accessible
+// names can still push the serialized digest past the ceiling. Trim from the
+// least decision-relevant list first (landmarks, then headings, then the
+// interactive elements the caller actually needs to choose what to click) and
+// record every trim in `truncated` -- silently returning a wall is the defect
+// this whole change exists to remove.
+export function boundSnapshotDigest(digest, maxChars = SNAPSHOT_DIGEST_MAX_CHARS) {
+  const fits = (value) => JSON.stringify(value).length <= maxChars;
+  if (fits(digest)) return digest;
+  const bounded = {
+    ...digest,
+    interactive: [...(digest.interactive ?? [])],
+    headings: [...(digest.headings ?? [])],
+    landmarks: [...(digest.landmarks ?? [])],
+    truncated: { ...(digest.truncated ?? {}) },
+  };
+  for (const key of ["landmarks", "headings", "interactive"]) {
+    while (bounded[key].length && !fits(bounded)) { bounded[key].pop(); bounded.truncated[key] = true; }
+    if (fits(bounded)) break;
+  }
+  return bounded;
+}
+
 async function sleep(ms) { await new Promise((resolve) => setTimeout(resolve, ms)); }
+// Never holds the process open: a pending bound is a ceiling on a wait, not a
+// reason for node to stay alive.
+function delay(ms) { return new Promise((resolve) => { const timer = setTimeout(resolve, ms); timer.unref?.(); }); }
 async function json(url) { const response = await fetch(url); if (!response.ok) throw new Error(`Chrome DevTools returned ${response.status}`); return response.json(); }
 async function waitForExit(child, timeoutMs = 3000) {
   if (child.exitCode != null) return;
@@ -136,6 +286,8 @@ export function validateQARequest(args, { allowedOrigins } = {}) {
     if (["click", "fill"].includes(args.operation) && !selector(args.selector)) return `${args.operation} needs selector`;
     if (args.operation === "fill" && !text(args.text)) return "fill needs bounded text";
     if (args.operation === "press" && !text(args.key)) return "press needs bounded key";
+    if (args.detail != null && !SNAPSHOT_DETAILS.includes(args.detail)) return `qa_action.detail must be ${SNAPSHOT_DETAILS.join(" or ")}`;
+    if (args.detail != null && args.operation !== "snapshot") return "qa_action.detail applies only to snapshot";
     if (args.narration != null && (!text(args.narration) || !args.narration.length)) return "narration must be a bounded non-empty string";
     return null;
   }
@@ -156,7 +308,7 @@ export function validateQARequest(args, { allowedOrigins } = {}) {
   return "unknown QA action";
 }
 
-export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}, allowedOrigins = new Set(), authBearerEnv = null, authBearerKeychainService = null, authBearerKeychainAccount = null } = {}) {
+export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}, allowedOrigins = new Set(), authBearerEnv = null, authBearerKeychainService = null, authBearerKeychainAccount = null, presenterStopTimeoutMs = PRESENTER_STOP_TIMEOUT_MS } = {}) {
   const driverRuntime = {
     chrome,
     spawn,
@@ -167,6 +319,7 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
     json,
     waitForExit,
     removeProfile,
+    delay,
     resolveKeychainSecret: defaultResolveKeychainSecret,
     ...runtime,
   };
@@ -261,6 +414,25 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
     return { qaSessionId: session.id, mode, url: qaURL.href, browser: "local-chromium-cdp", presenter: "suppressed", ...(isRemoteTarget ? { origin: qaURL.origin, authBearer: bearerToken ? "attached" : "not_configured" } : {}) };
   }
   async function command(session, method, params = {}) { return session.cdp.call(method, params, session.cdpSession); }
+  // The pre-screenshot presenter stop is a COURTESY, not the capture. It is a
+  // round trip to the bound embedded page over the loopback WebSocket, and a
+  // page that has been reloaded (Vite/HMR) or navigated leaves a socket that is
+  // still open at the TCP level with nobody left to answer -- a reply that can
+  // never arrive. Unbounded, that reply was awaited for the caller's full
+  // 120s tool budget and the screenshot never happened at all. Bounded, the
+  // capture proceeds and the result NAMES what it stopped waiting for.
+  async function clearPresenter(session) {
+    if (!beforeScreenshot) return { presenter: "suppressed" };
+    const attempt = Promise.resolve()
+      .then(() => beforeScreenshot(session))
+      .then((outcome) => (outcome && typeof outcome === "object" && typeof outcome.presenter === "string" ? outcome : { presenter: "suppressed" }))
+      .catch((error) => ({ presenter: "stop_failed", presenterDetail: error.message }));
+    const bound = driverRuntime.delay(presenterStopTimeoutMs).then(() => ({
+      presenter: "stop_timed_out",
+      presenterDetail: `presenter stop did not settle within ${presenterStopTimeoutMs}ms (waiting for the bound embedded page to acknowledge embedded-demo:stop); captured anyway`,
+    }));
+    return Promise.race([attempt, bound]);
+  }
   async function captureChromeFreeScreenshot(session, params = {}) {
     // The editing toolbar is runtime chrome, not application evidence. Keep the
     // removal scoped to this one capture and always restore the original nodes.
@@ -274,20 +446,42 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
   async function action(args) {
     const session = sessions.get(args.qaSessionId); if (!session) throw new Error("QA session not found");
     if (args.narration) await narrate?.(args.narration, session);
+    const narrator = args.narration ? "started" : "not_requested";
     if (args.operation === "snapshot") {
-      const result = await command(session, "Runtime.evaluate", { expression: "document.documentElement.outerHTML", returnByValue: true, awaitPromise: true });
-      return { qaSessionId: session.id, operation: "snapshot", html: result.result.value, narrator: args.narration ? "started" : "not_requested", presenter: "suppressed" };
+      const detail = args.detail ?? "digest";
+      if (detail === "full") {
+        const result = await command(session, "Runtime.evaluate", { expression: "document.documentElement.outerHTML", returnByValue: true, awaitPromise: true });
+        const html = String(result.result?.value ?? "");
+        const returned = html.slice(0, SNAPSHOT_FULL_MAX_CHARS);
+        const truncated = returned.length < html.length;
+        return {
+          qaSessionId: session.id, operation: "snapshot", detail: "full", html: returned,
+          htmlChars: html.length, returnedChars: returned.length, truncated,
+          ...(truncated ? { truncationNote: `raw document is ${html.length} characters; the first ${returned.length} are returned. Use detail:"digest" for a bounded structured observation.` } : {}),
+          narrator, presenter: "suppressed",
+        };
+      }
+      const expression = `(${snapshotDigestInPage.toString()})(${js(SNAPSHOT_LIMITS)})`;
+      const result = await command(session, "Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true });
+      const raw = result.result?.value;
+      if (!raw || typeof raw !== "object") throw new Error("snapshot digest could not be built in the QA page");
+      const digest = boundSnapshotDigest(raw);
+      return {
+        qaSessionId: session.id, operation: "snapshot", detail: "digest",
+        ...digest, limits: { ...SNAPSHOT_LIMITS, digestChars: SNAPSHOT_DIGEST_MAX_CHARS },
+        narrator, presenter: "suppressed",
+      };
     }
     if (args.operation === "screenshot") {
       // A persistent tour presenter is an intentional showcase affordance, but
       // is not QA evidence. Clear it through the page's bounded stop API first.
-      await beforeScreenshot?.(session);
+      const presenterOutcome = await clearPresenter(session);
       const result = await captureChromeFreeScreenshot(session, { format: "png" });
       session.screenshotCount += 1;
       const screenshotPath = join(session.evidenceDir, `screenshot-${String(session.screenshotCount).padStart(3, "0")}.png`);
       const png = Buffer.from(result.data, "base64");
       await driverRuntime.writeFile(screenshotPath, png, { mode: 0o600 });
-      return { qaSessionId: session.id, operation: "screenshot", screenshotPath, bytes: png.length, narrator: args.narration ? "started" : "not_requested", presenter: "suppressed", chrome: "suppressed" };
+      return { qaSessionId: session.id, operation: "screenshot", screenshotPath, bytes: png.length, narrator, ...presenterOutcome, chrome: "suppressed" };
     }
     const expression = args.operation === "click"
       ? `(() => { const e=document.querySelector(${js(args.selector)}); if(!e) throw new Error('selector not found'); e.click(); return true; })()`
@@ -295,7 +489,7 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
         ? `(() => { const e=document.querySelector(${js(args.selector)}); if(!e) throw new Error('selector not found'); e.focus(); e.value=${js(args.text)}; e.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:${js(args.text)}})); e.dispatchEvent(new Event('change',{bubbles:true})); return true; })()`
         : `(() => { const e=document.activeElement; if(!e) throw new Error('no active element'); e.dispatchEvent(new KeyboardEvent('keydown',{key:${js(args.key)},bubbles:true})); e.dispatchEvent(new KeyboardEvent('keyup',{key:${js(args.key)},bubbles:true})); return true; })()`;
     await command(session, "Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
-    return { qaSessionId: session.id, operation: args.operation, ok: true, narrator: args.narration ? "started" : "not_requested", presenter: "suppressed" };
+    return { qaSessionId: session.id, operation: args.operation, ok: true, narrator, presenter: "suppressed" };
   }
   function requireTestAudioMode(id) {
     const session = sessions.get(id); if (!session) throw new Error("QA session not found");
@@ -328,9 +522,9 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
     if (/^(Target\.|Browser\.|Page\.navigate$|Page\.navigateToHistoryEntry$)/.test(args.method)) throw new Error("qa_cdp cannot attach, create, close, or navigate targets");
     if (args.narration) await narrate?.(args.narration, session);
     const isScreenshot = args.method === "Page.captureScreenshot";
-    if (isScreenshot) await beforeScreenshot?.(session);
+    const presenterOutcome = isScreenshot ? await clearPresenter(session) : { presenter: undefined };
     const result = isScreenshot ? await captureChromeFreeScreenshot(session, args.params ?? {}) : await command(session, args.method, args.params ?? {});
-    return { qaSessionId: session.id, method: args.method, result, narrator: args.narration ? "started" : "not_requested", presenter: isScreenshot ? "suppressed" : undefined, chrome: isScreenshot ? "suppressed" : undefined };
+    return { qaSessionId: session.id, method: args.method, result, narrator: args.narration ? "started" : "not_requested", ...presenterOutcome, chrome: isScreenshot ? "suppressed" : undefined };
   }
   function events(id, { since = 0 } = {}) { const session = sessions.get(id); if (!session) throw new Error("QA session not found"); const start = Number.isInteger(since) && since >= 0 ? since : 0; const events = session.cdp.events.filter((event) => event.sessionId === session.cdpSession); return { qaSessionId: id, cursor: events.length, events: events.slice(start).map(redactPolledEvent) }; }
   async function captureStart(id) { const session = sessions.get(id); if (!session) throw new Error("QA session not found"); await command(session, "Network.enable"); await command(session, "Runtime.enable"); await command(session, "Log.enable"); session.captureCursor = session.cdp.events.length; return { qaSessionId: id, active: true, limits: { responses: 16, bodyChars: 65536 }, presenter: "suppressed" }; }
