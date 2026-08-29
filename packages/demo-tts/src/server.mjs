@@ -117,6 +117,14 @@ export function createServer(opts = {}) {
           'X-Narration-Estimated': String(!!result.estimated),
           'X-Narration-Cache': result.cacheHit ? 'hit' : 'miss',
           'Access-Control-Allow-Origin': '*',
+          // Without this the browser reads the mp3 body but every X-Narration-*
+          // header comes back undefined: a cross-origin response only exposes
+          // the CORS-safelisted headers unless it names the rest. The demo
+          // player reads X-Narration-Duration-Ms to know how long the clip
+          // runs, so omitting it degrades silently to a guessed duration
+          // rather than to an error.
+          'Access-Control-Expose-Headers':
+            'X-Narration-Duration-Ms, X-Narration-Estimated, X-Narration-Cache',
         });
         return res.end(result.mp3);
       } catch (err) {
