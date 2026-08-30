@@ -37,6 +37,13 @@ evidence:
   manifest: sha256:5ad1...
   review_receipt: REVIEW-01J8...
 
+correlations:
+  - handle: CORR-01J8Y8A1K
+    kind: w3c-trace
+    source: browser-otel
+    handling: sealed_lookup
+    window: {before: 30s, after: 90s}
+
 assertions:
   suggested: [invitation-success-is-visible]
   approved: []
@@ -70,6 +77,8 @@ envelope; neither invents a separate evidence format.
 | Convert a session to a fixture | `trace.to_flow` | committed flow/cassette | reviewable candidate files |
 | Run story regression tests | `story.test` | story flow fixtures | deterministic test report |
 | Store proof | `evidence.record`, `visual.record` | `host.flow_evidence` | immutable evidence handle and receipt |
+| Plan a backend evidence read | `feedback.observability.plan` | `host.feedback.observability.plan` | bounded read plan with no telemetry records |
+| Fetch correlated logs and traces | `feedback.observability.fetch` | `host.feedback.observability.fetch` | classified candidate evidence and provider receipts |
 | File a defect | `issue.create` | configured GitHub issue filer | issue URL plus local/evidence receipts |
 
 ## MCP operating pattern
@@ -249,6 +258,27 @@ Every evidence handle records:
 
 Evidence consumers receive handles. The evidence service resolves authorized,
 short-lived reads; credentials never appear in MCP arguments or Starlark.
+
+## Observability provider boundary
+
+`feedback.observability.plan` accepts a reviewed correlation handle, requested
+signals, and a narrower time window. The host resolves environment routing,
+provider endpoints, indexes, buckets, namespaces, tenants, and credential roles
+from project policy. The plan returns sources and hard limits but reads no
+records.
+
+`feedback.observability.fetch` accepts only an approved plan revision. Provider
+adapters implement `capabilities`, `plan`, and `fetch`; they normalize results
+to OpenTelemetry-shaped logs and spans where possible and return explicit
+sampling, truncation, rotation, authorization, and partial-source status.
+Fetched records remain quarantined candidate evidence until the ordinary
+per-item review approves their exact digest for retention or agent access.
+
+Neither MCP nor Starlark can supply provider query syntax, a shell command,
+filesystem path, URL, credential, Kubernetes selector, index, or object prefix.
+Local `rg` or `grep`, object-store reads, trace query APIs, and log-search APIs
+remain host executor details. See [backend logs and traces](08-observability-evidence.md)
+for configuration and operating patterns.
 
 ## GitHub routing
 

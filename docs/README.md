@@ -10,13 +10,15 @@ The [Kitsoki Feedback guide](guide/README.md) covers the complete workflow:
 - [04 — product tours](guide/04-product-tours.md);
 - [05 — interactive QA with agents](guide/05-interactive-agent-qa.md);
 - [06 — repeatable browser tests](guide/06-repeatable-tests.md);
-- [07 — MCP, Starlark, and host automation](guide/07-surfaces.md).
+- [07 — MCP, Starlark, and host automation](guide/07-surfaces.md);
+- [08 — backend logs and distributed traces](guide/08-observability-evidence.md).
 
 ## Understand the contracts
 
 - [Concept](concept.md)
 - [Chrome extension mode](requirements/extension-mode.md)
 - [Rich evidence sidecars](requirements/rich-evidence-sidecars.md)
+- [Correlated observability evidence](requirements/observability-evidence-providers.md)
 - [Embedded demo control](embedded-demo-control.md)
 
 The guide is task-oriented. The requirement and control documents define the

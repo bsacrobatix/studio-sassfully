@@ -47,6 +47,7 @@ The normalized format preserves:
 - source and actor provenance;
 - exact application, release, environment, role and fixture identities;
 - ordered typed actions and semantic observations;
+- reviewed request, trace, span, session, and execution correlation handles;
 - privacy classifications, substitutions, omissions and reviewer decisions;
 - evidence digests and immutable storage receipts;
 - proposed assertions separately from human-approved assertions;
@@ -80,6 +81,7 @@ report.
 6. [Turn a QA journey into a repeatable test](06-repeatable-tests.md).
 7. Use the [MCP, Starlark, and host reference](07-surfaces.md) when automating the
    workflow.
+8. [Link feedback to backend logs and distributed traces](08-observability-evidence.md).
 
 ## The six durable objects
 
@@ -93,7 +95,8 @@ reports as disconnected blobs:
 - A **report** contains reviewed text, a semantic anchor, classifications,
   evidence metadata, and routing state.
 - An **evidence bundle** contains approved sidecars such as replay, screenshot,
-  console, network, and trace data. The report contains digests, not raw bytes.
+  console, network, correlated backend logs, and trace data. The report contains
+  handles and digests, not raw bytes or provider credentials.
 - A **scenario** is a reviewed `test-flow/v1` program with explicit actions and
   assertions. A replay alone is not a scenario.
 - A **receipt** proves what was published, offered, completed, stored, uploaded,
@@ -119,5 +122,6 @@ and the regression test that protects the resulting behavior.
   bounded evidence item for that session.
 
 See [rich evidence sidecars](../requirements/rich-evidence-sidecars.md) for the
-transport contract and [extension mode](../requirements/extension-mode.md) for
-the zero-integration capture boundary.
+transport contract, [correlated observability evidence](../requirements/observability-evidence-providers.md)
+for the backend retrieval boundary, and [extension mode](../requirements/extension-mode.md)
+for the zero-integration capture boundary.

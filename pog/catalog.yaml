@@ -29,6 +29,9 @@ catalog:
       - id: source-extension-mode
         kind: document
         path: docs/requirements/extension-mode.md
+      - id: source-observability-evidence-providers
+        kind: document
+        path: docs/requirements/observability-evidence-providers.md
       - id: source-kitsoki-feedback-proposal
         kind: external-document
         path: "../Kitsoki/docs/proposals/generic-feedback-sdk-slidey-reports.md"
@@ -528,6 +531,36 @@ nodes:
     edges:
       part_of: [product-sassfully]
       motivated_by: [uc-deck-feedback, uc-product-site-feedback]
+  - schema: sassfully/requirement/v0
+    id: req-reviewed-correlation-handles
+    title: Feedback carries reviewed observability correlation handles
+    status: draft
+    visibility: public
+    summary: A capture source can attach a W3C trace and span identity, request ID, session ID, execution ID, or provider request ID with source, scope, timestamp bounds, classification, and handling policy. The reviewed report exposes an opaque handle; provider credentials and sealed correlation values remain inside the host boundary.
+    sources: [source-observability-evidence-providers]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-bug-report-with-replay]
+  - schema: sassfully/requirement/v0
+    id: req-provider-neutral-observability-fetch
+    title: Backend evidence retrieval is provider-neutral and bounded
+    status: draft
+    visibility: public
+    summary: Local artifacts, S3-compatible objects, OpenTelemetry-aligned traces, Jaeger, Tempo, Loki, Elasticsearch, and Kubernetes logs resolve through one read-only capabilities-plan-fetch contract with administrator-defined query templates, hard scope and size bounds, normalized records, explicit partial-result reasons, and immutable source receipts.
+    sources: [source-observability-evidence-providers]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-bug-report-with-replay]
+  - schema: sassfully/requirement/v0
+    id: req-otel-log-trace-correlation
+    title: Browser, service, and log evidence share standard trace identity
+    status: draft
+    visibility: public
+    summary: Kitsoki uses W3C Trace Context and OpenTelemetry TraceId, SpanId, resource identity, and log-record semantics as the canonical cross-service correlation shape, while accepting application request and session IDs as compatibility joins. Existing browser OpenTelemetry may attach a bounded non-exporting correlation processor to its tracer provider without Kitsoki installing a second provider or exporter.
+    sources: [source-observability-evidence-providers]
+    edges:
+      part_of: [product-sassfully]
+      motivated_by: [uc-bug-report-with-replay]
   - schema: sassfully/requirement/v0
     id: req-http-sink
     title: Reviewed bundles can submit to an HTTP intake

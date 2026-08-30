@@ -34,6 +34,11 @@ incidental differences in tools and recording formats; it does not erase who
 observed the behavior, which application revision ran, which evidence was
 reviewed, or which assertions a person accepted.
 
+When the browser or integrated library knows a request, trace, session, or
+execution ID, the same evidence path can resolve bounded backend logs and
+distributed traces from configured observability providers. The report carries
+a reviewed correlation handle, not a logging credential or arbitrary query.
+
 Capture can begin in either product mode:
 
 - the Chrome extension works on sites that do nothing special;
@@ -51,7 +56,8 @@ Start with the [Kitsoki Feedback guide](docs/guide/README.md):
 - [product tours](docs/guide/04-product-tours.md);
 - [interactive QA with agents](docs/guide/05-interactive-agent-qa.md);
 - [repeatable scenario tests](docs/guide/06-repeatable-tests.md);
-- [MCP, Starlark, and host surfaces](docs/guide/07-surfaces.md).
+- [MCP, Starlark, and host surfaces](docs/guide/07-surfaces.md);
+- [backend logs, distributed traces, and observability providers](docs/guide/08-observability-evidence.md).
 
 Feedback is not mutation. The reviewed report is the artifact; a GitHub issue,
 object-graph proposal, agent job, source change, or deployment is a governed

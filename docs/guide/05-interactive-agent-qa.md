@@ -64,6 +64,9 @@ Use a short observe–act–verify cycle:
 5. **Mark evidence.** Add a marker at the action or symptom worth retaining.
 6. **Ask the operator.** When product intent is ambiguous, do not convert the
    agent's guess into an assertion.
+7. **Fetch backend evidence when needed.** Resolve an approved request, trace,
+   session, or execution handle through the bounded observability provider; do
+   not give the agent a logging-system credential or arbitrary query surface.
 
 Example typed operations:
 
@@ -163,6 +166,10 @@ for clipping and focus-ring appearance.
 Use an environment-provided fault fixture or cassette. Assert the visible
 failure, retry action, and recovered state. Do not intercept arbitrary network
 traffic with agent-supplied scripts.
+
+When the visible failure has a reviewed correlation handle, fetch the bounded
+trace and logs after the action. Record the failing service or span as an
+observation, not as a browser assertion. See [backend observability evidence](08-observability-evidence.md).
 
 ### Visual regression
 

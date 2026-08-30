@@ -56,7 +56,9 @@ Evidence is itemized. A normal bug report might show:
 | Replay | off | Bounded event window, masked inputs, and duration. |
 | Console | off | Redacted messages and exceptions. |
 | Network | off | Method, origin, path, status, and bounded redacted bodies. |
-| Application trace | off | Typed events and pseudonym substitutions. |
+| Correlation handles | off | Request, trace, span, session, or execution identity plus source, scope, and time bounds. |
+| Backend observability | off | Bounded normalized logs and spans fetched through a configured read-only provider. |
+| Application trace | off | Typed runtime events and pseudonym substitutions. |
 | Environment | on | Browser, viewport, locale, app revision, and feature flags approved by policy. |
 
 Selecting an item approves that exact digest. Editing or recapturing it creates
@@ -187,9 +189,11 @@ short replay only when animation, focus, scroll, or timing is part of the bug.
 
 ### A backend/API defect visible in the UI
 
-Attach redacted request metadata and an application trace. Do not paste access
-tokens, cookies, full connection strings, or arbitrary response bodies into the
-description.
+Attach redacted request metadata and a reviewed correlation handle. Use
+[backend observability evidence](08-observability-evidence.md) to fetch bounded
+logs and the distributed trace through the configured host provider. Do not
+paste access tokens, cookies, full connection strings, arbitrary response
+bodies, or observability credentials into the description.
 
 ### Product feedback rather than a defect
 

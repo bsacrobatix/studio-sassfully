@@ -46,9 +46,9 @@ kitsoki feedback doctor
 ```
 
 `doctor` checks the project identity, privacy profile, origin rules, evidence
-destination, GitHub connection, and local browser integration. It reports each
-capability separately; it never treats an unavailable evidence store as an
-empty, successful one.
+destination, GitHub connection, local browser integration, and configured
+observability providers. It reports each capability separately; it never treats
+an unavailable evidence or telemetry store as an empty, successful one.
 
 ## 2. Install the Chrome extension
 
@@ -231,3 +231,8 @@ kitsoki feedback doctor --require extension,evidence,github
 
 The command exits successfully only when all three named capabilities return
 valid receipts.
+
+Backend logs and distributed traces are optional. Add them after the core
+feedback path is working by following [observability evidence](08-observability-evidence.md).
+The browser contributes only reviewed correlation handles; provider access and
+credentials stay in the Kitsoki host.

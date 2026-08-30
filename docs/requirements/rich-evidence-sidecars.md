@@ -36,6 +36,10 @@ a sidecar retry survives month rollover. Same-key bundle retries serialize
 check-and-append, and same key-plus-digest evidence retries use exclusive
 creation with `EEXIST` treated as a deduped success.
 
-Server-trace evidence is a marker/summary only: it must not contain browser
-trace body bytes. HAR/replay capture follows the same capture-time redaction,
+A browser-originated server-trace item is a correlation marker/summary only: it
+must not contain browser trace body bytes. A host may resolve that reviewed
+marker into a separate bounded backend log or trace sidecar under the
+[observability provider contract](observability-evidence-providers.md). The
+provider result receives its own privacy review, digest, retention policy, and
+source receipt. HAR/replay capture follows the same capture-time redaction,
 masking, bounded retention, review, and per-item approval policy.
