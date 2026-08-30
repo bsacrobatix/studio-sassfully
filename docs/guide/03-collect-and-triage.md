@@ -80,6 +80,37 @@ Open **Feedback inbox** in Kitsoki or list reports through MCP. Triage records:
 
 The original report remains immutable. Triage appends decisions and links.
 
+## Turn a complaint into reusable product knowledge
+
+A customer complaint enters the same canonical journey format as manual or
+agent QA. The customer's words remain attached as reviewed source evidence;
+Kitsoki separately normalizes the reproducible actions, target state,
+observations and environment.
+
+```mermaid
+flowchart LR
+    A[Reviewed customer complaint] --> B[Normalize reproduction journey]
+    B --> C[Compare with existing scenario family]
+    C --> D{Disposition}
+    D -->|Known behavior, new evidence| E[Attach to existing scenario]
+    D -->|New reproducible variant| F[Create related scenario branch]
+    D -->|Accepted product contract| G[Promote to failing then fixed test]
+    D -->|Intent unclear or change desired| H[Create iteration point]
+    D -->|Needs engineering work| I[File GitHub issue]
+```
+
+This prevents two common losses:
+
+- a useful complaint does not disappear when its issue closes;
+- one unusual report does not silently redefine product behavior before a
+  product or QA reviewer accepts the assertion.
+
+If the report matches an existing user flow, branch from that flow rather than
+creating an unrelated test. For example, an **Invite member** journey may gain
+a **duplicate pending invitation** branch while sharing navigation, role and
+form setup with the root scenario. The branch retains the complaint reference
+and its own evidence and test receipt.
+
 ### Route to GitHub
 
 Select **Create GitHub issue** or run:
@@ -122,6 +153,14 @@ Select **Start QA session**. Kitsoki creates a bounded agent session with:
 - a session recording and receipt.
 
 See [interactive agent QA](05-interactive-agent-qa.md) for the operating loop.
+
+### Create an iteration point
+
+Use an iteration point when the evidence is trustworthy but the desired
+behavior is not yet agreed. It contains the canonical journey, competing
+expected outcomes, affected tour or scenario references, and the product
+decision still required. It is not labeled as a failed test until an assertion
+has been accepted.
 
 ## Common reporting patterns
 

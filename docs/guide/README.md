@@ -1,41 +1,61 @@
 # Kitsoki Feedback guide
 
-Kitsoki Feedback supports the whole product conversation, not only the moment
-something goes wrong. A team can announce **What's new**, guide a user through
-a feature, collect feedback at the exact step where it becomes useful, explore
-the journey with an agent, and preserve the result as a repeatable test.
+Kitsoki Feedback gives every candidate user journey the same trustworthy path
+from observation to repeatable behavior. It does not matter whether the journey
+starts as a customer complaint, a product manager's feature tour, a QA
+engineer's manual session, an agent QA campaign, or an operator collaborating
+with an agent interactively.
 
-Feature discovery, feedback, and QA are different flows over the same
-machinery: semantic anchors, typed browser actions, privacy-reviewed evidence,
-GitHub routing, and durable receipts.
-
-```mermaid
-flowchart LR
-    A[Semantic anchors and typed actions] --> B{Product conversation}
-    B -->|Discover| C[What's new and feature tour]
-    B -->|Respond| D[Contextual feedback]
-    B -->|Verify| E[Interactive agent QA]
-    C --> F[Tour and completion receipts]
-    D --> G[Reviewed evidence and GitHub issue]
-    E --> H[Repeatable test-flow scenario]
-    F --> I[Linked product history]
-    G --> I
-    H --> I
-```
-
-The reactive feedback lifecycle remains local and review-first:
+Each source keeps its provenance, but all sources normalize into the same
+reviewed evidence and journey format. From there, a team can refine the journey
+as a tour, lock accepted behavior into a deterministic test, treat an ambiguous
+result as a product iteration point, file an evidence-backed GitHub issue, or
+branch into related scenarios.
 
 ```mermaid
 flowchart LR
-    A[Capture locally] --> B[Review report and evidence]
-    B --> C[Submit reviewed report]
-    C --> D[Upload individually approved evidence]
-    D --> E{Route}
-    E --> F[GitHub]
-    E --> G[Agent QA]
-    E --> H[Tour revision]
-    E --> I[Repeatable test]
+    A[Customer complaint] --> F[Source adapter]
+    B[Product manager tour] --> F
+    C[Manual QA session] --> F
+    D[Agent QA workflow] --> F
+    E[Interactive agent QA] --> F
+    F --> G[Canonical reviewed journey]
+    G --> H{Promote}
+    H -->|Explain| I[Repeatable tour]
+    H -->|Enforce| J[Locked behavioral test]
+    H -->|Decide| K[Iteration point]
+    H -->|Act| L[GitHub issue]
+    J --> M[Scenario family]
 ```
+
+## One trusted evidence spine
+
+Every source passes through the same trust boundary:
+
+```mermaid
+flowchart LR
+    A[Source-specific capture] --> B[Normalize typed actions and observations]
+    B --> C[Classify and review evidence]
+    C --> D[Bind exact app, revision, environment and actors]
+    D --> E[Validate anchors, ordering and bounds]
+    E --> F[Content-addressed evidence bundle]
+    F --> G[Canonical journey plus receipts]
+```
+
+The normalized format preserves:
+
+- source and actor provenance;
+- exact application, release, environment, role and fixture identities;
+- ordered typed actions and semantic observations;
+- privacy classifications, substitutions, omissions and reviewer decisions;
+- evidence digests and immutable storage receipts;
+- proposed assertions separately from human-approved assertions;
+- links to reports, campaigns, tours, GitHub issues and descendant scenarios.
+
+That separation is why evidence from an agent is not trusted merely because an
+agent produced it, and evidence from a person is not trusted merely because a
+person watched it. Both become trustworthy through the same validation,
+review, provenance and receipt contract.
 
 ## Choose a capture mode
 

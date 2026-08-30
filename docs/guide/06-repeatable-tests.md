@@ -1,15 +1,17 @@
 # Turn QA scenarios into repeatable tests
 
-Kitsoki Feedback can preserve an interactive journey immediately, but it does
-not call that journey a test. A repeatable test has a closed action vocabulary,
-explicit assertions, a declared application target, synthetic data, and a
-complete execution receipt.
+Kitsoki Feedback can preserve a journey from any admitted source immediately,
+but it does not call that journey a test. Customer evidence, a product tour,
+manual QA, an agent campaign and interactive agent QA all produce the same
+scenario-candidate shape. A repeatable test additionally has a closed action
+vocabulary, explicit approved assertions, a declared application target,
+synthetic data, and a complete execution receipt.
 
 ## Promotion workflow
 
 ```mermaid
 flowchart LR
-    A[Reviewed report] --> B[Interactive QA recording]
+    A[Complaint, tour, manual QA or agent QA] --> B[Canonical reviewed journey]
     B --> C[Scenario candidate]
     C --> D[Remove incidental actions]
     D --> E[Choose stable anchors]
@@ -30,6 +32,10 @@ At the end of interactive QA, select **Save as scenario**. Kitsoki stores:
 - actor provenance for operator and agent actions;
 - suggested assertions, marked unapproved;
 - the source report and issue references.
+
+The same candidate is produced by **Lock behavior as test** from a product tour,
+**Convert to scenario** from a complaint, or **Save journey** from manual or
+agent QA. The source adapter changes; the candidate contract does not.
 
 The candidate remains an artifact. It does not enter a gate.
 
@@ -181,6 +187,49 @@ provenance:
 The gate result updates the report timeline. Closing the GitHub issue can then
 point to the committed scenario and its green receipt rather than to a manual
 claim that the bug was fixed.
+
+## Build a scenario family from one user flow
+
+A scenario family keeps one accepted user journey as the root and expresses
+related bugs or product questions as explicit branches. Branches reuse declared
+setup and semantic anchors, but each has its own delta, assertions, provenance
+and execution receipt.
+
+```mermaid
+flowchart TD
+    A[Invite member: valid team admin flow]
+    A --> B[Role branch: viewer cannot invite]
+    A --> C[Boundary branch: duplicate pending invitation]
+    A --> D[Recovery branch: send fails then retry succeeds]
+    A --> E[Accessibility branch: keyboard-only completion]
+    A --> F[Reported branch: success banner missing]
+```
+
+Create a branch when the journey shares the root's product intent and setup but
+changes a meaningful condition or expected outcome. Record the relationship:
+
+```yaml
+lineage:
+  family: invite-member
+  parent: invite-member/happy-path
+  branch_reason: customer-reported-variant
+  source_reports: [FB-01J8Y7M2Q]
+
+delta:
+  fixture: pending-invitation-exists
+  expected: duplicate-invitation-warning
+```
+
+Do not duplicate the whole flow merely to change one condition. Do not force a
+report into a family when it describes a different user goal. The family is a
+traceable product model, not just a folder naming convention.
+
+A new complaint can therefore:
+
+- add evidence to an existing branch;
+- reveal a missing branch;
+- challenge the assertion and create an iteration point;
+- prove that the root flow itself has regressed.
 
 ## Regression-test patterns
 

@@ -9,6 +9,53 @@ Kitsoki Feedback exposes one typed service through three authoring surfaces:
 These are projections over the same report, evidence, tour, scenario, and
 receipt contracts. They are not independent automation systems.
 
+## Canonical journey envelope
+
+Every source adapter emits `kitsoki.feedback/journey/v1`. The envelope is the
+standard handoff between capture, review, tour authoring, QA and test promotion:
+
+```yaml
+version: kitsoki.feedback/journey/v1
+
+source:
+  kind: customer-feedback
+  ref: FB-01J8Y7M2Q
+  actor_class: customer
+
+target:
+  application: acme-console
+  revision: sha256:8d4a...
+  environment: customer-safe-replay
+  role: team-admin
+
+steps:
+  - id: open-team-settings
+    action: {kind: navigate, anchor: route:team-settings}
+    observation: {kind: semantic-snapshot, digest: sha256:91b2...}
+
+evidence:
+  manifest: sha256:5ad1...
+  review_receipt: REVIEW-01J8...
+
+assertions:
+  suggested: [invitation-success-is-visible]
+  approved: []
+
+lineage:
+  family: invite-member
+  parent: invite-member/happy-path
+  branch_reason: customer-reported-variant
+```
+
+Source adapters may collect different raw material, but they cannot omit the
+same required identity, privacy, ordering, bounds and receipt checks. Suggested
+assertions remain separate from approved assertions so normalization cannot
+quietly turn an observer's interpretation into product policy.
+
+The envelope contains evidence handles and digests, not raw sidecar bytes or
+credential values. Tours and `test-flow/v1` are validated projections from this
+envelope; neither invents a separate evidence format.
+
 ## Surface map
 
 | Goal | MCP | Starlark / story | Durable result |

@@ -79,6 +79,38 @@ in a tour.
 The recording accelerates authorship; it is not executed directly. The tour
 draft contains only the selected, typed actions.
 
+## Refine a tour, then lock in behavior
+
+A product manager can use a tour as the editable expression of a user journey:
+reorder the explanation, simplify the path, adjust anchors and choose the
+visible consequence that represents success. When that consequence becomes an
+accepted product contract, select **Lock behavior as test**.
+
+```mermaid
+flowchart LR
+    A[Product manager drafts tour] --> B[Validate anchors and typed actions]
+    B --> C[Refine explanation and journey]
+    C --> D[Review visible consequence]
+    D --> E{Product intent settled?}
+    E -->|No| F[Keep as iteration point]
+    E -->|Yes| G[Lock behavior as scenario candidate]
+    G --> H[QA reviews synthetic data and assertions]
+    H --> I[Run twice and commit behavioral test]
+```
+
+Locking behavior copies no raw browser recording. It projects the reviewed
+typed actions, semantic anchors, target identities and accepted consequence
+into a scenario candidate. A QA or product reviewer still approves the exact
+assertions and test environment before it enters a gate.
+
+The tour and test then share lineage without becoming the same artifact:
+
+- the tour may continue to change narration, pacing and educational detail;
+- the test continues to enforce the accepted product consequence;
+- a later complaint links to the tour step and test branch that cover it;
+- a deliberate behavior change updates the contract through a reviewed test
+  revision rather than making the old test silently adapt.
+
 ## Run a tour from the toolbar
 
 Open **Feedback > Tours**, choose a tour, and select **Preview**. Preview checks:

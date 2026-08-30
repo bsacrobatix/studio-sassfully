@@ -1,25 +1,40 @@
 # Kitsoki Feedback
 
-Kitsoki Feedback is the product conversation layer for feature discovery,
-contextual feedback, tours, and QA. Teams publish **What's new** experiences and
-guided feature tours from the same semantic anchors users later point to when
-they report a problem. An agent can explore that exact surface, preserve the
-evidence, file a GitHub issue, and turn the journey into a deterministic browser
-scenario.
+Kitsoki Feedback is a trusted evidence-to-behavior system. A candidate user
+journey can arrive from a customer complaint, a product manager refining a
+feature tour, a QA engineer testing manually, an autonomous agent QA campaign,
+or an operator working interactively with an agent. Kitsoki preserves where it
+came from, then standardizes it through one validated evidence path and format.
 
-The product supports three connected flows:
+The reviewed journey can become:
 
-- **Discover:** announce a release, introduce a feature, or guide a user through
-  a new workflow.
-- **Respond:** collect privacy-reviewed feedback and approved evidence at the
-  exact feature or tour step.
-- **Verify:** reproduce the journey with an agent and retain it as a repeatable
-  QA test.
+- a repeatable product or What's new tour;
+- a behavioral test that locks in an accepted product contract;
+- an iteration point when product intent still needs a decision;
+- a GitHub issue with trustworthy evidence;
+- the root of a scenario family covering related roles, boundaries, failures,
+  recoveries, and reported variants.
 
-All three use the same anchors, typed actions, evidence policy, and durable
-receipts. The flow and user intent differ; the platform contract does not.
+```mermaid
+flowchart LR
+    A[Customer feedback] --> F[Trusted evidence spine]
+    B[Product manager tour] --> F
+    C[Manual QA] --> F
+    D[Agent QA workflow] --> F
+    E[Interactive agent QA] --> F
+    F --> G[Repeatable tour]
+    F --> H[Locked behavioral test]
+    F --> I[Iteration point]
+    F --> J[GitHub issue]
+    H --> K[Related scenario branches]
+```
 
-Use it in either capture mode:
+Source-specific capture remains visible in provenance. Standardization removes
+incidental differences in tools and recording formats; it does not erase who
+observed the behavior, which application revision ran, which evidence was
+reviewed, or which assertions a person accepted.
+
+Capture can begin in either product mode:
 
 - the Chrome extension works on sites that do nothing special;
 - the embedded toolbar adds semantic anchors, typed context, and progressively
