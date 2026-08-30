@@ -1,21 +1,34 @@
-# sassfully
+# Kitsoki Feedback
 
-A generic, contextual-feedback framework: bring your own presentation, let
-users file feedback — bug reports, feature requests, mistranslation reports,
-customization asks — anchored to a semantic location inside your system, and
-route each item to the outcome it deserves (a comment, an issue, an AI edit
-instruction, a local note, a support request).
+Kitsoki Feedback is a contextual feedback, product-tour, and QA system. A user
+can point at the part of a product they mean, submit a privacy-reviewed report,
+attach approved replay or diagnostic evidence, and route it to GitHub or a
+Kitsoki agent. Teams can drive the same surface interactively, turn a useful QA
+journey into a deterministic browser scenario, and keep the report, evidence,
+issue, tour, and test linked by durable receipts.
 
-Feedback is not mutation: the reviewed note is the artifact; anything that
-changes the host system is a downstream outcome. Capture is opt-in and
-privacy-controlled per host — PII stripping by default, optional
-screenshot/replay evidence per feedback kind.
+Use it in either capture mode:
 
-**Status: pre-code.** Requirements live in [docs/](docs/) (the concept and the
-host-neutral feedback brief); the typed catalog (`pog/catalog.yaml`) and the
-first package (feedback-core: anchor contract + capture widget + local-note
-outcome) come next. Development follows a catalog-first loop — the object
-graph exists before the first line of code.
+- the Chrome extension works on sites that do nothing special;
+- the embedded toolbar adds semantic anchors, typed context, and progressively
+  richer application integration.
+
+When both are present, the extension enriches the embedded report rather than
+creating a second capture flow.
+
+Start with the [Kitsoki Feedback guide](docs/guide/README.md):
+
+- [setup, evidence storage, and GitHub](docs/guide/setup.md);
+- [collecting and triaging feedback](docs/guide/collect-and-triage.md);
+- [product tours](docs/guide/tours.md);
+- [interactive QA with agents](docs/guide/interactive-agent-qa.md);
+- [repeatable scenario tests](docs/guide/repeatable-tests.md);
+- [MCP, Starlark, and host surfaces](docs/guide/surfaces.md).
+
+Feedback is not mutation. The reviewed report is the artifact; a GitHub issue,
+object-graph proposal, agent job, source change, or deployment is a governed
+downstream outcome. Capture is opt-in, raw evidence stays local until review,
+and each evidence item requires its own upload approval.
 
 ## License
 
