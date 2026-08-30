@@ -13,6 +13,7 @@ receipt contracts. They are not independent automation systems.
 
 | Goal | MCP | Starlark / story | Durable result |
 | --- | --- | --- | --- |
+| Publish What's new | `feedback.campaign.validate`, `feedback.campaign.publish` | `ctx.feedback.campaign` + `host.feedback.campaign.publish` | immutable campaign revision and publication receipt |
 | Report friction | `feedback.report`, `feedback.list` | reviewed feedback intake | report reference and routing results |
 | Read reviewed application feedback | feedback inbox tools | `host.feedback.list_reviewed` | bounded reviewed projections and revision |
 | Dispatch reviewed feedback | feedback dispatch tool | `host.feedback.dispatch` | durable job and application receipts |
@@ -28,18 +29,38 @@ receipt contracts. They are not independent automation systems.
 
 An agent should use the smallest surface that answers the question:
 
-```text
-feedback.list
-  -> choose reviewed report
-  -> open only approved evidence
-  -> visual.record / qa_start
-  -> snapshot
-  -> one typed action
-  -> snapshot or screenshot
-  -> stop recording
-  -> issue.create and/or trace.to_flow
-  -> story.test
+```mermaid
+flowchart LR
+    A[feedback.list] --> B[Choose reviewed report]
+    B --> C[Open approved evidence]
+    C --> D[visual.record or qa_start]
+    D --> E[Semantic snapshot]
+    E --> F[One typed action]
+    F --> G[Snapshot or screenshot]
+    G --> H[Stop recording]
+    H --> I[issue.create or trace.to_flow]
+    I --> J[story.test]
 ```
+
+### What's new campaigns
+
+`feedback.campaign.validate` checks release identity, audience policy, entry
+anchors, the pinned tour revision, feedback-at-step policy, and expiration. It
+does not publish or show anything to a user.
+
+`feedback.campaign.publish` accepts only a validated revision. It stores an
+immutable campaign, makes it eligible at its declared entry points, and returns
+a publication receipt. Repeating the same publication identity returns the
+same receipt; different content requires a new campaign revision.
+
+`ctx.feedback.campaign` builds the same canonical campaign document inside a
+story. `host.feedback.campaign.publish` owns the external effect. The story can
+name semantic application and release identities, but it cannot supply a
+credential, arbitrary delivery endpoint, or executable browser action.
+
+The campaign references an ordinary validated tour revision. Its runtime
+execution still uses `embedded_demo` or the extension player, so What's new does
+not create a second tour engine.
 
 ### Feedback
 
@@ -143,11 +164,10 @@ explicit lease that fails never falls back silently to a laptop browser.
 
 Application stories use a deliberately narrow feedback host:
 
-```text
-list_reviewed(scope, limit) -> reports, revision
-dispatch(report_ref, dispatch_id, resume_mode, resume_workspace, retry_brief)
-  -> job_id, application receipts
-```
+| Operation | Inputs | Returns |
+| --- | --- | --- |
+| `list_reviewed` | `scope`, `limit` | reviewed reports and revision |
+| `dispatch` | `report_ref`, `dispatch_id`, `resume_mode`, `resume_workspace`, `retry_brief` | durable job ID and application receipts |
 
 The loaded application supplies the authoritative scope. Callers cannot choose
 an arbitrary repository, ledger, credential, provider, command, or filesystem
@@ -224,10 +244,10 @@ privacy mechanism.
 This gives scenario replay type-correct synthetic values while preserving
 within-report equality:
 
-```text
-EMAIL:7KM2Q -> user-7km2q@example.test
-PERSON:81JAA -> Person-81JAA
-```
+| Pseudonym | Synthetic replay value |
+| --- | --- |
+| `EMAIL:7KM2Q` | `user-7km2q@example.test` |
+| `PERSON:81JAA` | `Person-81JAA` |
 
 Credentials remain separate role bindings and are never converted into
 pseudonyms.

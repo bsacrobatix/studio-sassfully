@@ -4,12 +4,13 @@
 
 The [Kitsoki Feedback guide](guide/README.md) covers the complete workflow:
 
-- [project setup, evidence storage, and GitHub](guide/setup.md);
-- [feedback capture and triage](guide/collect-and-triage.md);
-- [product tours](guide/tours.md);
-- [interactive QA with agents](guide/interactive-agent-qa.md);
-- [repeatable browser tests](guide/repeatable-tests.md);
-- [MCP, Starlark, and host automation](guide/surfaces.md).
+- [01 — project setup, evidence storage, and GitHub](guide/01-setup.md);
+- [02 — What's new and feature tours](guide/02-whats-new-and-feature-tours.md);
+- [03 — feedback capture and triage](guide/03-collect-and-triage.md);
+- [04 — product tours](guide/04-product-tours.md);
+- [05 — interactive QA with agents](guide/05-interactive-agent-qa.md);
+- [06 — repeatable browser tests](guide/06-repeatable-tests.md);
+- [07 — MCP, Starlark, and host automation](guide/07-surfaces.md).
 
 ## Understand the contracts
 

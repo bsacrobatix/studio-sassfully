@@ -7,16 +7,16 @@ complete execution receipt.
 
 ## Promotion workflow
 
-```text
-reviewed report
-    -> interactive QA recording
-    -> scenario candidate
-    -> remove incidental actions
-    -> choose stable anchors
-    -> add explicit assertions
-    -> replace sensitive values
-    -> run twice in a sealed environment
-    -> commit test-flow/v1
+```mermaid
+flowchart LR
+    A[Reviewed report] --> B[Interactive QA recording]
+    B --> C[Scenario candidate]
+    C --> D[Remove incidental actions]
+    D --> E[Choose stable anchors]
+    E --> F[Add explicit assertions]
+    F --> G[Replace sensitive values]
+    G --> H[Run twice in a sealed environment]
+    H --> I[Commit test-flow/v1]
 ```
 
 ## 1. Save a scenario candidate
@@ -84,12 +84,12 @@ then assert the resulting state.
 
 Use synthetic values that satisfy the same type and validation rules:
 
-```text
-email      -> user-7km2q@example.test
-person     -> Person-81JAA
-domain     -> host-7dq92.example.test
-user role  -> role:test-team-admin
-```
+| Source type | Synthetic or bound value |
+| --- | --- |
+| Email | `user-7km2q@example.test` |
+| Person | `Person-81JAA` |
+| Domain | `host-7dq92.example.test` |
+| User role | `role:test-team-admin` |
 
 Credentials use runtime role bindings such as
 `credential:acme.test-team-admin`. Their values never enter the scenario,

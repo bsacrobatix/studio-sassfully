@@ -1,11 +1,23 @@
 # Kitsoki Feedback
 
-Kitsoki Feedback is a contextual feedback, product-tour, and QA system. A user
-can point at the part of a product they mean, submit a privacy-reviewed report,
-attach approved replay or diagnostic evidence, and route it to GitHub or a
-Kitsoki agent. Teams can drive the same surface interactively, turn a useful QA
-journey into a deterministic browser scenario, and keep the report, evidence,
-issue, tour, and test linked by durable receipts.
+Kitsoki Feedback is the product conversation layer for feature discovery,
+contextual feedback, tours, and QA. Teams publish **What's new** experiences and
+guided feature tours from the same semantic anchors users later point to when
+they report a problem. An agent can explore that exact surface, preserve the
+evidence, file a GitHub issue, and turn the journey into a deterministic browser
+scenario.
+
+The product supports three connected flows:
+
+- **Discover:** announce a release, introduce a feature, or guide a user through
+  a new workflow.
+- **Respond:** collect privacy-reviewed feedback and approved evidence at the
+  exact feature or tour step.
+- **Verify:** reproduce the journey with an agent and retain it as a repeatable
+  QA test.
+
+All three use the same anchors, typed actions, evidence policy, and durable
+receipts. The flow and user intent differ; the platform contract does not.
 
 Use it in either capture mode:
 
@@ -18,12 +30,13 @@ creating a second capture flow.
 
 Start with the [Kitsoki Feedback guide](docs/guide/README.md):
 
-- [setup, evidence storage, and GitHub](docs/guide/setup.md);
-- [collecting and triaging feedback](docs/guide/collect-and-triage.md);
-- [product tours](docs/guide/tours.md);
-- [interactive QA with agents](docs/guide/interactive-agent-qa.md);
-- [repeatable scenario tests](docs/guide/repeatable-tests.md);
-- [MCP, Starlark, and host surfaces](docs/guide/surfaces.md).
+- [setup, evidence storage, and GitHub](docs/guide/01-setup.md);
+- [What's new and feature tours](docs/guide/02-whats-new-and-feature-tours.md);
+- [collecting and triaging feedback](docs/guide/03-collect-and-triage.md);
+- [product tours](docs/guide/04-product-tours.md);
+- [interactive QA with agents](docs/guide/05-interactive-agent-qa.md);
+- [repeatable scenario tests](docs/guide/06-repeatable-tests.md);
+- [MCP, Starlark, and host surfaces](docs/guide/07-surfaces.md).
 
 Feedback is not mutation. The reviewed report is the artifact; a GitHub issue,
 object-graph proposal, agent job, source change, or deployment is a governed

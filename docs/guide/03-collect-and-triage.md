@@ -121,7 +121,7 @@ Select **Start QA session**. Kitsoki creates a bounded agent session with:
 - no credential values;
 - a session recording and receipt.
 
-See [interactive agent QA](interactive-agent-qa.md) for the operating loop.
+See [interactive agent QA](05-interactive-agent-qa.md) for the operating loop.
 
 ## Common reporting patterns
 

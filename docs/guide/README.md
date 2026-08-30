@@ -1,16 +1,40 @@
 # Kitsoki Feedback guide
 
-Kitsoki Feedback turns a product conversation into durable, reviewable work.
-Users can point at the part of a page they mean, describe what happened, attach
-an approved replay or screenshot, and send one reviewed report. Teams can route
-that report to GitHub, inspect it with an agent, replay the journey as a tour,
-and promote a useful QA session into a deterministic browser test.
+Kitsoki Feedback supports the whole product conversation, not only the moment
+something goes wrong. A team can announce **What's new**, guide a user through
+a feature, collect feedback at the exact step where it becomes useful, explore
+the journey with an agent, and preserve the result as a repeatable test.
 
-The same lifecycle works at every adoption level:
+Feature discovery, feedback, and QA are different flows over the same
+machinery: semantic anchors, typed browser actions, privacy-reviewed evidence,
+GitHub routing, and durable receipts.
 
-```text
-capture locally -> review -> submit report -> upload approved evidence
-                -> GitHub / agent QA / tour / repeatable test
+```mermaid
+flowchart LR
+    A[Semantic anchors and typed actions] --> B{Product conversation}
+    B -->|Discover| C[What's new and feature tour]
+    B -->|Respond| D[Contextual feedback]
+    B -->|Verify| E[Interactive agent QA]
+    C --> F[Tour and completion receipts]
+    D --> G[Reviewed evidence and GitHub issue]
+    E --> H[Repeatable test-flow scenario]
+    F --> I[Linked product history]
+    G --> I
+    H --> I
+```
+
+The reactive feedback lifecycle remains local and review-first:
+
+```mermaid
+flowchart LR
+    A[Capture locally] --> B[Review report and evidence]
+    B --> C[Submit reviewed report]
+    C --> D[Upload individually approved evidence]
+    D --> E{Route}
+    E --> F[GitHub]
+    E --> G[Agent QA]
+    E --> H[Tour revision]
+    E --> I[Repeatable test]
 ```
 
 ## Choose a capture mode
@@ -28,30 +52,37 @@ report.
 
 ## Start here
 
-1. [Set up a project, evidence destination, and GitHub](setup.md).
-2. [Collect and triage feedback](collect-and-triage.md).
-3. [Author and run product tours](tours.md).
-4. [Run interactive QA with an agent](interactive-agent-qa.md).
-5. [Turn a QA journey into a repeatable test](repeatable-tests.md).
-6. Use the [MCP, Starlark, and host reference](surfaces.md) when automating the
+1. [Set up a project, evidence destination, and GitHub](01-setup.md).
+2. [Publish What's new and feature tours](02-whats-new-and-feature-tours.md).
+3. [Collect and triage feedback](03-collect-and-triage.md).
+4. [Author and run product tours](04-product-tours.md).
+5. [Run interactive QA with an agent](05-interactive-agent-qa.md).
+6. [Turn a QA journey into a repeatable test](06-repeatable-tests.md).
+7. Use the [MCP, Starlark, and host reference](07-surfaces.md) when automating the
    workflow.
 
-## The four durable objects
+## The six durable objects
 
-Kitsoki Feedback uses four objects rather than treating a bug report as a blob:
+Kitsoki Feedback uses six linked objects rather than treating tours or bug
+reports as disconnected blobs:
 
+- A **campaign** declares the release, audience, entry points, pinned tour, and
+  feedback policy for a What's new experience.
+- A **tour** contains a reviewed revision of captions, semantic anchors, and
+  optional typed actions.
 - A **report** contains reviewed text, a semantic anchor, classifications,
   evidence metadata, and routing state.
 - An **evidence bundle** contains approved sidecars such as replay, screenshot,
   console, network, and trace data. The report contains digests, not raw bytes.
-- A **receipt** proves what was stored, uploaded, filed, or run. A successful
-  command without a receipt is not durable completion.
 - A **scenario** is a reviewed `test-flow/v1` program with explicit actions and
   assertions. A replay alone is not a scenario.
+- A **receipt** proves what was published, offered, completed, stored, uploaded,
+  filed, or run. A successful command without a receipt is not durable
+  completion.
 
-All four retain the report reference. That is the join key from the toolbar to
-the evidence store, GitHub issue, agent session, tour execution, and test
-receipt.
+The objects carry references to one another. That preserves the path from a
+release campaign and tour step through feedback, evidence, GitHub, agent QA,
+and the regression test that protects the resulting behavior.
 
 ## Safety defaults
 

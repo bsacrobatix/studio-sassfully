@@ -5,6 +5,13 @@ product surface and optionally performs typed actions. The same anchors used in
 feedback and QA keep tours attached to product meaning rather than screenshot
 coordinates.
 
+The most common product flow publishes the tour from a **What's new** campaign:
+the announcement explains why the change matters, and the tour shows where it
+lives and how to use it. Tours also support onboarding, support walkthroughs,
+release acceptance, documentation, and bug reproduction. See
+[What's new and feature tours](02-whats-new-and-feature-tours.md) for campaign
+targeting, entry points, progress, dismissal, and feedback-at-step behavior.
+
 The `sassfully/demo-script/v1` wire identifier is retained for compatibility
 with existing players and stored tours; the product name is Kitsoki Feedback.
 
@@ -13,6 +20,16 @@ Tours can run in two places:
 - the Chrome extension can tour any enabled site, with no site integration;
 - an integrated page can run a tour through its resident demo player and expose
   richer semantic anchors, narration controls, and evidence stamps.
+
+```mermaid
+flowchart LR
+    A[Campaign, onboarding, support, or QA need] --> B[Tour draft]
+    B --> C[Validate anchors on exact page]
+    C --> D[Preview reviewed revision]
+    D --> E[Run in extension or embedded player]
+    E --> F[Execution receipt]
+    E --> G[Contextual feedback]
+```
 
 ## Tour format
 
@@ -113,10 +130,10 @@ and the persisted value is visible after reload.
 Use the tour as the narrative layer and a `test-flow/v1` scenario as the
 behavioral proof:
 
-```text
-tour: explain Settings and click Save
-test: fill value -> click Save -> assert banner -> reload -> assert value
-```
+| Artifact | Flow |
+| --- | --- |
+| Tour | Explain Settings, then click **Save**. |
+| Test | Fill the value, click **Save**, assert the banner, reload, and assert the persisted value. |
 
 The two artifacts may share semantic anchors and evidence, but they have
 different contracts. A tour is designed for a person to understand; a test is

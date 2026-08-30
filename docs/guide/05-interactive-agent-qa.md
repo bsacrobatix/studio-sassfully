@@ -10,9 +10,11 @@ test promotion.
 
 Open a reviewed report and select **Start QA session**, or use MCP:
 
-```text
-feedback.list -> choose reviewed report -> grant evidence handles
-              -> embedded_demo {action: qa_start}
+```mermaid
+flowchart LR
+    A[feedback.list] --> B[Choose reviewed report]
+    B --> C[Grant approved evidence handles]
+    C --> D[embedded_demo: qa_start]
 ```
 
 Choose:
