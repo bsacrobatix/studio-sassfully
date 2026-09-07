@@ -1,5 +1,5 @@
 # POG record-flow-evidence — deterministic story bound to the test-suite
-# deliverable type's `materialize:` declaration in pog/catalog.yaml
+# deliverable type's canonical typestore materialization contract
 # (materialization-first taxonomy, .context/materialization-first.md).
 # One producing room: `record` runs the node's evidence recorder (the
 # `record_command` materialize param, default scripts/record-flow-evidence.sh)

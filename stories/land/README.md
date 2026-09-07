@@ -167,8 +167,8 @@ It resolves the moment `land` projects `test_path_regex` — at which point both
 changelog entry.
 
 **The regex this repo needs**, verified against every tracked path — it matches
-all 120 assertion-bearing files, with zero false positives and zero `packages/*/src/**`,
-`pog/catalog.yaml`, or `scripts/*.sh` source files caught:
+all 120 assertion-bearing files, with zero false positives and zero `packages/*/src/**`
+or `scripts/*.sh` source files caught:
 
 ```
 (^|/)(test|tests|testdata|__tests__|fixtures|flows)/|(^|/)scripts/(test-[^/]*\.sh|qa/|checks/)|\.(test|spec)\.[cm]?[jt]sx?$

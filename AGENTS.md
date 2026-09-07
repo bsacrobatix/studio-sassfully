@@ -6,7 +6,8 @@ this repo as public from the moment it is committed — drafts and scratch work
 belong in `.context/`, never in tracked files.
 
 - **Catalog-first development.** Requirements, use cases, and acceptance
-  criteria live in the typed object graph (`pog/catalog.yaml`, seeded from
+  criteria live in the typed object graph (the canonical typestore seed at
+  `stories/qa-compliance-gate-runner/fixtures/typestore_catalog.yaml`, seeded from
   docs/ — coming with plan step 0.5); code changes trace back to catalog
   nodes. Don't grow features in README prose.
 - **Privacy is a requirement, not a patch.** Feedback capture may touch user
@@ -122,7 +123,7 @@ landing through an isolated Git worktree replaces it:
   `agent_launch_policy` preflight: this repo's root and its sibling repos
   are protected roots; agent work happens in an isolated worktree under
   `.worktrees/<name>` via `kitsoki agent launch --exec`, with
-  `--profile pog-drive` as the sanctioned catalog-drive entry.
+  `--profile sassfully-dev` as the sanctioned Story application entry.
 - **Full-permissions agents are a last resort.** Use a sanctioned escape
   hatch only when the governed path cannot do the job — and file the gap that
   forced it (feedback or requirement node) so the workaround becomes

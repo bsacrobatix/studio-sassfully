@@ -1,5 +1,5 @@
 # POG mockup-packet — deterministic story bound to the use-case type's
-# `materialize:` declaration in pog/catalog.yaml (A2, use-case-loop-plan.md
+# canonical typestore materialization contract (A2, use-case-loop-plan.md
 # §3.5). Five rooms = five stage pills: project -> mockup -> tours -> capture
 # -> doctor, matching the plan's "Story stages (= rooms = pills)" column for
 # the mockup packet artifact row.

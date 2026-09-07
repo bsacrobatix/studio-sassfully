@@ -1,5 +1,5 @@
 # POG demo-packet — deterministic story bound to the use-case type's
-# `materialize:` declaration in pog/catalog.yaml (C2,
+# canonical typestore materialization contract (C2,
 # use-case-loop-plan.md §3.5/§4). Four rooms = four stage pills: plan ->
 # launch -> capture -> doctor, matching the plan's "demo packet" row
 # ("real-app tours + rrweb clips + deck", stages plan -> launch -> capture

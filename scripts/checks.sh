@@ -3,8 +3,9 @@
 #
 #   1. pog-doctor  — conventions lint (CI-safe: skips the hook check in CI)
 #   2. tests       — every package with a package.json test script
-#   3. graph lint  — pog/catalog.yaml validated by the kitsoki engine.
-#   4. story flows — every stories/*/flows fixture replayed (no LLM, no network).
+#   3. story validation — every application definition loads through Kitsoki's
+#                        canonical application/typestore validator.
+#   4. story flows      — every stories/*/flows fixture replayed (no LLM, no network).
 #
 # Steps 3 and 4 both need a kitsoki binary. Resolution order (resolve_kitsoki):
 #   a. $KITSOKI_BIN            — an explicitly pinned prebuilt binary
@@ -75,18 +76,28 @@ resolve_kitsoki() {
 
 in_ci() { [ "${CI:-}" = "true" ] || [ "${GITHUB_ACTIONS:-}" = "true" ]; }
 
-lint_catalog() {
+# Validate the Story applications, including their declared application models
+# and canonical typestore bindings. Catalog content is not a repository-local
+# contract: product applications bind a reviewed `catalog:<id>` at deployment,
+# and the deterministic flow fixtures exercise that binding against a real
+# SQLite typestore. Do not reintroduce a file-catalog lint here.
+validate_story_apps() {
   resolve_kitsoki
   if [ -n "$KITSOKI_RESOLVED" ]; then
-    "$KITSOKI_RESOLVED" graph lint pog/catalog.yaml
-    echo "catalog: lint green ($KITSOKI_RESOLVED_HOW)"
+    local app_count=0
+    while IFS= read -r app; do
+      echo "validate: $app"
+      "$KITSOKI_RESOLVED" validate "$app"
+      app_count=$((app_count + 1))
+    done < <(find stories -name app.yaml -type f | sort)
+    echo "validate: $app_count story app(s) load cleanly ($KITSOKI_RESOLVED_HOW)"
     return 0
   fi
   if in_ci; then
-    echo "catalog: LINT SKIPPED in CI — no kitsoki build available; CI pinning is POG plan 1.4"
+    echo "validate: SKIPPED in CI — no kitsoki build available; CI pinning is POG plan 1.4"
     return 0
   fi
-  echo "error: no kitsoki available to lint pog/catalog.yaml (set KITSOKI_BIN or POG_KITSOKI_SRC, or install kitsoki)" >&2
+  echo "error: no kitsoki available to validate story applications (set KITSOKI_BIN or POG_KITSOKI_SRC, or install kitsoki)" >&2
   return 1
 }
 
@@ -115,11 +126,8 @@ check_story_flows() {
   echo "flows: $ran story app(s) replayed green ($KITSOKI_RESOLVED_HOW)"
 }
 
-if [ -f pog/catalog.yaml ]; then
-  lint_catalog
-fi
-
 if [ -d stories ]; then
+  validate_story_apps
   check_story_flows
 fi
 

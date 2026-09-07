@@ -1,8 +1,12 @@
 states:
   check:
     description: "Running the qa-target's gate command"
-    relevant_world: [node_id, gate, check_ok, check_stdout, check_exit, status]
+    relevant_world: [node_id, graph_catalog_revision, current_status, idempotency_key, gate, check_ok, check_stdout, check_exit, status]
     on_enter:
+      - invoke: host.graph.open
+        id: open_catalog
+        bind: { graph_catalog_revision: catalog_revision }
+        on_error: check_failed
       - invoke: host.run
         id: run_gate
         with:

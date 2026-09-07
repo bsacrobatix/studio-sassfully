@@ -1,7 +1,7 @@
 {
   "name": "@sassfully/feedback-core",
   "version": "0.1.0",
-  "description": "Contextual feedback core: producer-owned anchors, capture->review->submit state machine, privacy-fail-closed review, multi-sink routing with idempotent submission. v0.1 scope per feature-feedback-core (pog/catalog.yaml); kitsoki runstatus capture/bugReport code was reference only (comp-kitsoki-adapter owns extraction).",
+  "description": "Contextual feedback core: producer-owned anchors, capture->review->submit state machine, privacy-fail-closed review, multi-sink routing with idempotent submission. v0.1 scope per feature-feedback-core in the canonical Sassfully typestore; kitsoki runstatus capture/bugReport code was reference only (comp-kitsoki-adapter owns extraction).",
   "type": "module",
   "main": "src/index.mjs",
   "license": "Apache-2.0",

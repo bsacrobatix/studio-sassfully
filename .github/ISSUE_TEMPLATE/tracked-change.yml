@@ -1,5 +1,5 @@
 name: Tracked change
-description: Work item materialized from a pog/catalog.yaml node (POG loop)
+description: Work item materialized from a canonical typestore node
 labels: ["node:change"]
 body:
   - type: input
@@ -7,9 +7,9 @@ body:
     attributes:
       label: Catalog node id
       description: >-
-        The pog/catalog.yaml node this issue tracks (a change node, or the
+        The canonical typestore node this issue tracks (a change node, or the
         requirement/milestone it decomposes). Issue state is derived truth for
-        the node's status — don't hand-edit the catalog status.
+        the node's status — don't hand-edit a local catalog file.
       placeholder: e.g. change-feedback-core-anchor-contract
     validations:
       required: true

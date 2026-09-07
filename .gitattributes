@@ -168,13 +168,6 @@ Gemfile.lock        merge=text
 packages/feedback-core/dist/kitsoki-embed/** merge=binary
 packages/*/vendor/**                         merge=binary
 
-# pog/catalog.yaml deliberately STAYS on mergiraf. It is the hottest shared file
-# in the repo — every branch adds nodes to it — and a tree-sitter YAML merge of
-# two additive changesets is exactly the case mergiraf is good at. The risk of a
-# structurally valid but semantically wrong catalog is covered downstream:
-# `scripts/checks.sh` runs `kitsoki graph lint pog/catalog.yaml`, and stories/land
-# re-runs that gate on the REBASED sha before it pushes.
-
 # Recorded evidence and demo/tour goldens are generated artifacts, not source.
 # A three-way merge of two regenerated recordings is never meaningful; take the
 # conflict and re-record instead of silently interleaving two runs.

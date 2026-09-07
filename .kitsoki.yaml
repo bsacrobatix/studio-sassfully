@@ -6,16 +6,26 @@ project_profile: .kitsoki/project-profile.yaml
 root:
   import: dev-story
 
-# pog-drive: the sanctioned launch profile for agents driving this repo's
-# object-graph catalog (pog/catalog.yaml) via `kitsoki agent launch --profile
-# pog-drive`. Ambient Claude auth, no secrets — machine-specific overrides
+# sassfully-dev: the sanctioned launch profile for this repository's Story
+# applications. Graph access is granted only through the application's bound
+# canonical typestore, never from a local catalog path. Ambient Claude auth,
+# no secrets — machine-specific overrides
 # (synthetic endpoints, quotas) belong in .kitsoki.local.yaml, which
 # deep-merges on top and wins by profile name.
-default_profile: pog-drive
+default_profile: sassfully-dev
 harness_profiles:
-  pog-drive:
+  sassfully-dev:
     backend: claude
     model: opus
     models: [opus, sonnet, haiku]
     effort: medium
     efforts: [low, medium, high, xhigh, max]
+
+# Graph authority is deployment-owned. The QA Story supplies only operation
+# data and optimistic-concurrency receipts; it cannot choose a catalog path.
+application_graphs:
+  pog-qa-compliance-gate-runner:
+    catalog: catalog:sassfully-catalog
+    max_nodes: 200
+    max_bytes: 1048576
+    write_policy: steward

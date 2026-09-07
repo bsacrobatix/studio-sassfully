@@ -1,40 +1,57 @@
-# POG qa-compliance-gate-runner — deterministic pilot story bound to the
-# qa-target type's `materialize:` declaration in pog/catalog.yaml (C3,
-# use-case-loop-plan.md §4 row C3 / §3.5 compliance paragraph). Two rooms,
-# check -> attest, matching the plan's "check -> attest" stage pair for the
-# `requirement` artifact kind. No hosts/agents/live LLM: the check room runs
-# the qa-target's `gate` field as a literal shell command via host.run (the
-# same generic host verb `stories/materialize-doc` docs point at for
-# "no Go needed"), and the attest room writes an evidence log + flips the
-# qa-target node's own `status` field (EvidenceStatus vocabulary: missing |
-# planned | stale | failed | verified | in-progress) via a system-authored
-# graph.propose/apply changeset — the same D9 auto-authorize mechanism C1's
-# internal/materialize/writeback.go uses for materialization:/evidence:,
-# extended here to the bare ["status"] path the D9 allowlist already always
-# permits (internal/graph/propose.go's isAutoAuthorizablePath). This is what
-# makes a qa-target's status "derived, never hand-edited": nothing but this
-# story's attest room (or a human editing the changeset queue) ever writes
-# it.
+# POG qa-compliance-gate-runner — deterministic qa-target materialization.
+# It reads the catalog's current revision, then performs the canonical guarded
+# typestore lifecycle: propose -> apply. The steward-bound qa-status proposal
+# is authorized by the graph service as part of proposal. Every mutation carries
+# the caller's durable run idempotency key, expected revision, and changeset
+# digest; the final receipt is retained in Story world.
 app:
   id: pog-qa-compliance-gate-runner
-  version: 0.1.0
+  version: 0.2.0
   title: "POG qa-target compliance gate runner"
   author: "pog"
   license: "CC0"
 
-# Host verb allow-list (internal/app/types.go's AppDef.Hosts) — host.run
-# (check room's gate command) and host.graph (attest room's status-flip
-# changeset). Without this, an undeclared host verb invoke is a silent
-# no-op rather than a hard error, which is exactly the bug that cost real
-# debugging time building this story: host.graph calls ran, returned
-# nothing, and the job still completed "successfully" with no status flip.
 hosts:
   - host.run
-  - host.graph
+  - host.graph.open
+  - host.graph.propose
+  - host.graph.apply
+
+application:
+  schema: application/v1
+  name: Sassfully QA compliance runner
+  description: Runs a qa-target gate and records its governed graph status.
+  semantic_ref: pog-qa-compliance-gate-runner.application
+  pages:
+    home:
+      name: QA compliance
+      description: Deterministic qa-target gate attestation.
+      semantic_ref: pog-qa-compliance-gate-runner.page.home
+  models:
+    taxonomy: sassfully_catalog
+    version: "1"
+    types:
+      core-node: {}
+      qa-target: {}
+      changeset: {}
+    capability:
+      types:
+        core-node: &graph_access { read: true, write: true }
+        qa-target: *graph_access
+        changeset: *graph_access
+  seed_catalog:
+    path: fixtures/typestore_catalog.yaml
+    namespace: sassfully_catalog
+    version: "1"
 
 world:
   node_id: { type: string, default: "" }
-  catalog_path: { type: string, default: "pog/catalog.yaml" }
+  graph_catalog_revision: { type: string, default: "" }
+  # The materializer reads the qa-target before it starts this Story and
+  # supplies the status it observed. The graph service verifies this guard at
+  # apply time, together with graph_catalog_revision.
+  current_status: { type: string, default: "" }
+  idempotency_key: { type: string, default: "" }
   repo_root: { type: string, default: "." }
   gate: { type: string, default: "" }
   check_ok: { type: bool, default: false }
@@ -43,6 +60,10 @@ world:
   artifact_path: { type: string, default: "" }
   status: { type: string, default: "" }
   changeset_id: { type: string, default: "" }
+  content_digest: { type: string, default: "" }
+  mutation_applied: { type: bool, default: false }
+  mutation_replayed: { type: bool, default: false }
+  mutation_changed: { type: bool, default: false }
 
 intents:
   next:

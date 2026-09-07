@@ -15,7 +15,8 @@
 #                                   silently target a stale ref.
 #   gate_command  scripts/checks.sh — the repo's own deterministic gate
 #                                   (pog-doctor + every package's npm test +
-#                                   `graph lint pog/catalog.yaml`). ~12s, no
+#                                   canonical app validation + every Story flow).
+#                                   ~12s, no
 #                                   network, no LLM. See scripts/checks.sh.
 #   remote        origin
 #

@@ -1,0 +1,21 @@
+# Small, committed graph fixture for the QA runner's real typestore flow.
+# It exercises the same qa-target status lifecycle as the Sassfully catalog
+# without importing that catalog's historical changesets into this focused
+# application test.
+schema: project-object-graph/seed-catalog/v0
+catalog:
+  id: sassfully-catalog
+  title: Sassfully QA typestore fixture
+  status: active
+  visibility: internal
+type_registry:
+  - { id: core-node, schema: graph/core-node/v0 }
+  - { id: changeset, schema: graph/changeset/v1, extends: core-node }
+  - { id: qa-target, schema: sassfully/qa-target/v0, extends: core-node }
+nodes:
+  - schema: sassfully/qa-target/v0
+    id: qa-feedback-privacy
+    title: QA — privacy fails closed
+    status: verified
+    visibility: public
+    gate: scripts/qa/feedback-privacy.sh

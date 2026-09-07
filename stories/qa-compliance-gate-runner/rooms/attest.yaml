@@ -1,7 +1,7 @@
 states:
   attest:
-    description: "Writing the evidence log and flipping the qa-target's status"
-    relevant_world: [node_id, catalog_path, check_ok, check_stdout, status, artifact_path, changeset_id]
+    description: "Writing evidence and recording the guarded qa-target status"
+    relevant_world: [node_id, graph_catalog_revision, idempotency_key, check_ok, check_stdout, status, artifact_path, changeset_id, content_digest, mutation_applied, mutation_replayed, mutation_changed]
     on_enter:
       - set:
           status: "{{ world.check_ok ? \"verified\" : \"failed\" }}"
@@ -23,34 +23,37 @@ states:
             - "{{ world.check_stdout }}"
             - "{{ world.artifact_path }}"
         on_error: attest_failed
-      # Flip the qa-target node's own `status` field via a system-authored
-      # changeset (D9 auto-authorize: the bare ["status"] path always
-      # qualifies — internal/graph/propose.go's isAutoAuthorizablePath).
-      # This is the ONLY writer of a qa-target's status: never hand-edited.
-      - invoke: host.graph
+      # The configured application graph supplies the catalog authority. The
+      # Story supplies only its guarded lifecycle inputs.
+      - invoke: host.graph.propose
         id: propose_status
         with:
-          op: propose
-          catalog_path: "{{ world.catalog_path }}"
           title: "{{ 'QA runner: ' + world.node_id + ' gate check' }}"
+          rationale: "Record the deterministic qa-target gate result."
+          expected_revision: "{{ world.graph_catalog_revision }}"
+          idempotency_key: "{{ world.idempotency_key + ':propose' }}"
+          visibility: internal
           operations:
             - kind: modified
               node: "{{ world.node_id }}"
               changes:
                 - path: ["status"]
+                  before: "{{ world.current_status }}"
                   after: "{{ world.status }}"
           provenance:
             job_id: "{{ world.node_id }}-qa-check"
             story: "stories/qa-compliance-gate-runner"
-        bind: { changeset_id: changeset_id }
+        bind: { changeset_id: changeset_id, content_digest: content_digest, graph_catalog_revision: catalog_revision }
         on_error: attest_failed
-      - invoke: host.graph
+      - invoke: host.graph.apply
         id: apply_status
         with:
-          op: apply
-          catalog_path: "{{ world.catalog_path }}"
           changeset_id: "{{ world.changeset_id }}"
+          content_digest: "{{ world.content_digest }}"
+          expected_revision: "{{ world.graph_catalog_revision }}"
+          idempotency_key: "{{ world.idempotency_key + ':apply' }}"
           dry_run: false
+        bind: { mutation_applied: applied, mutation_replayed: replayed, mutation_changed: changed, graph_catalog_revision: catalog_revision }
         on_error: attest_failed
     view:
       extends: "base"
@@ -62,7 +65,52 @@ states:
                 Artifact: "{{ world.artifact_path|default:'(none)' }}"
                 Status: "{{ world.status|default:'(unset)' }}"
                 Changeset: "{{ world.changeset_id|default:'(none)' }}"
-          - prose: "Gate command ran; evidence log written; qa-target status flipped via a system-authored, auto-authorized changeset. Run `restart` to re-check."
+                Applied: "{{ world.mutation_applied }}"
+                Replayed: "{{ world.mutation_replayed }}"
+                Changed: "{{ world.mutation_changed }}"
+          - prose: "Gate command ran; evidence log written; qa-target status passed through the guarded typestore lifecycle. Run `restart` to re-check."
+        choices:
+          - list:
+              items:
+                - { label: "restart" }
+                - { label: "look", hint: "view the immutable receipt" }
+    on:
+      restart:
+        - target: check
+          effects:
+            - set:
+                check_ok: false
+                check_stdout: ""
+                check_exit: 0
+                status: ""
+                artifact_path: ""
+                changeset_id: ""
+                content_digest: ""
+                mutation_applied: false
+                mutation_replayed: false
+                mutation_changed: false
+      look:
+        - target: receipt
+  # A receipt is a read-only state. Returning `look` to `attest` would rerun
+  # its on_enter mutations with the same idempotency key but a later revision,
+  # which is a different request and must be refused by the typestore.
+  receipt:
+    description: "Viewing the completed QA typestore receipt"
+    relevant_world: [node_id, graph_catalog_revision, idempotency_key, status, artifact_path, changeset_id, content_digest, mutation_applied, mutation_replayed, mutation_changed]
+    view:
+      extends: "base"
+      blocks:
+        body:
+          - kv:
+              pairs:
+                Node: "{{ world.node_id|default:'(none)' }}"
+                Artifact: "{{ world.artifact_path|default:'(none)' }}"
+                Status: "{{ world.status|default:'(unset)' }}"
+                Changeset: "{{ world.changeset_id|default:'(none)' }}"
+                Applied: "{{ world.mutation_applied }}"
+                Replayed: "{{ world.mutation_replayed }}"
+                Changed: "{{ world.mutation_changed }}"
+          - prose: "This receipt is immutable. Restart opens a fresh revision before the next QA check."
         choices:
           - list:
               items:
@@ -79,8 +127,12 @@ states:
                 status: ""
                 artifact_path: ""
                 changeset_id: ""
+                content_digest: ""
+                mutation_applied: false
+                mutation_replayed: false
+                mutation_changed: false
       look:
-        - target: attest
+        - target: receipt
   attest_failed:
     description: "Evidence write or status changeset failed"
     terminal: true
@@ -89,7 +141,7 @@ states:
       extends: "base"
       blocks:
         body:
-          - prose: "Writing evidence or proposing/applying the status changeset failed; no partial write was left in place beyond whatever host.graph itself guarantees."
+          - prose: "Writing evidence or completing the guarded typestore status lifecycle failed."
         choices:
           - list:
               items:
