@@ -18,11 +18,17 @@ toolbar, manual QA, agent QA, and repeatable test runs.
 
 Kitsoki uses [W3C Trace Context](https://www.w3.org/TR/trace-context/) and the
 [OpenTelemetry logs data model](https://opentelemetry.io/docs/specs/otel/logs/data-model/)
-as the canonical cross-service correlation shape. `TraceId`, `SpanId`, resource
+as the canonical cross-service correlation shape. The
+[telemetry profile](reference-evidence-stories.md#opentelemetry-aligned-telemetry-profile)
+defines log/span fields, resource and instrumentation scope, schema versioning,
+and the separation between telemetry shape and evidence provenance. `TraceId`, `SpanId`, resource
 identity, timestamps, and typed attributes remain recognizable when telemetry
 moves between vendors.
 
-OpenTelemetry is the interoperability layer, not the evidence store. An OTLP
+OpenTelemetry is the interoperability layer, not the evidence store. OTLP
+supports gRPC and HTTP telemetry export; it does not define a historical-query
+REST API. Feedback keeps JSON-RPC/Story control and authorized backend-specific
+host reads. Reuse existing SDK/Collector pipelines rather than add an exporter. An OTLP
 pipeline may deliver telemetry to Jaeger, Grafana Tempo and Loki, Elastic, a
 cloud service, or another backend. Jaeger v2 is built on the OpenTelemetry
 Collector framework; Kitsoki therefore treats Jaeger as a trace-query provider,

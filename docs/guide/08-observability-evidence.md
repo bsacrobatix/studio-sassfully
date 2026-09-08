@@ -135,6 +135,20 @@ feedback.correlate({
 });
 ```
 
+## Telemetry shape and API boundary
+
+Use the [OpenTelemetry-aligned telemetry profile](../requirements/reference-evidence-stories.md#opentelemetry-aligned-telemetry-profile)
+for log/trace bundle payloads: retain the appropriate signal fields, resource,
+instrumentation scope, typed attributes, and correlation identities where
+permitted. Other custom bundles remain application-defined. Redacted projections
+record omissions; their familiar telemetry shape does not prove completeness
+or authorize access.
+
+OTLP exports telemetry over gRPC or HTTP. It is not a REST query API for
+retrieving an issue's historical logs. Keep JSON-RPC for feedback and Story
+control, and let your configured Story use authorized typed host reads against
+the existing backend. Reuse your SDK and Collector pipeline.
+
 ## Configure providers
 
 Provider configuration names data locations and credential roles. Reports,

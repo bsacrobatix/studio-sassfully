@@ -199,6 +199,72 @@ and minimal receipts may outlive payloads only where retention policy allows;
 deleting evidence must not leave sensitive copies in prompts or artifact stores
 outside that policy.
 
+## OpenTelemetry-aligned telemetry profile
+
+For bundles containing logs or traces, reuse OpenTelemetry data structures and
+semantic conventions instead of inventing a competing telemetry model. This is
+a telemetry payload profile inside the common evidence envelope, not a
+requirement that every application emit OpenTelemetry or that non-telemetry
+custom bundles become spans. Application-owned Stories still choose the source,
+authorization logic, projection, and bundle schema.
+
+| Payload | Preserve when present and permitted |
+| --- | --- |
+| Logs | `Timestamp`, `ObservedTimestamp`, `SeverityNumber`, `SeverityText`, `Body`, typed `Attributes`, `TraceId`, `SpanId`, and `TraceFlags`, with their resource and instrumentation scope. |
+| Spans | Trace/span identity, parent span identity, trace flags/state where permitted, name, kind, start/end times, typed attributes, events, links, status, and source-reported dropped counts, with resource and instrumentation scope. |
+| Resource and scope | Resource attributes identifying the emitting service/deployment and instrumentation scope name/version/attributes; preserve applicable schema URLs. |
+
+Keep log fields and span fields in their proper models: a log's body and
+severity are not a span status, and a span event or link should not become an
+invented log record. Preserve the distinction between event time and observed
+time. Request, session, execution, and domain IDs that are not trace/span IDs
+remain classified custom reference fields or namespaced attributes; never coerce
+them into W3C identifiers. Validate the applicable ID shape and encoding, but
+remember that even a valid propagated trace ID is caller-influenced correlation,
+not proof of ownership, authenticity, or permission to fetch related records.
+Telemetry describing the evidence-fetch workflow remains distinct from incident
+telemetry; use links for that relationship rather than fabricate parent spans.
+
+Use existing semantic conventions where their meaning fits; record the bundle
+schema version and the applicable convention/schema version when known. Do not
+label guessed mappings as source facts or claim a schema URL the source did not
+supply unless an explicit versioned transform performed that conversion. Keep
+application-specific attributes in an application-owned namespace, and do not
+silently change their type or meaning across bundle revisions. Classification
+and redaction apply to bodies, attributes, events, links, resource identity, and
+trace state as well as obvious session IDs.
+
+A released bundle is an authorized projection, not necessarily a complete OTLP
+message or a replayable export. Record field omissions and transforms in the
+evidence envelope, separately from source-reported sampling and dropped counts.
+Missing spans, filtered services, or expired logs must not be filled with
+synthetic successful records or presented as a complete trace. Preserve source
+provenance and access decisions outside telemetry fields: OpenTelemetry shape
+and a content digest do not establish trust or grant access.
+
+### Transport and retrieval
+
+[OTLP](https://opentelemetry.io/docs/specs/otlp/) transports telemetry over gRPC
+with protobuf, or HTTP POST with binary protobuf or protobuf JSON encoding.
+OTLP/HTTP is a telemetry export protocol, not a general REST API for
+querying historical records or opening issues. Reuse an application's existing
+SDK and Collector/export pipeline. Kitsoki does not introduce a second exporter
+or require changing the logging backend to support reference evidence.
+
+Keep JSON-RPC as feedback/Story control: submit references, inspect durable
+status, and obtain issue-scoped evidence. Configured Stories use permitted typed
+host reads against the system retaining records. Those backend APIs may use HTTP,
+gRPC, or another admitted protocol, but their query dialect and authentication
+stay behind host capabilities. OTLP compatibility does not imply a standard
+cross-vendor historical query API. The [telemetry integration contract](observability-evidence-providers.md)
+describes optional lookup conventions within this boundary.
+
+The governing references are the [OpenTelemetry logs data model](https://opentelemetry.io/docs/specs/otel/logs/data-model/),
+[trace API model](https://opentelemetry.io/docs/specs/otel/trace/api/),
+[resource conventions](https://opentelemetry.io/docs/specs/semconv/resource/),
+[semantic conventions](https://opentelemetry.io/docs/specs/semconv/),
+and [W3C Trace Context](https://www.w3.org/TR/trace-context/).
+
 ## Review, automatic release, and privacy
 
 Unreleased candidates remain in bounded, expiring quarantine with no ordinary
@@ -282,6 +348,8 @@ These are implementation acceptance requirements, not tests claimed to pass:
 | Valid trace with restricted downstream service | Allowed projection only; restricted traversal is bounded and omitted. |
 | Caller changes Story, query, destination, scope, or policy | Unknown or privileged fields rejected; configured bindings remain authoritative. |
 | Two custom Story bundle schemas | Both work through the common envelope without core vendor-specific adapters. |
+| Telemetry profile and redaction | Log/span fields, resource/scope, typed values, and IDs preserve their model; filtered fields and missing spans are explicit and cannot imply a complete trace. |
+| OTLP-compatible source | Existing export pipeline stays intact; historical reads still require authorized backend lookup and cannot treat trace identity as permission. |
 | Retry, concurrent submit, lost GitHub reply | One canonical filing outcome; conflict on retry key with changed content. |
 | Fetch timeout, partial trace, expired source | Durable classified state, bounded retry, no false complete success. |
 | Custom payload includes secrets or unknown classification | Quarantine/refusal; nothing reaches GitHub or an ordinary agent. |
