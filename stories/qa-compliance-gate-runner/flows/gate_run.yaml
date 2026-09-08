@@ -8,6 +8,7 @@ typestore_graph_fixture:
   catalog: ../fixtures/typestore_catalog.yaml
   catalog_id: sassfully-catalog
   backend: sqlite
+expect_no_host_errors: true
 initial_state: check
 initial_world:
   node_id: qa-feedback-privacy

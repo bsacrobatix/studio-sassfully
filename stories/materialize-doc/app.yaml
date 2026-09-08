@@ -1,13 +1,39 @@
-# POG materialize-doc — deterministic story bound to the doc and tutorial
-# deliverable types' materialization contract. This Story receives sealed
-# materialization inputs and has no graph host calls, so it exposes no graph
-# routing interface or catalog authority.
+# POG materialize-doc — deterministic materialization of sealed doc and
+# tutorial deliverables. It has no graph host routing or caller-selected
+# catalog authority; its application model pins the deliverable taxonomy.
 app:
   id: pog-materialize-doc
   version: 0.2.0
   title: "POG doc deliverable — generated document"
   author: "pog"
   license: "CC0"
+
+application:
+  schema: application/v1
+  name: Sassfully document materializer
+  description: Deterministically materializes a sealed doc or tutorial deliverable.
+  semantic_ref: pog-materialize-doc.application
+  pages:
+    home:
+      name: Document materialization
+      description: The deterministic doc and tutorial materialization flow.
+      semantic_ref: pog-materialize-doc.page.home
+  models:
+    taxonomy: sassfully_catalog
+    version: "1"
+    types:
+      core-node: {}
+      doc: {}
+      tutorial: {}
+    capability:
+      types:
+        core-node: &deliverable_read { read: true }
+        doc: *deliverable_read
+        tutorial: *deliverable_read
+  seed_catalog:
+    path: fixtures/typestore_catalog.yaml
+    namespace: sassfully_catalog
+    version: "1"
 
 world:
   node_id: { type: string, default: "" }

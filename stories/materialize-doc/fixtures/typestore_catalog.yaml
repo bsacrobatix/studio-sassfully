@@ -1,0 +1,19 @@
+# The sealed model taxonomy for document materialization. The materializer
+# reads the selected deliverable before entering this Story, so the Story
+# receives only sealed node/context/gate inputs and performs no graph routing.
+schema: project-object-graph/seed-catalog/v0
+catalog:
+  id: sassfully-catalog
+  title: Sassfully document materializer models
+  status: active
+  visibility: internal
+type_registry:
+  - { id: core-node, schema: graph/core-node/v0 }
+  - { id: doc, schema: sassfully/doc/v0, extends: core-node }
+  - { id: tutorial, schema: sassfully/tutorial/v0, extends: core-node }
+nodes:
+  - schema: sassfully/doc/v0
+    id: wi-3-1
+    title: Materialization brief
+    status: planned
+    visibility: internal

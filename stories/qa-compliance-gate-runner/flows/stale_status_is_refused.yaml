@@ -1,0 +1,42 @@
+# A stale materializer observation cannot overwrite the canonical status.
+# The fixture starts verified; the stale `current_status` below is failed.
+test_kind: flow
+app: ../app.yaml
+use_orchestrator: true
+host_bindings: { graph: host.graph }
+typestore_graph_fixture:
+  catalog: ../fixtures/typestore_catalog.yaml
+  catalog_id: sassfully-catalog
+  backend: sqlite
+expect_no_host_errors: true
+initial_state: check
+initial_world:
+  node_id: qa-feedback-privacy
+  current_status: failed
+  idempotency_key: qa-feedback-privacy-stale-status-1
+  gate: "scripts/checks.sh"
+host_handlers:
+  host.run:
+    by_call:
+      run_gate:
+        data: { ok: false, stdout: "canonical validation: 1 issue\n", exit_code: 1 }
+      write_evidence:
+        data: { ok: true, stdout: "", exit_code: 0 }
+turns:
+  - intent: { name: look, slots: {} }
+    expect_state: check
+    expect_world:
+      check_ok: false
+      check_stdout: "canonical validation: 1 issue\n"
+
+  - intent: { name: next, slots: {} }
+    allow_host_errors: true
+    expect_state: attest_failed
+    expect_world:
+      status: failed
+      changeset_id: ""
+      mutation_applied: false
+      mutation_changed: false
+    expect_view_matches: "guarded typestore status lifecycle failed"
+
+expect_no_errors: true
