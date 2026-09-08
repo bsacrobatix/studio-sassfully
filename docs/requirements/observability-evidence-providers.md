@@ -1,6 +1,13 @@
 # Correlated observability evidence: provider and privacy contract
 
-**Status:** accepted 2026-08-30.
+**Status:** design requirements, originally accepted 2026-08-30; refined
+2026-09-08. Provider and API examples are not a claim of implementation.
+
+The governing extension model is [reference-backed feedback through native
+Stories](reference-evidence-stories.md). Application-owned Starlark validates
+authoritative references, fetches through permitted host capabilities, and builds
+custom bundles. This document specializes that contract for telemetry; it does
+not require a separate provider framework.
 
 This contract defines how a reviewed feedback journey links to backend logs and
 distributed traces without making a browser, an agent, or a story a privileged
@@ -62,7 +69,8 @@ the underlying value only inside the trusted host boundary.
 
 ## Provider interface
 
-Every observability adapter implements the same read-only contract:
+A telemetry Story may organize its read-only work using these conventions.
+They are optional Story boundaries, not a mandatory adapter interface:
 
 | Operation | Input | Result |
 | --- | --- | --- |
@@ -75,8 +83,9 @@ template. It rejects arbitrary browser- or agent-authored query strings.
 `fetch` applies exact time, service, environment, record, byte, and duration
 bounds before returning data.
 
-All results normalize into OpenTelemetry-shaped trace or log records where a
-lossless mapping exists. Unmapped provider fields remain namespaced attributes.
+Telemetry payloads should use OpenTelemetry-shaped trace or log records where a
+lossless mapping exists. Other custom bundle schemas remain valid under the
+common envelope. Unmapped provider fields remain namespaced attributes.
 Every result records provider, query-template revision, source identities,
 window, truncation, sampling, inaccessible sources, returned count, content
 digest, privacy transform, and read receipt.
@@ -86,7 +95,7 @@ report, MCP argument, Starlark value, trace, scenario, or evidence artifact.
 
 ## Initial adapters
 
-The first adapter set covers:
+Possible application-owned Story integrations include:
 
 - local JSONL, NDJSON, and text artifacts through a bounded literal search;
 - S3-compatible immutable objects and manifests;
@@ -102,7 +111,10 @@ behind these adapters. They are not exposed as commands to an agent or story.
 
 ## Trust and refusal rules
 
-- Fetch is read-only and requires an approved correlation handle.
+- Fetch is read-only and requires authenticated scope and a validated reference.
+  A reviewed handle alone does not prove ownership or request/session membership;
+  the configured Story verifies those relationships through authoritative host
+  lookups before broader retrieval.
 - Browser capture uses an explicit response-header allowlist; it never captures
   every header.
 - Trace baggage is not imported by default.
@@ -113,9 +125,12 @@ behind these adapters. They are not exposed as commands to an agent or story.
 - Kubernetes pod logs are ephemeral evidence unless copied into a durable
   reviewed bundle; cluster-level storage is preferred for retained proof.
 - Raw provider responses remain outside GitHub. GitHub receives the normalized
-  summary, evidence digest, and authorized evidence link.
-- Every retained result follows the existing bundle-first, per-item evidence
-  approval and retention contract.
+  summary, permitted digest, and opaque internal evidence binding; no bearer link.
+- Every retained result requires an exact-digest release decision and retention
+  policy. Individual review remains the default; an explicit configured policy
+  may release a classified projection automatically under the
+  [Story evidence contract](reference-evidence-stories.md#review-automatic-release-and-privacy).
+  Browser sidecar upload approvals remain unchanged.
 
 ## Microservice traversal
 

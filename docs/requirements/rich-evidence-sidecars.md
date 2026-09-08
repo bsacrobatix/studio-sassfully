@@ -40,6 +40,9 @@ A browser-originated server-trace item is a correlation marker/summary only: it
 must not contain browser trace body bytes. A host may resolve that reviewed
 marker into a separate bounded backend log or trace sidecar under the
 [observability provider contract](observability-evidence-providers.md). The
-provider result receives its own privacy review, digest, retention policy, and
-source receipt. HAR/replay capture follows the same capture-time redaction,
+provider result receives its own digest, retention policy, source receipt,
+and exact-digest release decision. Under the proposed
+[native Story evidence contract](reference-evidence-stories.md), that decision
+may be individual review or an explicit automatic release policy for a
+classified backend projection. This does not change browser upload approval. HAR/replay capture follows the same capture-time redaction,
 masking, bounded retention, review, and per-item approval policy.

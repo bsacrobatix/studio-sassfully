@@ -118,10 +118,14 @@ and the regression test that protects the resulting behavior.
 - GitHub receives reviewed prose and evidence references by default, not raw
   replay or HAR files.
 - Unknown privacy classifications block submission.
-- Agents receive the reviewed projection unless a person explicitly grants a
-  bounded evidence item for that session.
+- Agents receive released projections only. Browser evidence requires review;
+  the proposed reference evidence path also permits explicit configured policy
+  release for a bounded audience and purpose.
 
 See [rich evidence sidecars](../requirements/rich-evidence-sidecars.md) for the
 transport contract, [correlated observability evidence](../requirements/observability-evidence-providers.md)
 for the backend retrieval boundary, and [extension mode](../requirements/extension-mode.md)
 for the zero-integration capture boundary.
+
+For the proposed request/session reference submission and issue-scoped agent
+handoff, see [reference-backed feedback through native Stories](../requirements/reference-evidence-stories.md).

@@ -35,9 +35,11 @@ observed the behavior, which application revision ran, which evidence was
 reviewed, or which assertions a person accepted.
 
 When the browser or integrated library knows a request, trace, session, or
-execution ID, the same evidence path can resolve bounded backend logs and
-distributed traces from configured observability providers. The report carries
-a reviewed correlation handle, not a logging credential or arbitrary query.
+execution ID, the proposed [native Story evidence design](docs/requirements/reference-evidence-stories.md)
+lets an application validate that reference and retrieve permitted records
+through its own `.kitsoki` Story and Starlark. Custom bundles remain internally
+bound to the issue; GitHub receives a safe summary and the assigned agent gets
+issue-scoped access. This is a design requirement, not a shipped retrieval claim.
 
 Capture can begin in either product mode:
 

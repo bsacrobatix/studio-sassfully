@@ -77,8 +77,8 @@ envelope; neither invents a separate evidence format.
 | Convert a session to a fixture | `trace.to_flow` | committed flow/cassette | reviewable candidate files |
 | Run story regression tests | `story.test` | story flow fixtures | deterministic test report |
 | Store proof | `evidence.record`, `visual.record` | `host.flow_evidence` | immutable evidence handle and receipt |
-| Plan a backend evidence read | `feedback.observability.plan` | `host.feedback.observability.plan` | bounded read plan with no telemetry records |
-| Fetch correlated logs and traces | `feedback.observability.fetch` | `host.feedback.observability.fetch` | classified candidate evidence and provider receipts |
+| Plan a backend evidence read (proposed) | `feedback.observability.plan` | `host.feedback.observability.plan` | bounded read plan with no telemetry records |
+| Fetch correlated logs and traces (proposed) | `feedback.observability.fetch` | `host.feedback.observability.fetch` | classified candidate evidence and provider receipts |
 | File a defect | `issue.create` | configured GitHub issue filer | issue URL plus local/evidence receipts |
 
 ## MCP operating pattern
@@ -259,26 +259,32 @@ Every evidence handle records:
 Evidence consumers receive handles. The evidence service resolves authorized,
 short-lived reads; credentials never appear in MCP arguments or Starlark.
 
-## Observability provider boundary
+## Reference evidence and observability boundary (proposed)
 
-`feedback.observability.plan` accepts a reviewed correlation handle, requested
-signals, and a narrower time window. The host resolves environment routing,
-provider endpoints, indexes, buckets, namespaces, tenants, and credential roles
-from project policy. The plan returns sources and hard limits but reads no
-records.
+The [native Story design](../requirements/reference-evidence-stories.md) defines
+the new integration contract. A configured `.kitsoki` Story validates references
+against authoritative records and composes permitted typed host operations to
+build a custom, versioned evidence bundle. Transport identity and capability
+limits remain host-owned; Starlark applies application-specific authorization
+and construction logic.
 
-`feedback.observability.fetch` accepts only an approved plan revision. Provider
-adapters implement `capabilities`, `plan`, and `fetch`; they normalize results
-to OpenTelemetry-shaped logs and spans where possible and return explicit
-sampling, truncation, rotation, authorization, and partial-source status.
-Fetched records remain quarantined candidate evidence until the ordinary
-per-item review approves their exact digest for retention or agent access.
+The `feedback.observability.plan/fetch` and corresponding host names in this
+guide are design placeholders, not verified callable APIs. Telemetry Stories
+may use `capabilities`, `plan`, and `fetch` as internal conventions; other
+Stories need not implement that interface or normalize custom data as logs.
 
-Neither MCP nor Starlark can supply provider query syntax, a shell command,
-filesystem path, URL, credential, Kubernetes selector, index, or object prefix.
-Local `rg` or `grep`, object-store reads, trace query APIs, and log-search APIs
-remain host executor details. See [backend logs and traces](08-observability-evidence.md)
-for configuration and operating patterns.
+Fetched candidates remain quarantined until their exact projection digest has
+a release receipt from individual review or explicit configured policy. The
+policy separately governs GitHub summaries, prompt insertion, model processing,
+and host retrieval. Existing uploaded browser evidence retains individual
+approval.
+
+An assigned bugfix job receives a server-owned issue-evidence binding and a
+permitted manifest. Further Starlark reads derive issue/job scope from trusted
+execution context and recheck current visibility and revocation. Caller-provided
+IDs and issue-body handles grant no access. Credentials and unrestricted query
+execution remain outside Story values and agent arguments. See [backend logs
+and traces](08-observability-evidence.md) for optional telemetry recipes.
 
 ## GitHub routing
 

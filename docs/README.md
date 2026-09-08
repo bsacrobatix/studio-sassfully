@@ -18,6 +18,7 @@ The [Kitsoki Feedback guide](guide/README.md) covers the complete workflow:
 - [Concept](concept.md)
 - [Chrome extension mode](requirements/extension-mode.md)
 - [Rich evidence sidecars](requirements/rich-evidence-sidecars.md)
+- [Reference-backed feedback through native Stories — detailed proposed design](requirements/reference-evidence-stories.md)
 - [Correlated observability evidence](requirements/observability-evidence-providers.md)
 - [Embedded demo control](embedded-demo-control.md)
 

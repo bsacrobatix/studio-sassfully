@@ -1,5 +1,26 @@
 # Link feedback to backend logs and traces
 
+> **Design guide:** the configuration, commands, UI actions, and observability
+> APIs below describe the proposed telemetry integration, not verified shipped
+> surfaces. Use the [native Story design](../requirements/reference-evidence-stories.md)
+> as the governing contract for extensibility, authorization, release, and
+> issue-scoped agent access.
+
+## Start with an application-owned Story
+
+Configure a normal Story in `.kitsoki/stories` to validate reporter references,
+resolve records through permitted typed host operations, and build the bundle
+your application needs. The reporter supplies a description and request/session
+references; uploading logs is not required. Your Starlark defines application
+entitlements and record relationships within host-enforced capability limits.
+
+The following telemetry recipes are examples that such a Story can compose.
+They are not a required plugin interface or a prerequisite vendor adapter list.
+Before filing GitHub, the Story must satisfy the configured authoritative
+evidence minimum and release a safe summary. The assigned bugfix job receives
+the internal binding and permitted manifest, with further reads authorized by
+issue/job scope. See the detailed design for lifecycle and refusal behavior.
+
 Kitsoki Feedback can turn a request, trace, session, execution, or provider ID
 known at the point of feedback into reviewed backend evidence. The same path
 works whether telemetry is in a local artifact, an S3-compatible bucket,
@@ -7,8 +28,8 @@ Elasticsearch, Grafana Loki, Jaeger, Grafana Tempo, or Kubernetes pod logs.
 
 The browser does not query those systems. It contributes a reviewed correlation
 handle; the Kitsoki host resolves that handle through a configured, read-only
-provider adapter. The bounded result enters the ordinary evidence review before
-it can be retained, linked from GitHub, or granted to an agent.
+Story. The bounded result requires an exact-digest release decision through
+review or explicit policy before retention, GitHub projection, or agent access.
 
 ```mermaid
 flowchart LR
@@ -156,7 +177,7 @@ test query as proof that access works.
 
 ## Generic provider contract
 
-All adapters implement the same three operations:
+A telemetry Story can use these three optional operation conventions:
 
 | Operation | Purpose | Durable result |
 | --- | --- | --- |
@@ -208,9 +229,9 @@ Through MCP:
 
 `feedback.observability.plan` returns the proposed read. After approval,
 `feedback.observability.fetch` returns a classified candidate, source receipt,
-and privacy preview, never an ambient provider credential. Approve the exact
-candidate digest through the normal evidence review before retention or agent
-access.
+and privacy preview, never an ambient provider credential. Release the exact candidate digest through individual review or an explicit
+policy authorizing that classified projection and audience before retention or
+agent access.
 
 ```mermaid
 sequenceDiagram
@@ -227,8 +248,8 @@ sequenceDiagram
     Host->>Logs: bounded logs by trace and span IDs
     Logs-->>Host: correlated records and omissions
     Host-->>UI: classified candidate and privacy preview
-    UI->>Host: approve exact candidate digest
-    Host->>Store: normalized reviewed evidence
+    UI->>Host: release exact digest (review or explicit policy)
+    Host->>Store: released projection and decision receipt
     Store-->>UI: evidence handles and read receipt
 ```
 
@@ -284,7 +305,8 @@ and expose only a safe technical lookup handle to feedback capture.
 ## Use the evidence in QA and GitHub
 
 Fetched telemetry is another evidence item, not automatically trusted content.
-After its classified projection and exact digest are reviewed, an interactive
+After its classified projection and exact digest are released by review or
+explicit policy, an interactive
 agent can read the approved projection, identify the failing service or span,
 and add one backend observation to the journey. A saved scenario retains the
 evidence digest and correlation recipe, not production telemetry bytes.
@@ -293,9 +315,9 @@ GitHub receives a concise summary such as:
 
 - request `CORR-...` resolved to trace `TRACE-...`;
 - six services participated; one service was unsampled;
-- the failing span and three reviewed error records are attached;
+- the approved summary describes the failing span and error observations;
 - evidence was fetched from Tempo and Loki for a 120-second window;
-- full evidence is available through an authorized, expiring link.
+- an opaque internal binding resolves permitted evidence after authorization.
 
 Missing telemetry is evidence too. A receipt distinguishes no matching records,
 sampling, retention expiry, rotation, authorization refusal, provider failure,
