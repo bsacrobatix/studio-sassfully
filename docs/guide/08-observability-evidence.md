@@ -149,6 +149,20 @@ retrieving an issue's historical logs. Keep JSON-RPC for feedback and Story
 control, and let your configured Story use authorized typed host reads against
 the existing backend. Reuse your SDK and Collector pipeline.
 
+## First POC target
+
+The [agreed first POC](../requirements/reference-evidence-stories.md#first-poc-grafana-loki-queries-opentelemetry-log-evidence)
+uses Grafana Loki's LogQL `query_range` API and an OpenTelemetry LogRecord
+projection. A normal `.kitsoki` Story validates the authenticated session/request
+relationship before host-bound tenant/service/time-limited queries. It then
+releases a safe issue summary and supplies issue-scoped evidence to the assigned
+bugfix agent. This target is proposed work, not shipped Loki support.
+
+The POC reuses the existing Loki authentication gateway and query language.
+It does not require replacing the logging stack or standardizing every custom
+bundle as telemetry. Preserve mapping losses: Loki results cannot always
+reconstruct the original OpenTelemetry record or attribute types.
+
 ## Configure providers
 
 Provider configuration names data locations and credential roles. Reports,

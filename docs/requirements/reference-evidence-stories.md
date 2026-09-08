@@ -360,6 +360,74 @@ These are implementation acceptance requirements, not tests claimed to pass:
 | Required zero-retention route unavailable | Processing refused; no silent model-route fallback. |
 | Retention expiry and deletion | All governed copies follow policy; receipt states what remains and why. |
 
+## First POC: Grafana Loki queries, OpenTelemetry log evidence
+
+**Agreed POC target:** use Grafana Loki's existing LogQL query API for the first
+concrete backend integration and the OpenTelemetry LogRecord data model for its
+telemetry evidence projection. This is a selected implementation target, not a
+claim of shipped support, a universal query standard, or a requirement that
+other deployments use Loki. Native `.kitsoki` Stories and Starlark remain the
+extension mechanism; other backends and custom bundle schemas remain supported
+by the design without implementing a fixed provider interface.
+
+The smallest complete POC follows this path:
+
+1. The reporter submits a description and session/request references through
+   the feedback path. The configured Story uses an authoritative application
+   lookup to verify authenticated actor access and request/session membership.
+   It derives the trace ID, application/environment, permitted service scope,
+   and bounded time window from those records. A caller-supplied trace ID or a
+   matching line in Loki cannot replace this ownership check.
+2. The Story invokes an admitted typed host read using a configured LogQL
+   template and Loki's `/loki/api/v1/query_range` endpoint. The host binds the
+   tenant, endpoint, credential role, service selectors, start/end time, record
+   and byte limits, deadline, and retry budget. Reference values are safely
+   encoded as literal template inputs; reporters and agents cannot supply raw
+   LogQL, broaden selectors, or choose another tenant. Reuse LogQL rather than
+   invent a query language or an adapter framework.
+3. The host authenticates through the deployment's existing gateway or hosting
+   service and enforces the capability grant. Loki's tenant routing header,
+   where used, comes from trusted configuration; it is not proof of caller
+   authorization. Loki does not itself supply the application's user/session
+   ownership model. Both the application check and the host's source-access
+   boundary must pass before broader log retrieval.
+4. The Story constructs an OpenTelemetry-aligned LogRecord projection inside
+   the common evidence envelope. Map the returned entry timestamp and log body;
+   recover severity, trace/span identity, resource identity, and typed attributes
+   only where the configured source format supports them. Loki stream labels,
+   structured metadata, or parsed log fields do not necessarily preserve the
+   original OpenTelemetry types or full record. Record mappings, lost fields,
+   omissions, and unavailable values explicitly rather than inventing an exact
+   OTLP reconstruction. Retrieval time belongs in the receipt; it must not be
+   passed off as the source's original observed timestamp.
+5. Apply the configured release policy, persist the issue-evidence binding, and
+   file only the safe GitHub projection. The existing bugfix dispatch provides
+   the assigned agent with the permitted manifest and issue-scoped read handle.
+   The POC is complete only when that agent actually obtains the authorized
+   records and an unrelated issue/job is refused; a successful Loki response
+   or GitHub write alone is intermediate evidence.
+
+A capped response is not proof that all matching logs were returned. Conservatively
+mark limit hits as potentially truncated, and use only bounded continuation if
+implemented; timeouts and partial results retain the availability states above.
+Loki log access is sufficient for this first POC: full trace-store retrieval,
+a new Collector, an exporter, and a catalog of vendor adapters are not required.
+
+The POC acceptance receipt must include these cases:
+
+| Case | Required result |
+| --- | --- |
+| Real request in the reporter's session | Validated binding, bounded Loki lookup, released log projection, safe issue, and successful assigned-agent retrieval. |
+| Forged ID or another tenant's real request | Refusal before unauthorized log retrieval or issue filing, without an existence leak. |
+| Caller attempts raw query or tenant override | Refusal; admitted template and host scope remain authoritative. |
+| Timeout or result limit reached | Explicit unavailable/truncated state with bounded retries; no false complete success or privileged fallback. |
+| Evidence handle copied to another job | Access denied despite possession of the handle. |
+
+Backend details are governed by the [Loki HTTP API](https://grafana.com/docs/loki/latest/reference/loki-http-api/),
+[LogQL](https://grafana.com/docs/loki/latest/query/), and
+[Loki authentication guidance](https://grafana.com/docs/loki/latest/operations/authentication/).
+The output model follows the [OpenTelemetry logs data model](https://opentelemetry.io/docs/specs/otel/logs/data-model/).
+
 ## Small integration sequence
 
 1. Confirm the existing application feedback and generic report routes that
@@ -369,15 +437,19 @@ These are implementation acceptance requirements, not tests claimed to pass:
 2. Bind one ordinary `.kitsoki` Story to intake. Reuse an existing typed host
    session/request lookup if available after verifying its authorization contract;
    otherwise identify the narrow missing auth-bound host operation. Prove
-   authenticated relationship validation and one custom bundle end to end.
+   authenticated relationship validation, then the bounded Loki/LogQL read and
+   OpenTelemetry LogRecord projection specified in the POC above.
 3. Extend existing evidence persistence/review with policy release receipts and
    the durable issue binding; exercise filing reconciliation and refusals.
 4. Pass that binding through existing bugfix dispatch and prompt assembly;
    expose bounded issue-scoped retrieval through the host. Prove a real assigned
-   agent can obtain only that issue's released records.
-5. Demonstrate a second application-defined Starlark resolver and bundle schema
-   using a different source, plus the adversarial cases above. This establishes
-   extensibility without making a catalog of vendor adapters a prerequisite.
+   agent can obtain only that issue's released records; retain the POC acceptance
+   receipt including refusals, timeouts, and truncation.
+5. After the Loki POC, demonstrate a second application-defined Starlark resolver
+   and bundle schema using a different source, plus the adversarial cases above.
+   This follow-on extensibility proof is not a requirement for completing the
+   POC. It establishes extensibility without making a catalog of vendor adapters
+   a prerequisite.
 
 Record implementation and live proof separately as these steps land. This
 brief changes the design contract only; it does not enable reference-required

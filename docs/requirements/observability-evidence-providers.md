@@ -99,9 +99,16 @@ digest, privacy transform, and read receipt.
 Credentials are resolved from host credential roles. They never enter a
 report, MCP argument, Starlark value, trace, scenario, or evidence artifact.
 
-## Initial adapters
+## First POC and later integrations
 
-Possible application-owned Story integrations include:
+The [first POC](reference-evidence-stories.md#first-poc-grafana-loki-queries-opentelemetry-log-evidence)
+uses Loki/LogQL bounded queries and an OpenTelemetry LogRecord projection,
+after authoritative application reference validation. Loki query access and
+tenant routing alone do not establish user/session ownership. The configured
+Story and host capability boundary supply authorization; mapping losses and
+query limits remain explicit in the evidence envelope.
+
+Other possible application-owned Story integrations include:
 
 - local JSONL, NDJSON, and text artifacts through a bounded literal search;
 - S3-compatible immutable objects and manifests;
