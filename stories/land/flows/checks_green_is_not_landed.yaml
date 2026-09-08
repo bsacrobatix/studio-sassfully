@@ -1,0 +1,33 @@
+# Reviewer-owned mode awaits remote CI but never arms auto-merge. A green check
+# is therefore distinct from landing and must map to checks-green.
+test_kind: flow
+app: ../app.yaml
+initial_state: ready
+initial_world:
+  worktree_path: ".worktrees/reviewed-feedback"
+  workspace_branch: "feat/reviewed-feedback"
+  arm_auto_merge: false
+host_handlers:
+  host.git:
+    by_call:
+      land_fetch:   { data: { ok: true, fetched_sha: "aaaa111" } }
+      land_probe:   { data: { ok: true, fetched_sha: "" } }
+      land_rebase:  { data: { outcome: rebased, head_sha: "bbbb222", conflicted_files: [], error: "" } }
+      land_publish: { data: { outcome: pushed, ok: true, url: "git@github.com:bsacrobatix/studio-sassfully.git", error: "" } }
+      land_open_pr:
+        data: { ok: true, outcome: opened, url: "https://github.com/bsacrobatix/studio-sassfully/pull/14", pr_id: "14", repo: "bsacrobatix/studio-sassfully" }
+      land_arm:
+        error: "land_arm must not run for reviewer-owned checks"
+      land_await:
+        data: { ok: true, outcome: checks_passed, merged: false, merged_sha: "", head_sha: "bbbb222", state: success, pr_state: open, mergeable_state: "clean", checks_summary: "state: success", failed_log: "", polls: 2, waited_seconds: 40 }
+turns:
+  - intent: { name: land, slots: {} }
+    expect_state: __exit__checks-green
+    expect_world:
+      status: checks-green
+      pr_url: "https://github.com/bsacrobatix/studio-sassfully/pull/14"
+      head_sha: "bbbb222"
+      landed_sha: ""
+      ln__arm_outcome: ""
+expect_terminal: true
+expect_no_errors: true

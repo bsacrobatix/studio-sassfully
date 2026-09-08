@@ -4,7 +4,7 @@ use_orchestrator: true
 # Registers the real graph builtin before the fixture replaces its catalog
 # authority with the hermetic typestore mount.
 host_bindings: { graph: host.graph }
-graph_catalog_store:
+typestore_graph_fixture:
   catalog: ../fixtures/typestore_catalog.yaml
   catalog_id: sassfully-catalog
   backend: sqlite

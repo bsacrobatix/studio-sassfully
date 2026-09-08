@@ -1,0 +1,31 @@
+# A bounded wait leaves an open pull request as needs-human, never as landed or
+# checks-red. This pins the wrapper's ordinary failure mapping.
+test_kind: flow
+app: ../app.yaml
+initial_state: ready
+initial_world:
+  worktree_path: ".worktrees/waiting-feedback"
+  workspace_branch: "feat/waiting-feedback"
+  max_attempts: 2
+host_handlers:
+  host.git:
+    by_call:
+      land_fetch:   { data: { ok: true, fetched_sha: "aaaa111" } }
+      land_probe:   { data: { ok: true, fetched_sha: "" } }
+      land_rebase:  { data: { outcome: rebased, head_sha: "bbbb222", conflicted_files: [], error: "" } }
+      land_publish: { data: { outcome: pushed, ok: true, url: "git@github.com:bsacrobatix/studio-sassfully.git", error: "" } }
+      land_open_pr:
+        data: { ok: true, outcome: opened, url: "https://github.com/bsacrobatix/studio-sassfully/pull/15", pr_id: "15", repo: "bsacrobatix/studio-sassfully" }
+      land_arm:
+        data: { ok: true, outcome: armed, merge_method: merge, pr_id: "15", head_sha: "bbbb222", merged: false, merged_sha: "", detail: "auto-merge armed" }
+      land_await:
+        data: { ok: true, outcome: timeout, merged: false, merged_sha: "", head_sha: "bbbb222", state: pending, pr_state: open, mergeable_state: "clean", checks_summary: "state: pending", failed_log: "", polls: 2, waited_seconds: 40 }
+turns:
+  - intent: { name: land, slots: {} }
+    expect_state: __exit__needs-human
+    expect_world:
+      status: needs-human
+      landed_sha: ""
+      pr_url: ""
+      ln__attempt: 2
+expect_terminal: true

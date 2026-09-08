@@ -1,0 +1,19 @@
+# Exact-source mode cannot use rebase. This starts at the imported decision
+# point so the wrapper's exact-source-refused mapping is exercised directly.
+test_kind: flow
+app: ../app.yaml
+initial_state: ln.probe
+initial_world:
+  ln__preserve_head_sha: "5555555555555555555555555555555555555555"
+  ln__merge_method: rebase
+  ln__probe_ok: true
+  ln__published_sha: ""
+turns:
+  - intent: { name: probe_first_publish, slots: {} }
+    expect_state: __exit__exact-source-refused
+    expect_world:
+      status: exact-source-refused
+      preserve_head_sha: "5555555555555555555555555555555555555555"
+      landed_sha: ""
+expect_terminal: true
+expect_no_errors: true

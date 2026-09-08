@@ -1,9 +1,8 @@
-# sassfully-land — optimistic fast-forward landing for studio-sassfully.
+# sassfully-land — reviewable remote-CI landing for studio-sassfully.
 #
 # This story is DELIBERATELY THIN. The landing loop itself (fetch → rebase onto
-# the remote-tracking ref → headless conflict resolution → deterministic gate →
-# fast-forward push by refspec, with an optimistic retry on a lost push race and
-# a PR escalation when the resolver can't settle it) lives in Kitsoki's
+# the remote-tracking ref → headless conflict resolution → branch publication →
+# pull request → remote required-check verdict) lives in Kitsoki's
 # `@kitsoki/land`, and is IMPORTED here rather than copied. Three divergent
 # copies of a landing loop is how a repo ends up with a landing loop that
 # quietly force-pushes.
@@ -13,52 +12,36 @@
 #   target        staging/local   — the live integration branch. `main` is 42
 #                                   commits BEHIND it; landing onto main would
 #                                   silently target a stale ref.
-#   gate_command  scripts/checks.sh — the repo's own deterministic gate
-#                                   (pog-doctor + every package's npm test +
-#                                   canonical app validation + every Story flow).
-#                                   ~12s, no
-#                                   network, no LLM. See scripts/checks.sh.
+#   resolver_build_check  scripts/checks.sh — the repo's reviewed deterministic
+#                                   check, fixed by this pipeline while the
+#                                   conflict resolver evaluates a resolution.
+#                                   Remote CI is the landing gate.
 #   remote        origin
 #
 # THE INVARIANTS COME FROM THE IMPORT, NOT FROM DISCIPLINE. Because the loop is
 # @kitsoki/land's, this repo inherits its structural guarantees rather than
 # re-deriving them: the rebase target is the remote-tracking ref
 # `origin/staging/local` (no local branch for the protected target is ever
-# created), the push names its destination by refspec and has no --force path at
-# all, and `landed_sha` binds ONLY from a real push. A lost race is a re-fetch,
-# re-rebase, RE-GATE and retry — the gate is always re-proven on the sha that is
-# actually about to be pushed.
+# created), publication has no --force path, and `landed_sha` binds ONLY from a
+# confirmed merge. A required-check verdict is never presented as a landing.
 #
-# RELATIONSHIP TO THE SHELL SCRIPTS. scripts/land-branch.sh and
-# scripts/integrate-branch.sh are the hand-driven path and stay as they are.
-# This story is the AUTONOMOUS path: an agent finishing work in
-# .worktrees/<name> submits `land` and either the branch is on the remote or a
-# PR exists explaining why it isn't. There is no arc that reports a landing that
-# did not happen.
+# The reviewed resolver build check is pipeline-owned: it is a literal child
+# projection below, not a world value or an intent slot supplied by a caller.
+# A caller cannot replace it with a weaker command. The actual landing gate is
+# the protected branch's remote CI.
 #
-# ONE THING HERE IS KNOWINGLY NOT RIGHT — README.md "Known gaps §2". Upstream
-# `land` grew a bounded test-repair arc (`@kitsoki/gate-repair`) whose
-# anti-weakening fence is a `test_path_regex` that `land` does not project across
-# the import fold; the upstream default does not match this repo's test layout
-# (scripts/test-*.sh, scripts/qa/*.sh, scripts/checks/*.star, stories/flows/ and
-# fixtures/** are all invisible to it). The arc cannot be configured from here
-# and cannot be portably disabled either, because `@kitsoki/` resolution on a
-# developer machine is ambient and the disabling knob does not exist on every
-# version. So it runs at its upstream default on a build that carries it. The
-# regex this repo needs is written down in README.md, verified against every
-# tracked path, ready for the day `land` projects the key.
+# `@kitsoki/land` owns GitHub mutation and required-check waiting. This wrapper
+# owns only Sassfully's fixed destination and the terminal outcome projection.
 
 app:
   id: sassfully-land
   version: 0.1.0
-  title: "sassfully land — fast-forward a worktree branch onto staging/local"
+  title: "sassfully land — remote-CI pull-request landing onto staging/local"
   author: "studio-sassfully"
   license: "Apache-2.0"
 
 hosts:
   - host.git
-  - host.run
-  - host.agent.task   # the imported conflict resolver
 
 world:
   # ── The caller seeds these ─────────────────────────────────────────────────
@@ -66,18 +49,24 @@ world:
   workspace_branch: { type: string, default: "" }               # the branch to land
   target:           { type: string, default: "staging/local" }  # REMOTE branch — never checked out locally
   remote:           { type: string, default: "origin" }
-  gate_command:     { type: string, default: "bash scripts/checks.sh" }
-  max_attempts:     { type: int,    default: 5 }                # bound on the optimistic retry loop
+  max_attempts:     { type: int,    default: 5 }                # bound on remote-check waits
+  # A pipeline may select reviewer-owned check watching. This never changes the
+  # fixed resolver command above; it only withholds the irreversible merge.
+  arm_auto_merge:   { type: bool,   default: true }
+  # Promotion context, when present, is verified as an exact merge parent by
+  # the imported pipeline. Rebase is never selected for an exact source.
+  preserve_head_sha: { type: string, default: "" }
 
   # ── Outcome (projected out of the import) ──────────────────────────────────
-  status:     { type: string, default: "" }   # landed | pr-opened | needs-human
-  landed_sha: { type: string, default: "" }   # set ONLY on a real push
-  pr_url:     { type: string, default: "" }   # set only by the escalation tail
-  last_error: { type: string, default: "" }   # the REAL git / gate / resolver failure
+  status:            { type: string, default: "" }
+  landed_sha:        { type: string, default: "" } # confirmed merge only
+  pr_url:            { type: string, default: "" }
+  head_sha:          { type: string, default: "" }
+  last_error:        { type: string, default: "" }
 
 intents:
   land:
-    description: "Land the committed worktree branch onto staging/local by fast-forward."
+    description: "Publish the committed worktree branch, await remote CI, and report the terminal verdict."
     examples: ["land", "land it", "ship it", "push to staging"]
     priority: 90
   look:
@@ -95,6 +84,15 @@ exits:
   needs-human:
     description: "Landing stopped; last_error carries the real failure."
     requires: [last_error]
+  checks-red:
+    description: "Remote required checks failed; last_error carries the check evidence."
+    requires: [pr_url, last_error]
+  checks-green:
+    description: "Remote required checks passed for a reviewer-owned pull request; it has not landed."
+    requires: [pr_url, head_sha]
+  exact-source-refused:
+    description: "Exact-source promotion was refused before it could be called a landing."
+    requires: [preserve_head_sha, last_error]
 
 root: ready
 
@@ -110,21 +108,14 @@ imports:
       workspace_branch: "{{ world.workspace_branch }}"
       target:           "{{ world.target }}"
       remote:           "{{ world.remote }}"
-      gate_command:     "{{ world.gate_command }}"
+      # The only local command is fixed by this authored pipeline. It is used
+      # solely by the imported conflict resolver; remote CI remains the landing
+      # gate. There is deliberately no caller-provided gate_command world key.
+      resolver_build_check: "bash scripts/checks.sh"
       max_attempts:     "{{ world.max_attempts }}"
-      # NOT SET, and that is a compromise, not an oversight — see README.md
-      # "Known gaps §2". Upstream `land` grew a bounded repair arc whose
-      # anti-weakening fence is a `test_path_regex` it does not project across
-      # the fold, and the upstream default does not match this repo's test
-      # layout. `max_repair_attempts: "0"` would disable the arc — but that key
-      # only exists on newer `land` versions, and `@kitsoki/` resolution on a
-      # developer machine is ambient (a saved `~/.kitsoki/repo` pointer, an
-      # on-disk checkout, or the binary's embedded library, whichever answers
-      # first). Pinning the key would make this story fail to LOAD, and the
-      # whole gate with it, whenever resolution lands on an older copy. So the
-      # arc is left at its upstream default and the exposure is documented
-      # instead of being traded for a flaky gate. Set it the day `land`
-      # projects `test_path_regex`.
+      arm_auto_merge:   "{{ world.arm_auto_merge }}"
+      preserve_head_sha: "{{ world.preserve_head_sha }}"
+      merge_method: "merge"
     # land's public surface is `land` / `look`, and `land` only matters at its
     # own bootstrap room, which `entry: fetch` bypasses. Nothing to lift.
     intents:
@@ -135,6 +126,18 @@ imports:
         set:
           status:     "landed"
           landed_sha: "{{ world.ln__landed_sha }}"
+      checks-red:
+        to: "@exit:checks-red"
+        set:
+          status:     "checks-red"
+          pr_url:     "{{ world.ln__pr_url }}"
+          last_error: "{{ world.last_error }}"
+      checks-green:
+        to: "@exit:checks-green"
+        set:
+          status:   "checks-green"
+          pr_url:   "{{ world.ln__pr_url }}"
+          head_sha: "{{ world.ln__head_sha }}"
       # A DIFFERENT outcome from `landed`, and never conflated with it: the work
       # is preserved as a PR carrying the resolver's real reason.
       pr-opened:
@@ -146,27 +149,34 @@ imports:
         to: "@exit:needs-human"
         set:
           status:     "needs-human"
+          last_error: "{{ world.last_error }}"
+      exact-source-refused:
+        to: "@exit:exact-source-refused"
+        set:
+          status:            "exact-source-refused"
+          preserve_head_sha: "{{ world.ln__preserve_head_sha }}"
+          last_error:        "{{ world.last_error }}"
 
 states:
 
   ready:
-    description: "Ready to land — submit `land` to fetch, rebase onto origin/staging/local, gate, and push."
-    relevant_world: [workspace_branch, worktree_path, target, remote, gate_command, max_attempts]
+    description: "Ready to land — submit `land` to publish a branch, open a pull request, and await remote required checks."
+    relevant_world: [workspace_branch, worktree_path, target, remote, max_attempts]
     view:
-      - prose: "Landing **{{ world.workspace_branch|default:'(no branch set)' }}** onto **{{ world.remote }}/{{ world.target }}** by fast-forward. The rebase replays onto the remote-tracking ref, the gate is re-proven on the rebased sha, and the push names its destination by refspec — a lost race is a retry, not a wait."
+      - prose: "Landing **{{ world.workspace_branch|default:'(no branch set)' }}** through a pull request into **{{ world.remote }}/{{ world.target }}**. The imported pipeline rebases on the remote-tracking ref, publishes without force, and reports the remote required-check verdict separately from a confirmed merge."
       - kv:
           pairs:
             Branch:   '{{ world.workspace_branch|default:"(none)" }}'
             Worktree: "{{ world.worktree_path }}"
             Target:   "{{ world.remote }}/{{ world.target }} (remote ref — never checked out locally)"
-            Gate:     '{{ world.gate_command|default:"(none — landing ungated)" }}'
-            Attempts: "up to {{ world.max_attempts }}"
+            Gate:     "remote required checks (resolver build check: bash scripts/checks.sh)"
+            Attempts: "up to {{ world.max_attempts }} remote-check waits"
       - choice:
           mode: single
           prompt: "Actions"
           items:
             - label: "land"
-              hint:  "fetch → rebase → gate → push"
+              hint:  "fetch → publish → PR → remote required checks"
               intent: land
             - label: "look"
               intent: look
