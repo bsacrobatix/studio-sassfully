@@ -4,7 +4,43 @@ import { EventEmitter } from "node:events";
 import { access, mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { boundSnapshotDigest, createEmbeddedQADriver, SNAPSHOT_FULL_MAX_CHARS, SNAPSHOT_LIMITS, validateQARequest } from "../story-bridge/embedded-qa-driver.mjs";
+import { boundSnapshotDigest, createEmbeddedQADriver, resolveChromeExecutable, SNAPSHOT_FULL_MAX_CHARS, SNAPSHOT_LIMITS, validateQARequest } from "../story-bridge/embedded-qa-driver.mjs";
+
+test("Chromium executable selection keeps an explicit operator override on every platform", () => {
+  assert.equal(resolveChromeExecutable({ env: { SASSFULLY_CHROME_BIN: " /opt/owned-chrome " }, platform: "linux" }), "/opt/owned-chrome");
+});
+
+test("Chromium executable selection uses each platform's native default instead of a macOS bundle on Linux CI", () => {
+  assert.equal(resolveChromeExecutable({ env: {}, platform: "darwin" }), "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome");
+  assert.equal(resolveChromeExecutable({ env: {}, platform: "linux" }), "google-chrome");
+  assert.equal(resolveChromeExecutable({ env: { ProgramFiles: "C:\\Program Files" }, platform: "win32" }), "C:\\Program Files/Google/Chrome/Application/chrome.exe");
+});
+
+test("qa_start turns an unavailable Chromium executable into a bounded error and removes its disposable directories", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sassfully-qa-launch-error-"));
+  let directories = 0;
+  const child = new EventEmitter();
+  child.stderr = new EventEmitter();
+  child.exitCode = null;
+  child.kill = () => false;
+  const driver = createEmbeddedQADriver({ runtime: {
+    chrome: "missing-chrome",
+    spawn: () => {
+      queueMicrotask(() => child.emit("error", Object.assign(new Error("not found"), { code: "ENOENT" })));
+      return child;
+    },
+    mkdtemp: async () => {
+      const directory = join(root, directories++ === 0 ? "profile" : "evidence");
+      await mkdir(directory);
+      return directory;
+    },
+    tmpdir: () => root,
+  } });
+
+  await assert.rejects(driver.start({ url: "http://127.0.0.1:8932/" }), /Chromium failed to launch \(ENOENT\)/);
+  await assert.rejects(access(join(root, "profile")));
+  await assert.rejects(access(join(root, "evidence")));
+});
 
 function fakeChild() {
   const child = new EventEmitter();

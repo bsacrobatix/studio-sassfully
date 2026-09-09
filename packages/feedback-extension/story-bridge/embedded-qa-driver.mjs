@@ -26,7 +26,24 @@ async function defaultResolveKeychainSecret({ service, account }) {
   }
 }
 
-const chrome = process.env.SASSFULLY_CHROME_BIN || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+// Operators can always name an exact browser, but the built-in default must
+// work on the supported host platforms too. In particular, the relay's own
+// integration suite starts this driver on Linux CI, where the old macOS app
+// bundle path cannot exist. `google-chrome` is intentionally a PATH command:
+// Ubuntu's Chrome package owns that stable launcher rather than a
+// version-specific absolute path.
+export function resolveChromeExecutable({ env = process.env, platform = process.platform } = {}) {
+  const configured = env.SASSFULLY_CHROME_BIN?.trim();
+  if (configured) return configured;
+  if (platform === "darwin") return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+  if (platform === "win32") {
+    const programFiles = env.ProgramFiles || env["ProgramFiles(x86)"];
+    return programFiles ? join(programFiles, "Google", "Chrome", "Application", "chrome.exe") : "chrome.exe";
+  }
+  return "google-chrome";
+}
+
+const chrome = resolveChromeExecutable();
 const LOOPBACK_HOSTNAMES = ["127.0.0.1", "localhost", "::1"];
 const isLoopbackHostname = (hostname) => LOOPBACK_HOSTNAMES.includes(hostname);
 // A qa_start target is admitted when it is loopback (today's behavior,
@@ -368,9 +385,23 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
     }
     args.push("about:blank");
     const child = driverRuntime.spawn(driverRuntime.chrome, args, { stdio: ["ignore", "ignore", "pipe"] });
-    let endpoint = ""; child.stderr.on("data", (chunk) => { const match = /DevTools listening on (ws:\/\/[^\s]+)/.exec(String(chunk)); if (match) endpoint = match[1]; });
-    for (let tries = 0; tries < 100 && !endpoint; tries += 1) await sleep(50);
-    if (!endpoint) { child.kill(); await driverRuntime.waitForExit(child); await driverRuntime.removeProfile(profile); throw new Error("Chromium did not publish a local DevTools endpoint"); }
+    let endpoint = "";
+    let launchError = null;
+    // `spawn` reports a missing executable asynchronously. Without this
+    // listener Node treats ENOENT as an uncaught process error and the MCP
+    // caller only sees a timeout. Keep the error inside the typed qa_start
+    // boundary and clean the disposable profile before reporting it.
+    child.once("error", (error) => { launchError = error; });
+    child.stderr.on("data", (chunk) => { const match = /DevTools listening on (ws:\/\/[^\s]+)/.exec(String(chunk)); if (match) endpoint = match[1]; });
+    for (let tries = 0; tries < 100 && !endpoint && !launchError; tries += 1) await sleep(50);
+    if (!endpoint) {
+      child.kill();
+      if (!launchError) await driverRuntime.waitForExit(child);
+      await driverRuntime.removeProfile(profile);
+      await driverRuntime.removeProfile(evidenceDir);
+      if (launchError) throw new Error(`Chromium failed to launch (${launchError.code ?? launchError.message})`);
+      throw new Error("Chromium did not publish a local DevTools endpoint");
+    }
     // The credential travels as an env var NAME (with a Keychain fallback
     // when that var is absent/empty -- see resolveBearerToken above) end to
     // end -- never as an argv value and never logged. Resolved once per
