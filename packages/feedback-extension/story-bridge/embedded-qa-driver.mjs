@@ -342,9 +342,10 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
   };
   const sessions = new Map();
   // Direct env var wins when present (today's behavior, unchanged). Only
-  // when it is absent/empty does this fall back to the Keychain, once, right
-  // before the token is needed -- so a loopback qa_start (see `start` below,
-  // which never calls this at all) still never touches the Keychain either.
+  // when it is absent/empty does this fall back to the Keychain, once, before
+  // a remote qa_start allocates a browser -- so a loopback qa_start (see
+  // `start` below, which never calls this at all) still never touches the
+  // Keychain either.
   async function resolveBearerToken(origin) {
     const direct = process.env[authBearerEnv];
     if (direct) return direct;
@@ -358,6 +359,10 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
     const qaURL = new URL(url);
     if (!isAllowedQAUrl(qaURL.href, allowedOrigins)) throw new Error("qa_start.url must be loopback or an explicitly allowlisted origin");
     const isRemoteTarget = !isLoopbackHostname(qaURL.hostname);
+    // Authenticate an allowlisted remote target before creating a disposable
+    // browser or navigating anywhere. This makes refusal deterministic and
+    // prevents an absent operator credential from spending local resources.
+    const bearerToken = isRemoteTarget && authBearerEnv ? await resolveBearerToken(qaURL.origin) : null;
     // This marker is minted only for the disposable MCP-owned QA page. It is
     // never supplied by a normal demo client and is the page-side admission
     // check for the test-only CDP audio lane.
@@ -404,15 +409,8 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
     }
     // The credential travels as an env var NAME (with a Keychain fallback
     // when that var is absent/empty -- see resolveBearerToken above) end to
-    // end -- never as an argv value and never logged. Resolved once per
-    // session, right before it is needed, and never placed on `session` in
-    // cleartext form beyond this closure's use in the Fetch interceptor
-    // below.
-    let bearerToken = null;
-    if (isRemoteTarget && authBearerEnv) {
-      try { bearerToken = await resolveBearerToken(qaURL.origin); }
-      catch (error) { child.kill(); await driverRuntime.waitForExit(child); await driverRuntime.removeProfile(profile); throw error; }
-    }
+    // end -- never as an argv value and never logged. It stays only in this
+    // closure for the Fetch interceptor below.
     const version = await driverRuntime.json(endpoint.replace(/^ws:\/\/(.*)\/devtools\/browser\/.*$/, "http://$1/json/version"));
     const cdp = driverRuntime.createCDP ? await driverRuntime.createCDP(version.webSocketDebuggerUrl) : new CDP(version.webSocketDebuggerUrl); await cdp.connect?.();
     let target, attached;

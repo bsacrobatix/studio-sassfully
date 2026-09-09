@@ -317,11 +317,15 @@ test("qa_start against an allowlisted origin refuses cleanly when the named bear
   const root = await mkdtemp(join(tmpdir(), "sassfully-qa-missing-bearer-"));
   const directories = { n: 0 };
   let keychainCall = null;
+  let spawned = false;
   const driver = createEmbeddedQADriver({
     allowedOrigins: new Set(["https://staging.kitsoki.dev"]),
     authBearerEnv: "SASSFULLY_TEST_BEARER_MISSING",
     // Injected fake resolver -- never the real `security` binary in a test.
-    runtime: fakeDriverRuntime(cdp, root, directories, { resolveKeychainSecret: async (args) => { keychainCall = args; return null; } }),
+    runtime: fakeDriverRuntime(cdp, root, directories, {
+      spawn: () => { spawned = true; return fakeChild(); },
+      resolveKeychainSecret: async (args) => { keychainCall = args; return null; },
+    }),
   });
   await assert.rejects(
     driver.start({ url: "https://staging.kitsoki.dev/tour" }),
@@ -331,6 +335,8 @@ test("qa_start against an allowlisted origin refuses cleanly when the named bear
   // the operator's actual `security find-generic-password -a kitsoki-staging
   // -s KITSOKI_STAGING_SERVICE_TOKEN -w` shape -- when neither flag is set.
   assert.deepEqual(keychainCall, { service: "SASSFULLY_TEST_BEARER_MISSING", account: "kitsoki-staging" });
+  assert.equal(spawned, false, "a missing remote bearer must refuse before allocating or launching Chromium");
+  assert.equal(directories.n, 0, "a missing remote bearer must not leave disposable profile or evidence directories");
 });
 
 test("qa_start falls back to a Keychain-resolved bearer when the named env var is absent, and attaches it identically to the env-var path", async () => {
