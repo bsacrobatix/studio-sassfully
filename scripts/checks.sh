@@ -12,9 +12,9 @@
 #   b. $POG_KITSOKI_SRC        — a kitsoki checkout to build from, cached in
 #                                .artifacts/bin by that checkout's HEAD sha
 #   c. `kitsoki` on PATH       — the ordinary installed binary
-# In CI, where none of the three exist, both steps are SKIPPED LOUDLY — pinning
-# a build for CI is its own tracked step (POG plan 1.4). Locally they are
-# mandatory: a gate you cannot run is not a gate.
+# CI checks out one immutable Kitsoki source revision and supplies it through
+# $POG_KITSOKI_SRC. Story validation and flows are mandatory everywhere: a
+# gate without the Story contract is not a gate.
 #
 # No network, no live LLM — safe for CI.
 set -euo pipefail
@@ -46,6 +46,7 @@ done < <(find packages -mindepth 2 -maxdepth 2 -name package.json -type f | sort
 # throw the memo and the provenance away.
 KITSOKI_RESOLVED=""
 KITSOKI_RESOLVED_HOW=""
+KITSOKI_RESOLVED_REPO=""
 KITSOKI_RESOLVE_DONE=""
 resolve_kitsoki() {
   [ -n "$KITSOKI_RESOLVE_DONE" ] && return 0
@@ -66,6 +67,7 @@ resolve_kitsoki() {
       fi
       KITSOKI_RESOLVED="$bin"
       KITSOKI_RESOLVED_HOW="kitsoki@$sha"
+      KITSOKI_RESOLVED_REPO="$src"
     elif command -v kitsoki >/dev/null 2>&1; then
       KITSOKI_RESOLVED="$(command -v kitsoki)"
       KITSOKI_RESOLVED_HOW="kitsoki on PATH"
@@ -74,7 +76,16 @@ resolve_kitsoki() {
   return 0
 }
 
-in_ci() { [ "${CI:-}" = "true" ] || [ "${GITHUB_ACTIONS:-}" = "true" ]; }
+# Keep @kitsoki/* imports on the same immutable source tree that produced the
+# binary. A remembered developer checkout must never silently supply a second,
+# moving half of the toolchain.
+kitsoki_run() {
+  if [ -n "$KITSOKI_RESOLVED_REPO" ]; then
+    "$KITSOKI_RESOLVED" --kitsoki-repo "$KITSOKI_RESOLVED_REPO" "$@"
+  else
+    "$KITSOKI_RESOLVED" "$@"
+  fi
+}
 
 # Validate the Story applications, including their declared application models
 # and canonical typestore bindings. Catalog content is not a repository-local
@@ -87,14 +98,10 @@ validate_story_apps() {
     local app_count=0
     while IFS= read -r app; do
       echo "validate: $app"
-      "$KITSOKI_RESOLVED" validate "$app"
+      kitsoki_run validate "$app"
       app_count=$((app_count + 1))
     done < <(find stories -name app.yaml -type f | sort)
     echo "validate: $app_count story app(s) load cleanly ($KITSOKI_RESOLVED_HOW)"
-    return 0
-  fi
-  if in_ci; then
-    echo "validate: SKIPPED in CI — no kitsoki build available; CI pinning is POG plan 1.4"
     return 0
   fi
   echo "error: no kitsoki available to validate story applications (set KITSOKI_BIN or POG_KITSOKI_SRC, or install kitsoki)" >&2
@@ -109,10 +116,6 @@ check_story_flows() {
   local ran=0
   resolve_kitsoki
   if [ -z "$KITSOKI_RESOLVED" ]; then
-    if in_ci; then
-      echo "flows: SKIPPED in CI — no kitsoki build available; CI pinning is POG plan 1.4"
-      return 0
-    fi
     echo "error: no kitsoki available to replay story flows" >&2
     return 1
   fi
@@ -120,7 +123,7 @@ check_story_flows() {
     local app="${flows_dir%/flows}/app.yaml"
     [ -f "$app" ] || continue
     echo "flows: $app"
-    "$KITSOKI_RESOLVED" test flows "$app"
+    kitsoki_run test flows "$app"
     ran=$((ran + 1))
   done < <(find stories -name flows -type d | sort)
   echo "flows: $ran story app(s) replayed green ($KITSOKI_RESOLVED_HOW)"

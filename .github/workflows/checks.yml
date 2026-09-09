@@ -1,12 +1,50 @@
 name: checks
 on:
   push:
-    branches: [main]
+    branches: [staging/local]
   pull_request:
+    branches: [staging/local]
+
+permissions:
+  contents: read
+
+env:
+  # Story and Typestore contracts are reviewed against an immutable Kitsoki
+  # source revision. Updating this pin is an explicit toolchain change.
+  KITSOKI_REF: 7f7b7d91de0e95204bb57a602d2a9b8168b4dec1
 
 jobs:
   checks:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - run: scripts/checks.sh
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Mint a read-only Kitsoki source token
+        id: kitsoki_read
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
+        with:
+          app-id: ${{ secrets.KITSOKI_DEV_APP_ID }}
+          private-key: ${{ secrets.KITSOKI_DEV_APP_PRIVATE_KEY }}
+          owner: kitsoki-ai
+          repositories: kitsoki
+
+      - name: Check out the pinned Kitsoki source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: kitsoki-ai/kitsoki
+          ref: ${{ env.KITSOKI_REF }}
+          token: ${{ steps.kitsoki_read.outputs.token }}
+          path: .kitsoki-src
+          persist-credentials: false
+          fetch-depth: 1
+
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version-file: .kitsoki-src/go.mod
+          cache-dependency-path: .kitsoki-src/go.sum
+
+      - name: Run the complete Sassfully and Typestore gate
+        env:
+          POG_KITSOKI_SRC: ${{ github.workspace }}/.kitsoki-src
+        run: scripts/checks.sh
