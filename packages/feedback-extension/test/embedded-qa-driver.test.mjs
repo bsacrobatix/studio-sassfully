@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { access, mkdir, mkdtemp, readFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { boundSnapshotDigest, createEmbeddedQADriver, resolveChromeExecutable, SNAPSHOT_FULL_MAX_CHARS, SNAPSHOT_LIMITS, validateQARequest } from "../story-bridge/embedded-qa-driver.mjs";
@@ -76,6 +76,82 @@ function fakeCDP() {
   };
   return cdp;
 }
+
+test("QA sessions are capped before Chromium allocation and closeAll removes profiles", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sassfully-qa-cap-"));
+  const profiles = [];
+  let launches = 0;
+  const driver = createEmbeddedQADriver({ maxSessions: 2, runtime: {
+    chrome: "fake-chrome", spawn: () => { launches += 1; return fakeChild(); },
+    mkdtemp: async (prefix) => { const directory = await mkdtemp(join(root, prefix.includes("evidence") ? "evidence-" : "profile-")); if (!prefix.includes("evidence")) profiles.push(directory); return directory; },
+    tmpdir: () => root,
+    json: async () => ({ webSocketDebuggerUrl: "ws://127.0.0.1:9222/devtools/browser/fake" }),
+    createCDP: async () => fakeCDP(),
+  } });
+  try {
+    const first = await driver.start({ url: "http://127.0.0.1:8932/" });
+    await driver.start({ url: "http://127.0.0.1:8932/" });
+    await assert.rejects(driver.start({ url: "http://127.0.0.1:8932/" }), /QA session limit reached \(2\)/);
+    assert.equal(launches, 2);
+    await driver.stop(first.qaSessionId);
+    await driver.start({ url: "http://127.0.0.1:8932/" });
+    assert.equal(launches, 3);
+    await driver.closeAll();
+    for (const profile of profiles) await assert.rejects(access(profile));
+  } finally { await driver.closeAll(); await rm(root, { recursive: true, force: true }); }
+});
+
+test("idle QA sessions expire and remove disposable profiles", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sassfully-qa-idle-"));
+  let profile;
+  const driver = createEmbeddedQADriver({ idleTimeoutMs: 50, runtime: {
+    chrome: "fake-chrome", spawn: () => fakeChild(),
+    mkdtemp: async (prefix) => { const directory = await mkdtemp(join(root, prefix.includes("evidence") ? "evidence-" : "profile-")); if (!prefix.includes("evidence")) profile = directory; return directory; },
+    tmpdir: () => root,
+    json: async () => ({ webSocketDebuggerUrl: "ws://127.0.0.1:9222/devtools/browser/fake" }),
+    createCDP: async () => fakeCDP(),
+  } });
+  try {
+    const session = await driver.start({ url: "http://127.0.0.1:8932/" });
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await assert.rejects(driver.stop(session.qaSessionId), /QA session not found/);
+    await assert.rejects(access(profile));
+  } finally { await driver.closeAll(); await rm(root, { recursive: true, force: true }); }
+});
+
+test("QA CDP startup failure removes both temporary directories", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sassfully-qa-cdp-error-"));
+  const directories = [];
+  let child;
+  const driver = createEmbeddedQADriver({ runtime: {
+    chrome: "fake-chrome", spawn: () => { child = fakeChild(); return child; },
+    mkdtemp: async (prefix) => { const directory = await mkdtemp(join(root, prefix.includes("evidence") ? "evidence-" : "profile-")); directories.push(directory); return directory; },
+    tmpdir: () => root,
+    json: async () => { throw new Error("CDP version failed"); },
+  } });
+  try {
+    await assert.rejects(driver.start({ url: "http://127.0.0.1:8932/" }), /CDP version failed/);
+    assert.equal(child.exitCode, 0);
+    for (const directory of directories) await assert.rejects(access(directory));
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("QA evidence-directory failure removes the newly allocated profile", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sassfully-qa-evidence-error-"));
+  const profile = join(root, "profile");
+  let allocations = 0;
+  const driver = createEmbeddedQADriver({ runtime: {
+    mkdtemp: async () => {
+      if (allocations++ === 0) { await mkdir(profile); return profile; }
+      throw new Error("evidence allocation failed");
+    },
+    tmpdir: () => root,
+  } });
+  try {
+    await assert.rejects(driver.start({ url: "http://127.0.0.1:8932/" }), /evidence allocation failed/);
+    await assert.rejects(access(profile));
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
 
 test("QA screenshot temporarily removes Kitsoki chrome and preserves exported evidence after qa_stop", async () => {
   const cdp = fakeCDP();

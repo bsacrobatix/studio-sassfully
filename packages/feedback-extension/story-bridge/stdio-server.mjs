@@ -312,11 +312,17 @@ async function handleMcp(request) {
 }
 
 function attachMcpLines(input, send) {
-  readline.createInterface({ input, crlfDelay: Infinity }).on("line", async (line) => {
+  const lines = readline.createInterface({ input, crlfDelay: Infinity });
+  lines.on("line", async (line) => {
     let request; try { request = JSON.parse(line); } catch { return; }
     const response = await handleMcp(request);
     if (response) send(`${JSON.stringify(response)}\n`);
   });
+  return lines;
+}
+
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  process.once(signal, () => { void qaDriver.closeAll().finally(() => process.exit(0)); });
 }
 
 if (daemonSocket) {
@@ -336,5 +342,5 @@ if (daemonSocket) {
     process.stderr.write(`Sassfully Story bridge daemon listening on ${daemonSocket}\n`);
   });
 } else {
-  attachMcpLines(process.stdin, (line) => process.stdout.write(line));
+  attachMcpLines(process.stdin, (line) => process.stdout.write(line)).on("close", () => { void qaDriver.closeAll(); });
 }
