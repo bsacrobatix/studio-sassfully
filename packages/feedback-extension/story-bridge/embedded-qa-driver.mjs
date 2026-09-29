@@ -325,7 +325,7 @@ export function validateQARequest(args, { allowedOrigins } = {}) {
   return "unknown QA action";
 }
 
-export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}, allowedOrigins = new Set(), authBearerEnv = null, authBearerKeychainService = null, authBearerKeychainAccount = null, presenterStopTimeoutMs = PRESENTER_STOP_TIMEOUT_MS } = {}) {
+export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}, allowedOrigins = new Set(), authBearerEnv = null, authBearerKeychainService = null, authBearerKeychainAccount = null, presenterStopTimeoutMs = PRESENTER_STOP_TIMEOUT_MS, maxSessions = 4, idleTimeoutMs = 30 * 60_000 } = {}) {
   const driverRuntime = {
     chrome,
     spawn,
@@ -341,6 +341,14 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
     ...runtime,
   };
   const sessions = new Map();
+  let starting = 0;
+  function touch(id) {
+    const session = sessions.get(id);
+    if (!session) return;
+    clearTimeout(session.idleTimer);
+    session.idleTimer = setTimeout(() => { stop(id).catch(() => {}); }, idleTimeoutMs);
+    session.idleTimer.unref?.();
+  }
   // Direct env var wins when present (today's behavior, unchanged). Only
   // when it is absent/empty does this fall back to the Keychain, once, before
   // a remote qa_start allocates a browser -- so a loopback qa_start (see
@@ -355,7 +363,13 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
     if (fromKeychain) return fromKeychain;
     throw new Error(`qa_start requires env var ${authBearerEnv} (or a Keychain entry -s ${service} -a ${account}) to be set for allowlisted origin ${origin}`);
   }
-  async function start({ url, mode = "headless" }) {
+  async function start(options) {
+    if (sessions.size + starting >= maxSessions) throw new Error(`QA session limit reached (${maxSessions}); stop an existing session before qa_start`);
+    starting += 1;
+    try { return await launch(options); }
+    finally { starting -= 1; }
+  }
+  async function launch({ url, mode = "headless" }) {
     const qaURL = new URL(url);
     if (!isAllowedQAUrl(qaURL.href, allowedOrigins)) throw new Error("qa_start.url must be loopback or an explicitly allowlisted origin");
     const isRemoteTarget = !isLoopbackHostname(qaURL.hostname);
@@ -368,7 +382,9 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
     // check for the test-only CDP audio lane.
     qaURL.searchParams.set("__sassfully_qa_audio_test", "1");
     const profile = await driverRuntime.mkdtemp(join(driverRuntime.tmpdir(), "sassfully-qa-"));
-    const evidenceDir = await driverRuntime.mkdtemp(join(driverRuntime.tmpdir(), "sassfully-qa-evidence-"));
+    let evidenceDir;
+    try { evidenceDir = await driverRuntime.mkdtemp(join(driverRuntime.tmpdir(), "sassfully-qa-evidence-")); }
+    catch (error) { await driverRuntime.removeProfile(profile); throw error; }
     const args = ["--remote-debugging-port=0", "--remote-debugging-address=127.0.0.1", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--disable-sync", "--disable-background-networking"];
     if (mode === "headless") args.push("--headless=new");
     if (isRemoteTarget) {
@@ -389,7 +405,9 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
       args.push("--disable-features=LocalNetworkAccessChecks");
     }
     args.push("about:blank");
-    const child = driverRuntime.spawn(driverRuntime.chrome, args, { stdio: ["ignore", "ignore", "pipe"] });
+    let child;
+    try { child = driverRuntime.spawn(driverRuntime.chrome, args, { stdio: ["ignore", "ignore", "pipe"] }); }
+    catch (error) { await driverRuntime.removeProfile(profile); await driverRuntime.removeProfile(evidenceDir); throw error; }
     let endpoint = "";
     let launchError = null;
     // `spawn` reports a missing executable asynchronously. Without this
@@ -411,8 +429,10 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
     // when that var is absent/empty -- see resolveBearerToken above) end to
     // end -- never as an argv value and never logged. It stays only in this
     // closure for the Fetch interceptor below.
+    let cdp;
+    try {
     const version = await driverRuntime.json(endpoint.replace(/^ws:\/\/(.*)\/devtools\/browser\/.*$/, "http://$1/json/version"));
-    const cdp = driverRuntime.createCDP ? await driverRuntime.createCDP(version.webSocketDebuggerUrl) : new CDP(version.webSocketDebuggerUrl); await cdp.connect?.();
+    cdp = driverRuntime.createCDP ? await driverRuntime.createCDP(version.webSocketDebuggerUrl) : new CDP(version.webSocketDebuggerUrl); await cdp.connect?.();
     let target, attached;
     if (bearerToken) {
       // Attach to a blank page first so Fetch interception is armed before
@@ -440,7 +460,14 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
     }
     const session = { id: `qa-${crypto.randomUUID()}`, child, profile, evidenceDir, screenshotCount: 0, cdp, cdpSession: attached.sessionId, mode, url: qaURL.href, captureCursor: null, remoteOrigin: isRemoteTarget ? qaURL.origin : null };
     sessions.set(session.id, session);
+    touch(session.id);
     return { qaSessionId: session.id, mode, url: qaURL.href, browser: "local-chromium-cdp", presenter: "suppressed", ...(isRemoteTarget ? { origin: qaURL.origin, authBearer: bearerToken ? "attached" : "not_configured" } : {}) };
+    } catch (error) {
+      cdp?.close(); child.kill(); await driverRuntime.waitForExit(child).catch(() => {});
+      await driverRuntime.removeProfile(profile);
+      await driverRuntime.removeProfile(evidenceDir);
+      throw error;
+    }
   }
   async function command(session, method, params = {}) { return session.cdp.call(method, params, session.cdpSession); }
   // The pre-screenshot presenter stop is a COURTESY, not the capture. It is a
@@ -592,10 +619,25 @@ export function createEmbeddedQADriver({ narrate, beforeScreenshot, runtime = {}
   }
   async function stop(id) {
     const session = sessions.get(id); if (!session) throw new Error("QA session not found");
-    sessions.delete(id); session.cdp.close(); session.child.kill(); await driverRuntime.waitForExit(session.child);
+    sessions.delete(id); clearTimeout(session.idleTimer); session.cdp.close(); session.child.kill(); await driverRuntime.waitForExit(session.child);
     const cleanupError = await driverRuntime.removeProfile(session.profile);
     if (cleanupError) throw new Error(`QA browser stopped but its temporary profile could not be removed: ${cleanupError.message}`);
     return { qaSessionId: id, stopped: true, evidenceDir: session.evidenceDir };
   }
-  return { start, action, cdp, requireTestAudioMode, activateTestAudio, events, captureStart, captureExport, harExport, stop };
+  async function closeAll() {
+    await Promise.allSettled([...sessions.keys()].map((id) => stop(id)));
+  }
+  const keepAlive = (method, id) => (...args) => { touch(id(...args)); return method(...args); };
+  return {
+    start,
+    action: keepAlive(action, (args) => args.qaSessionId),
+    cdp: keepAlive(cdp, (args) => args.qaSessionId),
+    requireTestAudioMode: keepAlive(requireTestAudioMode, (id) => id),
+    activateTestAudio: keepAlive(activateTestAudio, (id) => id),
+    events: keepAlive(events, (id) => id),
+    captureStart: keepAlive(captureStart, (id) => id),
+    captureExport: keepAlive(captureExport, (id) => id),
+    harExport: keepAlive(harExport, (id) => id),
+    stop, closeAll,
+  };
 }
